@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect, type CSSProperties } from 'react'
-import { usePrivy } from '@privy-io/react-auth'
+import { usePrivy, useWallets } from '@privy-io/react-auth'
 import { useWalletClient } from 'wagmi'
 import { createFangornMiddleware } from '@x402f/fetch'
-import { FangornConfig } from 'fangorn-sdk'
+import { FangornConfig } from '@fangorn-network/sdk'
 import './App.css'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -54,21 +54,38 @@ const CHAIN_CONFIG = FangornConfig.ArbitrumSepolia
 // ─── Middleware hook ───────────────────────────────────────────────────────────
 
 function useFangornMiddleware(): { middleware: FangornMiddleware | null; loading: boolean } {
-  const { data: walletClient } = useWalletClient()
+  const { wallets } = useWallets()
   const [middleware, setMiddleware] = useState<FangornMiddleware | null>(null)
   const [loading, setLoading] = useState(false)
 
+  // Use the first available wallet (embedded Privy wallet or injected)
+  const wallet = wallets[0]
+
   useEffect(() => {
-    if (!walletClient) { setMiddleware(null); return }
+    if (!wallet) { setMiddleware(null); return }
     setLoading(true)
-    createFangornMiddleware(
-      walletClient,
-      CHAIN_CONFIG,
-      window.location.host,
-      FANGORN_CONFIG.pinataJwt,
-      FANGORN_CONFIG.pinataGateway
-    ).then(setMiddleware).finally(() => setLoading(false))
-  }, [walletClient])
+
+    wallet.getEthereumProvider()
+      .then(async (provider) => {
+        // Privy's EIP-1193 provider → viem wallet client
+        const { createWalletClient, custom } = await import('viem')
+        const walletClient = createWalletClient({
+          account: wallet.address as `0x${string}`,
+          chain: CHAIN_CONFIG.chain,
+          transport: custom(provider),
+        })
+        return createFangornMiddleware(
+          walletClient,
+          CHAIN_CONFIG,
+          window.location.host,
+          FANGORN_CONFIG.pinataJwt,
+          FANGORN_CONFIG.pinataGateway
+        )
+      })
+      .then(setMiddleware)
+      .catch(console.error)
+      .finally(() => setLoading(false))
+  }, [wallet?.address])
 
   return { middleware, loading }
 }
@@ -402,7 +419,7 @@ function UploadView() {
           <div className="share-link">
             <span>Share link:</span>
             <code>
-              fangorn.music/play?owner=0x...&name={form.album}&tag={form.title}.mp3
+              acs-dev.fangorn.network/play?owner=0x...&name={form.album}&tag={form.title}.mp3
             </code>
           </div>
         )}
@@ -447,7 +464,7 @@ function PlayerBar({ track, middleware }: PlayerBarProps) {
     setError(null)
 
     const result = await middleware.fetchResource({
-      owner: track.owner,
+      owner: track.owner as `0x${string}`,
       datasourceName: track.datasourceName,
       tag: track.tag,
       baseUrl: import.meta.env.VITE_RESOURCE_SERVER_URL as string,

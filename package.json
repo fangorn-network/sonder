@@ -1,4 +1,4 @@
-    {
+{
   "name": "fangorn-music",
   "private": true,
   "version": "0.0.0",
@@ -10,11 +10,14 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@fangorn-network/sdk": "^2026.3.11",
     "@privy-io/react-auth": "^3.16.0",
     "@privy-io/wagmi": "^4.0.2",
-    "fangorn-sdk": "2026.2.2-7.0",
+    "@x402f/fetch": "^2026.3.1-1.1",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "react-dom": "^19.2.0",
+    "viem": "^2.47.1",
+    "wagmi": "^3.5.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
@@ -22,7 +25,6 @@
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.1",
-    "@x402f/fetch": "^0.0.1",
     "eslint": "^9.39.1",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",

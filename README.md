@@ -4,7 +4,15 @@
 
 ## Build
 
+### Graph Codegen
+
+This project is built on top of the graph. On first setup, run codegen: 
+
+``` sh
+pnpm graphclient:build
 ```
+
+``` sh
 pnpm run build
 ```
 

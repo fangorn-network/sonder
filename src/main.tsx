@@ -1,5 +1,8 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+// import { Buffer } from 'buffer'
+// globalThis.Buffer = Buffer
+// window.Buffer = Buffer
 
 import './index.css';
 

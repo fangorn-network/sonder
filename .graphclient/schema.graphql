@@ -1,0 +1,1714 @@
+schema {
+  query: Query
+}
+
+"""
+Marks the GraphQL type as indexable entity.  Each type that should be an entity is required to be annotated with this directive.
+"""
+directive @entity on OBJECT
+
+"""Defined a Subgraph ID for an object type"""
+directive @subgraphId(id: String!) on OBJECT
+
+"""
+creates a virtual field on the entity that may be queried but cannot be set manually through the mappings API.
+"""
+directive @derivedFrom(field: String!) on FIELD_DEFINITION
+
+"""
+Indicates whether the current, partially filled bucket should be included in the response. Defaults to `exclude`
+"""
+enum Aggregation_current {
+  """Exclude the current, partially filled bucket from the response"""
+  exclude
+  """Include the current, partially filled bucket in the response"""
+  include
+}
+
+enum Aggregation_interval {
+  hour
+  day
+}
+
+scalar BigDecimal
+
+scalar BigInt
+
+input BlockChangedFilter {
+  number_gte: Int!
+}
+
+input Block_height {
+  hash: Bytes
+  number: Int
+  number_gte: Int
+}
+
+scalar Bytes
+
+type Field {
+  id: ID!
+  name: String
+  value: String
+  atType: String
+  acc: String
+  manifestState: ManifestState!
+  price: PricingResource
+}
+
+input Field_filter {
+  id: ID
+  id_not: ID
+  id_gt: ID
+  id_lt: ID
+  id_gte: ID
+  id_lte: ID
+  id_in: [ID!]
+  id_not_in: [ID!]
+  name: String
+  name_not: String
+  name_gt: String
+  name_lt: String
+  name_gte: String
+  name_lte: String
+  name_in: [String!]
+  name_not_in: [String!]
+  name_contains: String
+  name_contains_nocase: String
+  name_not_contains: String
+  name_not_contains_nocase: String
+  name_starts_with: String
+  name_starts_with_nocase: String
+  name_not_starts_with: String
+  name_not_starts_with_nocase: String
+  name_ends_with: String
+  name_ends_with_nocase: String
+  name_not_ends_with: String
+  name_not_ends_with_nocase: String
+  value: String
+  value_not: String
+  value_gt: String
+  value_lt: String
+  value_gte: String
+  value_lte: String
+  value_in: [String!]
+  value_not_in: [String!]
+  value_contains: String
+  value_contains_nocase: String
+  value_not_contains: String
+  value_not_contains_nocase: String
+  value_starts_with: String
+  value_starts_with_nocase: String
+  value_not_starts_with: String
+  value_not_starts_with_nocase: String
+  value_ends_with: String
+  value_ends_with_nocase: String
+  value_not_ends_with: String
+  value_not_ends_with_nocase: String
+  atType: String
+  atType_not: String
+  atType_gt: String
+  atType_lt: String
+  atType_gte: String
+  atType_lte: String
+  atType_in: [String!]
+  atType_not_in: [String!]
+  atType_contains: String
+  atType_contains_nocase: String
+  atType_not_contains: String
+  atType_not_contains_nocase: String
+  atType_starts_with: String
+  atType_starts_with_nocase: String
+  atType_not_starts_with: String
+  atType_not_starts_with_nocase: String
+  atType_ends_with: String
+  atType_ends_with_nocase: String
+  atType_not_ends_with: String
+  atType_not_ends_with_nocase: String
+  acc: String
+  acc_not: String
+  acc_gt: String
+  acc_lt: String
+  acc_gte: String
+  acc_lte: String
+  acc_in: [String!]
+  acc_not_in: [String!]
+  acc_contains: String
+  acc_contains_nocase: String
+  acc_not_contains: String
+  acc_not_contains_nocase: String
+  acc_starts_with: String
+  acc_starts_with_nocase: String
+  acc_not_starts_with: String
+  acc_not_starts_with_nocase: String
+  acc_ends_with: String
+  acc_ends_with_nocase: String
+  acc_not_ends_with: String
+  acc_not_ends_with_nocase: String
+  manifestState: String
+  manifestState_not: String
+  manifestState_gt: String
+  manifestState_lt: String
+  manifestState_gte: String
+  manifestState_lte: String
+  manifestState_in: [String!]
+  manifestState_not_in: [String!]
+  manifestState_contains: String
+  manifestState_contains_nocase: String
+  manifestState_not_contains: String
+  manifestState_not_contains_nocase: String
+  manifestState_starts_with: String
+  manifestState_starts_with_nocase: String
+  manifestState_not_starts_with: String
+  manifestState_not_starts_with_nocase: String
+  manifestState_ends_with: String
+  manifestState_ends_with_nocase: String
+  manifestState_not_ends_with: String
+  manifestState_not_ends_with_nocase: String
+  manifestState_: ManifestState_filter
+  price: String
+  price_not: String
+  price_gt: String
+  price_lt: String
+  price_gte: String
+  price_lte: String
+  price_in: [String!]
+  price_not_in: [String!]
+  price_contains: String
+  price_contains_nocase: String
+  price_not_contains: String
+  price_not_contains_nocase: String
+  price_starts_with: String
+  price_starts_with_nocase: String
+  price_not_starts_with: String
+  price_not_starts_with_nocase: String
+  price_ends_with: String
+  price_ends_with_nocase: String
+  price_not_ends_with: String
+  price_not_ends_with_nocase: String
+  price_: PricingResource_filter
+  """Filter for the block changed event."""
+  _change_block: BlockChangedFilter
+  and: [Field_filter]
+  or: [Field_filter]
+}
+
+enum Field_orderBy {
+  id
+  name
+  value
+  atType
+  acc
+  manifestState
+  manifestState__id
+  manifestState__owner
+  manifestState__schema_id
+  manifestState__schema_name
+  manifestState__manifest_cid
+  manifestState__version
+  manifestState__lastUpdated
+  price
+  price__id
+  price__owner
+  price__price
+  price__currency
+}
+
+type FileEntry {
+  id: ID!
+  fields(skip: Int = 0, first: Int = 100, orderBy: Field_orderBy, orderDirection: OrderDirection, where: Field_filter): [Field!]
+}
+
+input FileEntry_filter {
+  id: ID
+  id_not: ID
+  id_gt: ID
+  id_lt: ID
+  id_gte: ID
+  id_lte: ID
+  id_in: [ID!]
+  id_not_in: [ID!]
+  fields: [String!]
+  fields_not: [String!]
+  fields_contains: [String!]
+  fields_contains_nocase: [String!]
+  fields_not_contains: [String!]
+  fields_not_contains_nocase: [String!]
+  fields_: Field_filter
+  """Filter for the block changed event."""
+  _change_block: BlockChangedFilter
+  and: [FileEntry_filter]
+  or: [FileEntry_filter]
+}
+
+enum FileEntry_orderBy {
+  id
+  fields
+}
+
+"""8 bytes signed integer"""
+scalar Int8
+
+type Manifest {
+  id: ID!
+  manifestVersion: BigInt
+  schemaId: String
+  files(skip: Int = 0, first: Int = 100, orderBy: FileEntry_orderBy, orderDirection: OrderDirection, where: FileEntry_filter): [FileEntry!]
+}
+
+type ManifestPublished {
+  id: Bytes!
+  owner: Bytes!
+  schema_id: Bytes!
+  manifest_cid: String!
+  version: BigInt!
+  blockNumber: BigInt!
+  blockTimestamp: BigInt!
+  transactionHash: Bytes!
+}
+
+input ManifestPublished_filter {
+  id: Bytes
+  id_not: Bytes
+  id_gt: Bytes
+  id_lt: Bytes
+  id_gte: Bytes
+  id_lte: Bytes
+  id_in: [Bytes!]
+  id_not_in: [Bytes!]
+  id_contains: Bytes
+  id_not_contains: Bytes
+  owner: Bytes
+  owner_not: Bytes
+  owner_gt: Bytes
+  owner_lt: Bytes
+  owner_gte: Bytes
+  owner_lte: Bytes
+  owner_in: [Bytes!]
+  owner_not_in: [Bytes!]
+  owner_contains: Bytes
+  owner_not_contains: Bytes
+  schema_id: Bytes
+  schema_id_not: Bytes
+  schema_id_gt: Bytes
+  schema_id_lt: Bytes
+  schema_id_gte: Bytes
+  schema_id_lte: Bytes
+  schema_id_in: [Bytes!]
+  schema_id_not_in: [Bytes!]
+  schema_id_contains: Bytes
+  schema_id_not_contains: Bytes
+  manifest_cid: String
+  manifest_cid_not: String
+  manifest_cid_gt: String
+  manifest_cid_lt: String
+  manifest_cid_gte: String
+  manifest_cid_lte: String
+  manifest_cid_in: [String!]
+  manifest_cid_not_in: [String!]
+  manifest_cid_contains: String
+  manifest_cid_contains_nocase: String
+  manifest_cid_not_contains: String
+  manifest_cid_not_contains_nocase: String
+  manifest_cid_starts_with: String
+  manifest_cid_starts_with_nocase: String
+  manifest_cid_not_starts_with: String
+  manifest_cid_not_starts_with_nocase: String
+  manifest_cid_ends_with: String
+  manifest_cid_ends_with_nocase: String
+  manifest_cid_not_ends_with: String
+  manifest_cid_not_ends_with_nocase: String
+  version: BigInt
+  version_not: BigInt
+  version_gt: BigInt
+  version_lt: BigInt
+  version_gte: BigInt
+  version_lte: BigInt
+  version_in: [BigInt!]
+  version_not_in: [BigInt!]
+  blockNumber: BigInt
+  blockNumber_not: BigInt
+  blockNumber_gt: BigInt
+  blockNumber_lt: BigInt
+  blockNumber_gte: BigInt
+  blockNumber_lte: BigInt
+  blockNumber_in: [BigInt!]
+  blockNumber_not_in: [BigInt!]
+  blockTimestamp: BigInt
+  blockTimestamp_not: BigInt
+  blockTimestamp_gt: BigInt
+  blockTimestamp_lt: BigInt
+  blockTimestamp_gte: BigInt
+  blockTimestamp_lte: BigInt
+  blockTimestamp_in: [BigInt!]
+  blockTimestamp_not_in: [BigInt!]
+  transactionHash: Bytes
+  transactionHash_not: Bytes
+  transactionHash_gt: Bytes
+  transactionHash_lt: Bytes
+  transactionHash_gte: Bytes
+  transactionHash_lte: Bytes
+  transactionHash_in: [Bytes!]
+  transactionHash_not_in: [Bytes!]
+  transactionHash_contains: Bytes
+  transactionHash_not_contains: Bytes
+  """Filter for the block changed event."""
+  _change_block: BlockChangedFilter
+  and: [ManifestPublished_filter]
+  or: [ManifestPublished_filter]
+}
+
+enum ManifestPublished_orderBy {
+  id
+  owner
+  schema_id
+  manifest_cid
+  version
+  blockNumber
+  blockTimestamp
+  transactionHash
+}
+
+type ManifestState {
+  id: Bytes!
+  owner: Bytes!
+  schema_id: Bytes!
+  schema_name: String!
+  manifest_cid: String!
+  manifest: Manifest!
+  version: BigInt!
+  lastUpdated: BigInt!
+}
+
+input ManifestState_filter {
+  id: Bytes
+  id_not: Bytes
+  id_gt: Bytes
+  id_lt: Bytes
+  id_gte: Bytes
+  id_lte: Bytes
+  id_in: [Bytes!]
+  id_not_in: [Bytes!]
+  id_contains: Bytes
+  id_not_contains: Bytes
+  owner: Bytes
+  owner_not: Bytes
+  owner_gt: Bytes
+  owner_lt: Bytes
+  owner_gte: Bytes
+  owner_lte: Bytes
+  owner_in: [Bytes!]
+  owner_not_in: [Bytes!]
+  owner_contains: Bytes
+  owner_not_contains: Bytes
+  schema_id: Bytes
+  schema_id_not: Bytes
+  schema_id_gt: Bytes
+  schema_id_lt: Bytes
+  schema_id_gte: Bytes
+  schema_id_lte: Bytes
+  schema_id_in: [Bytes!]
+  schema_id_not_in: [Bytes!]
+  schema_id_contains: Bytes
+  schema_id_not_contains: Bytes
+  schema_name: String
+  schema_name_not: String
+  schema_name_gt: String
+  schema_name_lt: String
+  schema_name_gte: String
+  schema_name_lte: String
+  schema_name_in: [String!]
+  schema_name_not_in: [String!]
+  schema_name_contains: String
+  schema_name_contains_nocase: String
+  schema_name_not_contains: String
+  schema_name_not_contains_nocase: String
+  schema_name_starts_with: String
+  schema_name_starts_with_nocase: String
+  schema_name_not_starts_with: String
+  schema_name_not_starts_with_nocase: String
+  schema_name_ends_with: String
+  schema_name_ends_with_nocase: String
+  schema_name_not_ends_with: String
+  schema_name_not_ends_with_nocase: String
+  manifest_cid: String
+  manifest_cid_not: String
+  manifest_cid_gt: String
+  manifest_cid_lt: String
+  manifest_cid_gte: String
+  manifest_cid_lte: String
+  manifest_cid_in: [String!]
+  manifest_cid_not_in: [String!]
+  manifest_cid_contains: String
+  manifest_cid_contains_nocase: String
+  manifest_cid_not_contains: String
+  manifest_cid_not_contains_nocase: String
+  manifest_cid_starts_with: String
+  manifest_cid_starts_with_nocase: String
+  manifest_cid_not_starts_with: String
+  manifest_cid_not_starts_with_nocase: String
+  manifest_cid_ends_with: String
+  manifest_cid_ends_with_nocase: String
+  manifest_cid_not_ends_with: String
+  manifest_cid_not_ends_with_nocase: String
+  manifest: String
+  manifest_not: String
+  manifest_gt: String
+  manifest_lt: String
+  manifest_gte: String
+  manifest_lte: String
+  manifest_in: [String!]
+  manifest_not_in: [String!]
+  manifest_contains: String
+  manifest_contains_nocase: String
+  manifest_not_contains: String
+  manifest_not_contains_nocase: String
+  manifest_starts_with: String
+  manifest_starts_with_nocase: String
+  manifest_not_starts_with: String
+  manifest_not_starts_with_nocase: String
+  manifest_ends_with: String
+  manifest_ends_with_nocase: String
+  manifest_not_ends_with: String
+  manifest_not_ends_with_nocase: String
+  manifest_: Manifest_filter
+  version: BigInt
+  version_not: BigInt
+  version_gt: BigInt
+  version_lt: BigInt
+  version_gte: BigInt
+  version_lte: BigInt
+  version_in: [BigInt!]
+  version_not_in: [BigInt!]
+  lastUpdated: BigInt
+  lastUpdated_not: BigInt
+  lastUpdated_gt: BigInt
+  lastUpdated_lt: BigInt
+  lastUpdated_gte: BigInt
+  lastUpdated_lte: BigInt
+  lastUpdated_in: [BigInt!]
+  lastUpdated_not_in: [BigInt!]
+  """Filter for the block changed event."""
+  _change_block: BlockChangedFilter
+  and: [ManifestState_filter]
+  or: [ManifestState_filter]
+}
+
+enum ManifestState_orderBy {
+  id
+  owner
+  schema_id
+  schema_name
+  manifest_cid
+  manifest
+  manifest__id
+  manifest__manifestVersion
+  manifest__schemaId
+  version
+  lastUpdated
+}
+
+type ManifestUpdated {
+  id: Bytes!
+  owner: Bytes!
+  schema_id: Bytes!
+  manifest_cid: String!
+  version: BigInt!
+  blockNumber: BigInt!
+  blockTimestamp: BigInt!
+  transactionHash: Bytes!
+}
+
+input ManifestUpdated_filter {
+  id: Bytes
+  id_not: Bytes
+  id_gt: Bytes
+  id_lt: Bytes
+  id_gte: Bytes
+  id_lte: Bytes
+  id_in: [Bytes!]
+  id_not_in: [Bytes!]
+  id_contains: Bytes
+  id_not_contains: Bytes
+  owner: Bytes
+  owner_not: Bytes
+  owner_gt: Bytes
+  owner_lt: Bytes
+  owner_gte: Bytes
+  owner_lte: Bytes
+  owner_in: [Bytes!]
+  owner_not_in: [Bytes!]
+  owner_contains: Bytes
+  owner_not_contains: Bytes
+  schema_id: Bytes
+  schema_id_not: Bytes
+  schema_id_gt: Bytes
+  schema_id_lt: Bytes
+  schema_id_gte: Bytes
+  schema_id_lte: Bytes
+  schema_id_in: [Bytes!]
+  schema_id_not_in: [Bytes!]
+  schema_id_contains: Bytes
+  schema_id_not_contains: Bytes
+  manifest_cid: String
+  manifest_cid_not: String
+  manifest_cid_gt: String
+  manifest_cid_lt: String
+  manifest_cid_gte: String
+  manifest_cid_lte: String
+  manifest_cid_in: [String!]
+  manifest_cid_not_in: [String!]
+  manifest_cid_contains: String
+  manifest_cid_contains_nocase: String
+  manifest_cid_not_contains: String
+  manifest_cid_not_contains_nocase: String
+  manifest_cid_starts_with: String
+  manifest_cid_starts_with_nocase: String
+  manifest_cid_not_starts_with: String
+  manifest_cid_not_starts_with_nocase: String
+  manifest_cid_ends_with: String
+  manifest_cid_ends_with_nocase: String
+  manifest_cid_not_ends_with: String
+  manifest_cid_not_ends_with_nocase: String
+  version: BigInt
+  version_not: BigInt
+  version_gt: BigInt
+  version_lt: BigInt
+  version_gte: BigInt
+  version_lte: BigInt
+  version_in: [BigInt!]
+  version_not_in: [BigInt!]
+  blockNumber: BigInt
+  blockNumber_not: BigInt
+  blockNumber_gt: BigInt
+  blockNumber_lt: BigInt
+  blockNumber_gte: BigInt
+  blockNumber_lte: BigInt
+  blockNumber_in: [BigInt!]
+  blockNumber_not_in: [BigInt!]
+  blockTimestamp: BigInt
+  blockTimestamp_not: BigInt
+  blockTimestamp_gt: BigInt
+  blockTimestamp_lt: BigInt
+  blockTimestamp_gte: BigInt
+  blockTimestamp_lte: BigInt
+  blockTimestamp_in: [BigInt!]
+  blockTimestamp_not_in: [BigInt!]
+  transactionHash: Bytes
+  transactionHash_not: Bytes
+  transactionHash_gt: Bytes
+  transactionHash_lt: Bytes
+  transactionHash_gte: Bytes
+  transactionHash_lte: Bytes
+  transactionHash_in: [Bytes!]
+  transactionHash_not_in: [Bytes!]
+  transactionHash_contains: Bytes
+  transactionHash_not_contains: Bytes
+  """Filter for the block changed event."""
+  _change_block: BlockChangedFilter
+  and: [ManifestUpdated_filter]
+  or: [ManifestUpdated_filter]
+}
+
+enum ManifestUpdated_orderBy {
+  id
+  owner
+  schema_id
+  manifest_cid
+  version
+  blockNumber
+  blockTimestamp
+  transactionHash
+}
+
+input Manifest_filter {
+  id: ID
+  id_not: ID
+  id_gt: ID
+  id_lt: ID
+  id_gte: ID
+  id_lte: ID
+  id_in: [ID!]
+  id_not_in: [ID!]
+  manifestVersion: BigInt
+  manifestVersion_not: BigInt
+  manifestVersion_gt: BigInt
+  manifestVersion_lt: BigInt
+  manifestVersion_gte: BigInt
+  manifestVersion_lte: BigInt
+  manifestVersion_in: [BigInt!]
+  manifestVersion_not_in: [BigInt!]
+  schemaId: String
+  schemaId_not: String
+  schemaId_gt: String
+  schemaId_lt: String
+  schemaId_gte: String
+  schemaId_lte: String
+  schemaId_in: [String!]
+  schemaId_not_in: [String!]
+  schemaId_contains: String
+  schemaId_contains_nocase: String
+  schemaId_not_contains: String
+  schemaId_not_contains_nocase: String
+  schemaId_starts_with: String
+  schemaId_starts_with_nocase: String
+  schemaId_not_starts_with: String
+  schemaId_not_starts_with_nocase: String
+  schemaId_ends_with: String
+  schemaId_ends_with_nocase: String
+  schemaId_not_ends_with: String
+  schemaId_not_ends_with_nocase: String
+  files: [String!]
+  files_not: [String!]
+  files_contains: [String!]
+  files_contains_nocase: [String!]
+  files_not_contains: [String!]
+  files_not_contains_nocase: [String!]
+  files_: FileEntry_filter
+  """Filter for the block changed event."""
+  _change_block: BlockChangedFilter
+  and: [Manifest_filter]
+  or: [Manifest_filter]
+}
+
+enum Manifest_orderBy {
+  id
+  manifestVersion
+  schemaId
+  files
+}
+
+"""Defines the order direction, either ascending or descending"""
+enum OrderDirection {
+  asc
+  desc
+}
+
+type PriceUpdated {
+  id: Bytes!
+  resourceId: Bytes!
+  owner: Bytes!
+  price: BigInt!
+}
+
+input PriceUpdated_filter {
+  id: Bytes
+  id_not: Bytes
+  id_gt: Bytes
+  id_lt: Bytes
+  id_gte: Bytes
+  id_lte: Bytes
+  id_in: [Bytes!]
+  id_not_in: [Bytes!]
+  id_contains: Bytes
+  id_not_contains: Bytes
+  resourceId: Bytes
+  resourceId_not: Bytes
+  resourceId_gt: Bytes
+  resourceId_lt: Bytes
+  resourceId_gte: Bytes
+  resourceId_lte: Bytes
+  resourceId_in: [Bytes!]
+  resourceId_not_in: [Bytes!]
+  resourceId_contains: Bytes
+  resourceId_not_contains: Bytes
+  owner: Bytes
+  owner_not: Bytes
+  owner_gt: Bytes
+  owner_lt: Bytes
+  owner_gte: Bytes
+  owner_lte: Bytes
+  owner_in: [Bytes!]
+  owner_not_in: [Bytes!]
+  owner_contains: Bytes
+  owner_not_contains: Bytes
+  price: BigInt
+  price_not: BigInt
+  price_gt: BigInt
+  price_lt: BigInt
+  price_gte: BigInt
+  price_lte: BigInt
+  price_in: [BigInt!]
+  price_not_in: [BigInt!]
+  """Filter for the block changed event."""
+  _change_block: BlockChangedFilter
+  and: [PriceUpdated_filter]
+  or: [PriceUpdated_filter]
+}
+
+enum PriceUpdated_orderBy {
+  id
+  resourceId
+  owner
+  price
+}
+
+type PricingResource {
+  id: ID!
+  owner: Bytes!
+  price: BigInt!
+  currency: String!
+}
+
+input PricingResource_filter {
+  id: ID
+  id_not: ID
+  id_gt: ID
+  id_lt: ID
+  id_gte: ID
+  id_lte: ID
+  id_in: [ID!]
+  id_not_in: [ID!]
+  owner: Bytes
+  owner_not: Bytes
+  owner_gt: Bytes
+  owner_lt: Bytes
+  owner_gte: Bytes
+  owner_lte: Bytes
+  owner_in: [Bytes!]
+  owner_not_in: [Bytes!]
+  owner_contains: Bytes
+  owner_not_contains: Bytes
+  price: BigInt
+  price_not: BigInt
+  price_gt: BigInt
+  price_lt: BigInt
+  price_gte: BigInt
+  price_lte: BigInt
+  price_in: [BigInt!]
+  price_not_in: [BigInt!]
+  currency: String
+  currency_not: String
+  currency_gt: String
+  currency_lt: String
+  currency_gte: String
+  currency_lte: String
+  currency_in: [String!]
+  currency_not_in: [String!]
+  currency_contains: String
+  currency_contains_nocase: String
+  currency_not_contains: String
+  currency_not_contains_nocase: String
+  currency_starts_with: String
+  currency_starts_with_nocase: String
+  currency_not_starts_with: String
+  currency_not_starts_with_nocase: String
+  currency_ends_with: String
+  currency_ends_with_nocase: String
+  currency_not_ends_with: String
+  currency_not_ends_with_nocase: String
+  """Filter for the block changed event."""
+  _change_block: BlockChangedFilter
+  and: [PricingResource_filter]
+  or: [PricingResource_filter]
+}
+
+enum PricingResource_orderBy {
+  id
+  owner
+  price
+  currency
+}
+
+type Query {
+  manifestPublished(
+    id: ID!
+    """
+    The block at which the query should be executed. Can either be a `{ hash: Bytes }` value containing a block hash, a `{ number: Int }` containing the block number, or a `{ number_gte: Int }` containing the minimum block number. In the case of `number_gte`, the query will be executed on the latest block only if the subgraph has progressed to or past the minimum block number. Defaults to the latest block when omitted.
+    """
+    block: Block_height
+    """
+    Set to `allow` to receive data even if the subgraph has skipped over errors while syncing.
+    """
+    subgraphError: _SubgraphErrorPolicy_! = deny
+  ): ManifestPublished
+  manifestPublisheds(
+    skip: Int = 0
+    first: Int = 100
+    orderBy: ManifestPublished_orderBy
+    orderDirection: OrderDirection
+    where: ManifestPublished_filter
+    """
+    The block at which the query should be executed. Can either be a `{ hash: Bytes }` value containing a block hash, a `{ number: Int }` containing the block number, or a `{ number_gte: Int }` containing the minimum block number. In the case of `number_gte`, the query will be executed on the latest block only if the subgraph has progressed to or past the minimum block number. Defaults to the latest block when omitted.
+    """
+    block: Block_height
+    """
+    Set to `allow` to receive data even if the subgraph has skipped over errors while syncing.
+    """
+    subgraphError: _SubgraphErrorPolicy_! = deny
+  ): [ManifestPublished!]!
+  manifestUpdated(
+    id: ID!
+    """
+    The block at which the query should be executed. Can either be a `{ hash: Bytes }` value containing a block hash, a `{ number: Int }` containing the block number, or a `{ number_gte: Int }` containing the minimum block number. In the case of `number_gte`, the query will be executed on the latest block only if the subgraph has progressed to or past the minimum block number. Defaults to the latest block when omitted.
+    """
+    block: Block_height
+    """
+    Set to `allow` to receive data even if the subgraph has skipped over errors while syncing.
+    """
+    subgraphError: _SubgraphErrorPolicy_! = deny
+  ): ManifestUpdated
+  manifestUpdateds(
+    skip: Int = 0
+    first: Int = 100
+    orderBy: ManifestUpdated_orderBy
+    orderDirection: OrderDirection
+    where: ManifestUpdated_filter
+    """
+    The block at which the query should be executed. Can either be a `{ hash: Bytes }` value containing a block hash, a `{ number: Int }` containing the block number, or a `{ number_gte: Int }` containing the minimum block number. In the case of `number_gte`, the query will be executed on the latest block only if the subgraph has progressed to or past the minimum block number. Defaults to the latest block when omitted.
+    """
+    block: Block_height
+    """
+    Set to `allow` to receive data even if the subgraph has skipped over errors while syncing.
+    """
+    subgraphError: _SubgraphErrorPolicy_! = deny
+  ): [ManifestUpdated!]!
+  schemaRegistered(
+    id: ID!
+    """
+    The block at which the query should be executed. Can either be a `{ hash: Bytes }` value containing a block hash, a `{ number: Int }` containing the block number, or a `{ number_gte: Int }` containing the minimum block number. In the case of `number_gte`, the query will be executed on the latest block only if the subgraph has progressed to or past the minimum block number. Defaults to the latest block when omitted.
+    """
+    block: Block_height
+    """
+    Set to `allow` to receive data even if the subgraph has skipped over errors while syncing.
+    """
+    subgraphError: _SubgraphErrorPolicy_! = deny
+  ): SchemaRegistered
+  schemaRegistereds(
+    skip: Int = 0
+    first: Int = 100
+    orderBy: SchemaRegistered_orderBy
+    orderDirection: OrderDirection
+    where: SchemaRegistered_filter
+    """
+    The block at which the query should be executed. Can either be a `{ hash: Bytes }` value containing a block hash, a `{ number: Int }` containing the block number, or a `{ number_gte: Int }` containing the minimum block number. In the case of `number_gte`, the query will be executed on the latest block only if the subgraph has progressed to or past the minimum block number. Defaults to the latest block when omitted.
+    """
+    block: Block_height
+    """
+    Set to `allow` to receive data even if the subgraph has skipped over errors while syncing.
+    """
+    subgraphError: _SubgraphErrorPolicy_! = deny
+  ): [SchemaRegistered!]!
+  resourceCreated(
+    id: ID!
+    """
+    The block at which the query should be executed. Can either be a `{ hash: Bytes }` value containing a block hash, a `{ number: Int }` containing the block number, or a `{ number_gte: Int }` containing the minimum block number. In the case of `number_gte`, the query will be executed on the latest block only if the subgraph has progressed to or past the minimum block number. Defaults to the latest block when omitted.
+    """
+    block: Block_height
+    """
+    Set to `allow` to receive data even if the subgraph has skipped over errors while syncing.
+    """
+    subgraphError: _SubgraphErrorPolicy_! = deny
+  ): ResourceCreated
+  resourceCreateds(
+    skip: Int = 0
+    first: Int = 100
+    orderBy: ResourceCreated_orderBy
+    orderDirection: OrderDirection
+    where: ResourceCreated_filter
+    """
+    The block at which the query should be executed. Can either be a `{ hash: Bytes }` value containing a block hash, a `{ number: Int }` containing the block number, or a `{ number_gte: Int }` containing the minimum block number. In the case of `number_gte`, the query will be executed on the latest block only if the subgraph has progressed to or past the minimum block number. Defaults to the latest block when omitted.
+    """
+    block: Block_height
+    """
+    Set to `allow` to receive data even if the subgraph has skipped over errors while syncing.
+    """
+    subgraphError: _SubgraphErrorPolicy_! = deny
+  ): [ResourceCreated!]!
+  priceUpdated(
+    id: ID!
+    """
+    The block at which the query should be executed. Can either be a `{ hash: Bytes }` value containing a block hash, a `{ number: Int }` containing the block number, or a `{ number_gte: Int }` containing the minimum block number. In the case of `number_gte`, the query will be executed on the latest block only if the subgraph has progressed to or past the minimum block number. Defaults to the latest block when omitted.
+    """
+    block: Block_height
+    """
+    Set to `allow` to receive data even if the subgraph has skipped over errors while syncing.
+    """
+    subgraphError: _SubgraphErrorPolicy_! = deny
+  ): PriceUpdated
+  priceUpdateds(
+    skip: Int = 0
+    first: Int = 100
+    orderBy: PriceUpdated_orderBy
+    orderDirection: OrderDirection
+    where: PriceUpdated_filter
+    """
+    The block at which the query should be executed. Can either be a `{ hash: Bytes }` value containing a block hash, a `{ number: Int }` containing the block number, or a `{ number_gte: Int }` containing the minimum block number. In the case of `number_gte`, the query will be executed on the latest block only if the subgraph has progressed to or past the minimum block number. Defaults to the latest block when omitted.
+    """
+    block: Block_height
+    """
+    Set to `allow` to receive data even if the subgraph has skipped over errors while syncing.
+    """
+    subgraphError: _SubgraphErrorPolicy_! = deny
+  ): [PriceUpdated!]!
+  schemaUpdated(
+    id: ID!
+    """
+    The block at which the query should be executed. Can either be a `{ hash: Bytes }` value containing a block hash, a `{ number: Int }` containing the block number, or a `{ number_gte: Int }` containing the minimum block number. In the case of `number_gte`, the query will be executed on the latest block only if the subgraph has progressed to or past the minimum block number. Defaults to the latest block when omitted.
+    """
+    block: Block_height
+    """
+    Set to `allow` to receive data even if the subgraph has skipped over errors while syncing.
+    """
+    subgraphError: _SubgraphErrorPolicy_! = deny
+  ): SchemaUpdated
+  schemaUpdateds(
+    skip: Int = 0
+    first: Int = 100
+    orderBy: SchemaUpdated_orderBy
+    orderDirection: OrderDirection
+    where: SchemaUpdated_filter
+    """
+    The block at which the query should be executed. Can either be a `{ hash: Bytes }` value containing a block hash, a `{ number: Int }` containing the block number, or a `{ number_gte: Int }` containing the minimum block number. In the case of `number_gte`, the query will be executed on the latest block only if the subgraph has progressed to or past the minimum block number. Defaults to the latest block when omitted.
+    """
+    block: Block_height
+    """
+    Set to `allow` to receive data even if the subgraph has skipped over errors while syncing.
+    """
+    subgraphError: _SubgraphErrorPolicy_! = deny
+  ): [SchemaUpdated!]!
+  schema(
+    id: ID!
+    """
+    The block at which the query should be executed. Can either be a `{ hash: Bytes }` value containing a block hash, a `{ number: Int }` containing the block number, or a `{ number_gte: Int }` containing the minimum block number. In the case of `number_gte`, the query will be executed on the latest block only if the subgraph has progressed to or past the minimum block number. Defaults to the latest block when omitted.
+    """
+    block: Block_height
+    """
+    Set to `allow` to receive data even if the subgraph has skipped over errors while syncing.
+    """
+    subgraphError: _SubgraphErrorPolicy_! = deny
+  ): Schema
+  schemas(
+    skip: Int = 0
+    first: Int = 100
+    orderBy: Schema_orderBy
+    orderDirection: OrderDirection
+    where: Schema_filter
+    """
+    The block at which the query should be executed. Can either be a `{ hash: Bytes }` value containing a block hash, a `{ number: Int }` containing the block number, or a `{ number_gte: Int }` containing the minimum block number. In the case of `number_gte`, the query will be executed on the latest block only if the subgraph has progressed to or past the minimum block number. Defaults to the latest block when omitted.
+    """
+    block: Block_height
+    """
+    Set to `allow` to receive data even if the subgraph has skipped over errors while syncing.
+    """
+    subgraphError: _SubgraphErrorPolicy_! = deny
+  ): [Schema!]!
+  schemaEntries(
+    id: ID!
+    """
+    The block at which the query should be executed. Can either be a `{ hash: Bytes }` value containing a block hash, a `{ number: Int }` containing the block number, or a `{ number_gte: Int }` containing the minimum block number. In the case of `number_gte`, the query will be executed on the latest block only if the subgraph has progressed to or past the minimum block number. Defaults to the latest block when omitted.
+    """
+    block: Block_height
+    """
+    Set to `allow` to receive data even if the subgraph has skipped over errors while syncing.
+    """
+    subgraphError: _SubgraphErrorPolicy_! = deny
+  ): SchemaEntries
+  schemaEntries_collection(
+    skip: Int = 0
+    first: Int = 100
+    orderBy: SchemaEntries_orderBy
+    orderDirection: OrderDirection
+    where: SchemaEntries_filter
+    """
+    The block at which the query should be executed. Can either be a `{ hash: Bytes }` value containing a block hash, a `{ number: Int }` containing the block number, or a `{ number_gte: Int }` containing the minimum block number. In the case of `number_gte`, the query will be executed on the latest block only if the subgraph has progressed to or past the minimum block number. Defaults to the latest block when omitted.
+    """
+    block: Block_height
+    """
+    Set to `allow` to receive data even if the subgraph has skipped over errors while syncing.
+    """
+    subgraphError: _SubgraphErrorPolicy_! = deny
+  ): [SchemaEntries!]!
+  schemaField(
+    id: ID!
+    """
+    The block at which the query should be executed. Can either be a `{ hash: Bytes }` value containing a block hash, a `{ number: Int }` containing the block number, or a `{ number_gte: Int }` containing the minimum block number. In the case of `number_gte`, the query will be executed on the latest block only if the subgraph has progressed to or past the minimum block number. Defaults to the latest block when omitted.
+    """
+    block: Block_height
+    """
+    Set to `allow` to receive data even if the subgraph has skipped over errors while syncing.
+    """
+    subgraphError: _SubgraphErrorPolicy_! = deny
+  ): SchemaField
+  schemaFields(
+    skip: Int = 0
+    first: Int = 100
+    orderBy: SchemaField_orderBy
+    orderDirection: OrderDirection
+    where: SchemaField_filter
+    """
+    The block at which the query should be executed. Can either be a `{ hash: Bytes }` value containing a block hash, a `{ number: Int }` containing the block number, or a `{ number_gte: Int }` containing the minimum block number. In the case of `number_gte`, the query will be executed on the latest block only if the subgraph has progressed to or past the minimum block number. Defaults to the latest block when omitted.
+    """
+    block: Block_height
+    """
+    Set to `allow` to receive data even if the subgraph has skipped over errors while syncing.
+    """
+    subgraphError: _SubgraphErrorPolicy_! = deny
+  ): [SchemaField!]!
+  manifestState(
+    id: ID!
+    """
+    The block at which the query should be executed. Can either be a `{ hash: Bytes }` value containing a block hash, a `{ number: Int }` containing the block number, or a `{ number_gte: Int }` containing the minimum block number. In the case of `number_gte`, the query will be executed on the latest block only if the subgraph has progressed to or past the minimum block number. Defaults to the latest block when omitted.
+    """
+    block: Block_height
+    """
+    Set to `allow` to receive data even if the subgraph has skipped over errors while syncing.
+    """
+    subgraphError: _SubgraphErrorPolicy_! = deny
+  ): ManifestState
+  manifestStates(
+    skip: Int = 0
+    first: Int = 100
+    orderBy: ManifestState_orderBy
+    orderDirection: OrderDirection
+    where: ManifestState_filter
+    """
+    The block at which the query should be executed. Can either be a `{ hash: Bytes }` value containing a block hash, a `{ number: Int }` containing the block number, or a `{ number_gte: Int }` containing the minimum block number. In the case of `number_gte`, the query will be executed on the latest block only if the subgraph has progressed to or past the minimum block number. Defaults to the latest block when omitted.
+    """
+    block: Block_height
+    """
+    Set to `allow` to receive data even if the subgraph has skipped over errors while syncing.
+    """
+    subgraphError: _SubgraphErrorPolicy_! = deny
+  ): [ManifestState!]!
+  manifest(
+    id: ID!
+    """
+    The block at which the query should be executed. Can either be a `{ hash: Bytes }` value containing a block hash, a `{ number: Int }` containing the block number, or a `{ number_gte: Int }` containing the minimum block number. In the case of `number_gte`, the query will be executed on the latest block only if the subgraph has progressed to or past the minimum block number. Defaults to the latest block when omitted.
+    """
+    block: Block_height
+    """
+    Set to `allow` to receive data even if the subgraph has skipped over errors while syncing.
+    """
+    subgraphError: _SubgraphErrorPolicy_! = deny
+  ): Manifest
+  manifests(
+    skip: Int = 0
+    first: Int = 100
+    orderBy: Manifest_orderBy
+    orderDirection: OrderDirection
+    where: Manifest_filter
+    """
+    The block at which the query should be executed. Can either be a `{ hash: Bytes }` value containing a block hash, a `{ number: Int }` containing the block number, or a `{ number_gte: Int }` containing the minimum block number. In the case of `number_gte`, the query will be executed on the latest block only if the subgraph has progressed to or past the minimum block number. Defaults to the latest block when omitted.
+    """
+    block: Block_height
+    """
+    Set to `allow` to receive data even if the subgraph has skipped over errors while syncing.
+    """
+    subgraphError: _SubgraphErrorPolicy_! = deny
+  ): [Manifest!]!
+  fileEntry(
+    id: ID!
+    """
+    The block at which the query should be executed. Can either be a `{ hash: Bytes }` value containing a block hash, a `{ number: Int }` containing the block number, or a `{ number_gte: Int }` containing the minimum block number. In the case of `number_gte`, the query will be executed on the latest block only if the subgraph has progressed to or past the minimum block number. Defaults to the latest block when omitted.
+    """
+    block: Block_height
+    """
+    Set to `allow` to receive data even if the subgraph has skipped over errors while syncing.
+    """
+    subgraphError: _SubgraphErrorPolicy_! = deny
+  ): FileEntry
+  fileEntries(
+    skip: Int = 0
+    first: Int = 100
+    orderBy: FileEntry_orderBy
+    orderDirection: OrderDirection
+    where: FileEntry_filter
+    """
+    The block at which the query should be executed. Can either be a `{ hash: Bytes }` value containing a block hash, a `{ number: Int }` containing the block number, or a `{ number_gte: Int }` containing the minimum block number. In the case of `number_gte`, the query will be executed on the latest block only if the subgraph has progressed to or past the minimum block number. Defaults to the latest block when omitted.
+    """
+    block: Block_height
+    """
+    Set to `allow` to receive data even if the subgraph has skipped over errors while syncing.
+    """
+    subgraphError: _SubgraphErrorPolicy_! = deny
+  ): [FileEntry!]!
+  field(
+    id: ID!
+    """
+    The block at which the query should be executed. Can either be a `{ hash: Bytes }` value containing a block hash, a `{ number: Int }` containing the block number, or a `{ number_gte: Int }` containing the minimum block number. In the case of `number_gte`, the query will be executed on the latest block only if the subgraph has progressed to or past the minimum block number. Defaults to the latest block when omitted.
+    """
+    block: Block_height
+    """
+    Set to `allow` to receive data even if the subgraph has skipped over errors while syncing.
+    """
+    subgraphError: _SubgraphErrorPolicy_! = deny
+  ): Field
+  fields(
+    skip: Int = 0
+    first: Int = 100
+    orderBy: Field_orderBy
+    orderDirection: OrderDirection
+    where: Field_filter
+    """
+    The block at which the query should be executed. Can either be a `{ hash: Bytes }` value containing a block hash, a `{ number: Int }` containing the block number, or a `{ number_gte: Int }` containing the minimum block number. In the case of `number_gte`, the query will be executed on the latest block only if the subgraph has progressed to or past the minimum block number. Defaults to the latest block when omitted.
+    """
+    block: Block_height
+    """
+    Set to `allow` to receive data even if the subgraph has skipped over errors while syncing.
+    """
+    subgraphError: _SubgraphErrorPolicy_! = deny
+  ): [Field!]!
+  pricingResource(
+    id: ID!
+    """
+    The block at which the query should be executed. Can either be a `{ hash: Bytes }` value containing a block hash, a `{ number: Int }` containing the block number, or a `{ number_gte: Int }` containing the minimum block number. In the case of `number_gte`, the query will be executed on the latest block only if the subgraph has progressed to or past the minimum block number. Defaults to the latest block when omitted.
+    """
+    block: Block_height
+    """
+    Set to `allow` to receive data even if the subgraph has skipped over errors while syncing.
+    """
+    subgraphError: _SubgraphErrorPolicy_! = deny
+  ): PricingResource
+  pricingResources(
+    skip: Int = 0
+    first: Int = 100
+    orderBy: PricingResource_orderBy
+    orderDirection: OrderDirection
+    where: PricingResource_filter
+    """
+    The block at which the query should be executed. Can either be a `{ hash: Bytes }` value containing a block hash, a `{ number: Int }` containing the block number, or a `{ number_gte: Int }` containing the minimum block number. In the case of `number_gte`, the query will be executed on the latest block only if the subgraph has progressed to or past the minimum block number. Defaults to the latest block when omitted.
+    """
+    block: Block_height
+    """
+    Set to `allow` to receive data even if the subgraph has skipped over errors while syncing.
+    """
+    subgraphError: _SubgraphErrorPolicy_! = deny
+  ): [PricingResource!]!
+  """Access to subgraph metadata"""
+  _meta(block: Block_height): _Meta_
+}
+
+type ResourceCreated {
+  id: Bytes!
+  resourceId: Bytes!
+  groupId: BigInt!
+  owner: Bytes!
+  price: BigInt!
+}
+
+input ResourceCreated_filter {
+  id: Bytes
+  id_not: Bytes
+  id_gt: Bytes
+  id_lt: Bytes
+  id_gte: Bytes
+  id_lte: Bytes
+  id_in: [Bytes!]
+  id_not_in: [Bytes!]
+  id_contains: Bytes
+  id_not_contains: Bytes
+  resourceId: Bytes
+  resourceId_not: Bytes
+  resourceId_gt: Bytes
+  resourceId_lt: Bytes
+  resourceId_gte: Bytes
+  resourceId_lte: Bytes
+  resourceId_in: [Bytes!]
+  resourceId_not_in: [Bytes!]
+  resourceId_contains: Bytes
+  resourceId_not_contains: Bytes
+  groupId: BigInt
+  groupId_not: BigInt
+  groupId_gt: BigInt
+  groupId_lt: BigInt
+  groupId_gte: BigInt
+  groupId_lte: BigInt
+  groupId_in: [BigInt!]
+  groupId_not_in: [BigInt!]
+  owner: Bytes
+  owner_not: Bytes
+  owner_gt: Bytes
+  owner_lt: Bytes
+  owner_gte: Bytes
+  owner_lte: Bytes
+  owner_in: [Bytes!]
+  owner_not_in: [Bytes!]
+  owner_contains: Bytes
+  owner_not_contains: Bytes
+  price: BigInt
+  price_not: BigInt
+  price_gt: BigInt
+  price_lt: BigInt
+  price_gte: BigInt
+  price_lte: BigInt
+  price_in: [BigInt!]
+  price_not_in: [BigInt!]
+  """Filter for the block changed event."""
+  _change_block: BlockChangedFilter
+  and: [ResourceCreated_filter]
+  or: [ResourceCreated_filter]
+}
+
+enum ResourceCreated_orderBy {
+  id
+  resourceId
+  groupId
+  owner
+  price
+}
+
+type Schema {
+  id: ID!
+  schemaId: Bytes!
+  owner: Bytes!
+  name: String!
+  versions(skip: Int = 0, first: Int = 100, orderBy: SchemaEntries_orderBy, orderDirection: OrderDirection, where: SchemaEntries_filter): [SchemaEntries!]
+}
+
+type SchemaEntries {
+  id: ID!
+  version: BigInt!
+  spec_cid: String!
+  agent_id: String
+  fields(skip: Int = 0, first: Int = 100, orderBy: SchemaField_orderBy, orderDirection: OrderDirection, where: SchemaField_filter): [SchemaField!]
+}
+
+input SchemaEntries_filter {
+  id: ID
+  id_not: ID
+  id_gt: ID
+  id_lt: ID
+  id_gte: ID
+  id_lte: ID
+  id_in: [ID!]
+  id_not_in: [ID!]
+  version: BigInt
+  version_not: BigInt
+  version_gt: BigInt
+  version_lt: BigInt
+  version_gte: BigInt
+  version_lte: BigInt
+  version_in: [BigInt!]
+  version_not_in: [BigInt!]
+  spec_cid: String
+  spec_cid_not: String
+  spec_cid_gt: String
+  spec_cid_lt: String
+  spec_cid_gte: String
+  spec_cid_lte: String
+  spec_cid_in: [String!]
+  spec_cid_not_in: [String!]
+  spec_cid_contains: String
+  spec_cid_contains_nocase: String
+  spec_cid_not_contains: String
+  spec_cid_not_contains_nocase: String
+  spec_cid_starts_with: String
+  spec_cid_starts_with_nocase: String
+  spec_cid_not_starts_with: String
+  spec_cid_not_starts_with_nocase: String
+  spec_cid_ends_with: String
+  spec_cid_ends_with_nocase: String
+  spec_cid_not_ends_with: String
+  spec_cid_not_ends_with_nocase: String
+  agent_id: String
+  agent_id_not: String
+  agent_id_gt: String
+  agent_id_lt: String
+  agent_id_gte: String
+  agent_id_lte: String
+  agent_id_in: [String!]
+  agent_id_not_in: [String!]
+  agent_id_contains: String
+  agent_id_contains_nocase: String
+  agent_id_not_contains: String
+  agent_id_not_contains_nocase: String
+  agent_id_starts_with: String
+  agent_id_starts_with_nocase: String
+  agent_id_not_starts_with: String
+  agent_id_not_starts_with_nocase: String
+  agent_id_ends_with: String
+  agent_id_ends_with_nocase: String
+  agent_id_not_ends_with: String
+  agent_id_not_ends_with_nocase: String
+  fields: [String!]
+  fields_not: [String!]
+  fields_contains: [String!]
+  fields_contains_nocase: [String!]
+  fields_not_contains: [String!]
+  fields_not_contains_nocase: [String!]
+  fields_: SchemaField_filter
+  """Filter for the block changed event."""
+  _change_block: BlockChangedFilter
+  and: [SchemaEntries_filter]
+  or: [SchemaEntries_filter]
+}
+
+enum SchemaEntries_orderBy {
+  id
+  version
+  spec_cid
+  agent_id
+  fields
+}
+
+type SchemaField {
+  id: ID!
+  name: String!
+  fieldType: String!
+}
+
+input SchemaField_filter {
+  id: ID
+  id_not: ID
+  id_gt: ID
+  id_lt: ID
+  id_gte: ID
+  id_lte: ID
+  id_in: [ID!]
+  id_not_in: [ID!]
+  name: String
+  name_not: String
+  name_gt: String
+  name_lt: String
+  name_gte: String
+  name_lte: String
+  name_in: [String!]
+  name_not_in: [String!]
+  name_contains: String
+  name_contains_nocase: String
+  name_not_contains: String
+  name_not_contains_nocase: String
+  name_starts_with: String
+  name_starts_with_nocase: String
+  name_not_starts_with: String
+  name_not_starts_with_nocase: String
+  name_ends_with: String
+  name_ends_with_nocase: String
+  name_not_ends_with: String
+  name_not_ends_with_nocase: String
+  fieldType: String
+  fieldType_not: String
+  fieldType_gt: String
+  fieldType_lt: String
+  fieldType_gte: String
+  fieldType_lte: String
+  fieldType_in: [String!]
+  fieldType_not_in: [String!]
+  fieldType_contains: String
+  fieldType_contains_nocase: String
+  fieldType_not_contains: String
+  fieldType_not_contains_nocase: String
+  fieldType_starts_with: String
+  fieldType_starts_with_nocase: String
+  fieldType_not_starts_with: String
+  fieldType_not_starts_with_nocase: String
+  fieldType_ends_with: String
+  fieldType_ends_with_nocase: String
+  fieldType_not_ends_with: String
+  fieldType_not_ends_with_nocase: String
+  """Filter for the block changed event."""
+  _change_block: BlockChangedFilter
+  and: [SchemaField_filter]
+  or: [SchemaField_filter]
+}
+
+enum SchemaField_orderBy {
+  id
+  name
+  fieldType
+}
+
+type SchemaRegistered {
+  id: Bytes!
+  schemaId: Bytes!
+  owner: Bytes!
+  name: String!
+  spec_cid: String!
+  agent_id: String!
+}
+
+input SchemaRegistered_filter {
+  id: Bytes
+  id_not: Bytes
+  id_gt: Bytes
+  id_lt: Bytes
+  id_gte: Bytes
+  id_lte: Bytes
+  id_in: [Bytes!]
+  id_not_in: [Bytes!]
+  id_contains: Bytes
+  id_not_contains: Bytes
+  schemaId: Bytes
+  schemaId_not: Bytes
+  schemaId_gt: Bytes
+  schemaId_lt: Bytes
+  schemaId_gte: Bytes
+  schemaId_lte: Bytes
+  schemaId_in: [Bytes!]
+  schemaId_not_in: [Bytes!]
+  schemaId_contains: Bytes
+  schemaId_not_contains: Bytes
+  owner: Bytes
+  owner_not: Bytes
+  owner_gt: Bytes
+  owner_lt: Bytes
+  owner_gte: Bytes
+  owner_lte: Bytes
+  owner_in: [Bytes!]
+  owner_not_in: [Bytes!]
+  owner_contains: Bytes
+  owner_not_contains: Bytes
+  name: String
+  name_not: String
+  name_gt: String
+  name_lt: String
+  name_gte: String
+  name_lte: String
+  name_in: [String!]
+  name_not_in: [String!]
+  name_contains: String
+  name_contains_nocase: String
+  name_not_contains: String
+  name_not_contains_nocase: String
+  name_starts_with: String
+  name_starts_with_nocase: String
+  name_not_starts_with: String
+  name_not_starts_with_nocase: String
+  name_ends_with: String
+  name_ends_with_nocase: String
+  name_not_ends_with: String
+  name_not_ends_with_nocase: String
+  spec_cid: String
+  spec_cid_not: String
+  spec_cid_gt: String
+  spec_cid_lt: String
+  spec_cid_gte: String
+  spec_cid_lte: String
+  spec_cid_in: [String!]
+  spec_cid_not_in: [String!]
+  spec_cid_contains: String
+  spec_cid_contains_nocase: String
+  spec_cid_not_contains: String
+  spec_cid_not_contains_nocase: String
+  spec_cid_starts_with: String
+  spec_cid_starts_with_nocase: String
+  spec_cid_not_starts_with: String
+  spec_cid_not_starts_with_nocase: String
+  spec_cid_ends_with: String
+  spec_cid_ends_with_nocase: String
+  spec_cid_not_ends_with: String
+  spec_cid_not_ends_with_nocase: String
+  agent_id: String
+  agent_id_not: String
+  agent_id_gt: String
+  agent_id_lt: String
+  agent_id_gte: String
+  agent_id_lte: String
+  agent_id_in: [String!]
+  agent_id_not_in: [String!]
+  agent_id_contains: String
+  agent_id_contains_nocase: String
+  agent_id_not_contains: String
+  agent_id_not_contains_nocase: String
+  agent_id_starts_with: String
+  agent_id_starts_with_nocase: String
+  agent_id_not_starts_with: String
+  agent_id_not_starts_with_nocase: String
+  agent_id_ends_with: String
+  agent_id_ends_with_nocase: String
+  agent_id_not_ends_with: String
+  agent_id_not_ends_with_nocase: String
+  """Filter for the block changed event."""
+  _change_block: BlockChangedFilter
+  and: [SchemaRegistered_filter]
+  or: [SchemaRegistered_filter]
+}
+
+enum SchemaRegistered_orderBy {
+  id
+  schemaId
+  owner
+  name
+  spec_cid
+  agent_id
+}
+
+type SchemaUpdated {
+  id: Bytes!
+  schemaId: Bytes!
+  new_spec_cid: String!
+  new_agent_id: String!
+}
+
+input SchemaUpdated_filter {
+  id: Bytes
+  id_not: Bytes
+  id_gt: Bytes
+  id_lt: Bytes
+  id_gte: Bytes
+  id_lte: Bytes
+  id_in: [Bytes!]
+  id_not_in: [Bytes!]
+  id_contains: Bytes
+  id_not_contains: Bytes
+  schemaId: Bytes
+  schemaId_not: Bytes
+  schemaId_gt: Bytes
+  schemaId_lt: Bytes
+  schemaId_gte: Bytes
+  schemaId_lte: Bytes
+  schemaId_in: [Bytes!]
+  schemaId_not_in: [Bytes!]
+  schemaId_contains: Bytes
+  schemaId_not_contains: Bytes
+  new_spec_cid: String
+  new_spec_cid_not: String
+  new_spec_cid_gt: String
+  new_spec_cid_lt: String
+  new_spec_cid_gte: String
+  new_spec_cid_lte: String
+  new_spec_cid_in: [String!]
+  new_spec_cid_not_in: [String!]
+  new_spec_cid_contains: String
+  new_spec_cid_contains_nocase: String
+  new_spec_cid_not_contains: String
+  new_spec_cid_not_contains_nocase: String
+  new_spec_cid_starts_with: String
+  new_spec_cid_starts_with_nocase: String
+  new_spec_cid_not_starts_with: String
+  new_spec_cid_not_starts_with_nocase: String
+  new_spec_cid_ends_with: String
+  new_spec_cid_ends_with_nocase: String
+  new_spec_cid_not_ends_with: String
+  new_spec_cid_not_ends_with_nocase: String
+  new_agent_id: String
+  new_agent_id_not: String
+  new_agent_id_gt: String
+  new_agent_id_lt: String
+  new_agent_id_gte: String
+  new_agent_id_lte: String
+  new_agent_id_in: [String!]
+  new_agent_id_not_in: [String!]
+  new_agent_id_contains: String
+  new_agent_id_contains_nocase: String
+  new_agent_id_not_contains: String
+  new_agent_id_not_contains_nocase: String
+  new_agent_id_starts_with: String
+  new_agent_id_starts_with_nocase: String
+  new_agent_id_not_starts_with: String
+  new_agent_id_not_starts_with_nocase: String
+  new_agent_id_ends_with: String
+  new_agent_id_ends_with_nocase: String
+  new_agent_id_not_ends_with: String
+  new_agent_id_not_ends_with_nocase: String
+  """Filter for the block changed event."""
+  _change_block: BlockChangedFilter
+  and: [SchemaUpdated_filter]
+  or: [SchemaUpdated_filter]
+}
+
+enum SchemaUpdated_orderBy {
+  id
+  schemaId
+  new_spec_cid
+  new_agent_id
+}
+
+input Schema_filter {
+  id: ID
+  id_not: ID
+  id_gt: ID
+  id_lt: ID
+  id_gte: ID
+  id_lte: ID
+  id_in: [ID!]
+  id_not_in: [ID!]
+  schemaId: Bytes
+  schemaId_not: Bytes
+  schemaId_gt: Bytes
+  schemaId_lt: Bytes
+  schemaId_gte: Bytes
+  schemaId_lte: Bytes
+  schemaId_in: [Bytes!]
+  schemaId_not_in: [Bytes!]
+  schemaId_contains: Bytes
+  schemaId_not_contains: Bytes
+  owner: Bytes
+  owner_not: Bytes
+  owner_gt: Bytes
+  owner_lt: Bytes
+  owner_gte: Bytes
+  owner_lte: Bytes
+  owner_in: [Bytes!]
+  owner_not_in: [Bytes!]
+  owner_contains: Bytes
+  owner_not_contains: Bytes
+  name: String
+  name_not: String
+  name_gt: String
+  name_lt: String
+  name_gte: String
+  name_lte: String
+  name_in: [String!]
+  name_not_in: [String!]
+  name_contains: String
+  name_contains_nocase: String
+  name_not_contains: String
+  name_not_contains_nocase: String
+  name_starts_with: String
+  name_starts_with_nocase: String
+  name_not_starts_with: String
+  name_not_starts_with_nocase: String
+  name_ends_with: String
+  name_ends_with_nocase: String
+  name_not_ends_with: String
+  name_not_ends_with_nocase: String
+  versions: [String!]
+  versions_not: [String!]
+  versions_contains: [String!]
+  versions_contains_nocase: [String!]
+  versions_not_contains: [String!]
+  versions_not_contains_nocase: [String!]
+  versions_: SchemaEntries_filter
+  """Filter for the block changed event."""
+  _change_block: BlockChangedFilter
+  and: [Schema_filter]
+  or: [Schema_filter]
+}
+
+enum Schema_orderBy {
+  id
+  schemaId
+  owner
+  name
+  versions
+}
+
+"""A string representation of microseconds UNIX timestamp (16 digits)"""
+scalar Timestamp
+
+type _Block_ {
+  """The hash of the block"""
+  hash: Bytes
+  """The block number"""
+  number: Int!
+  """Integer representation of the timestamp stored in blocks for the chain"""
+  timestamp: Int
+  """The hash of the parent block"""
+  parentHash: Bytes
+}
+
+"""The type for the top-level _meta field"""
+type _Meta_ {
+  """
+  Information about a specific subgraph block. The hash of the block
+  will be null if the _meta field has a block constraint that asks for
+  a block number. It will be filled if the _meta field has no block constraint
+  and therefore asks for the latest  block
+  """
+  block: _Block_!
+  """The deployment ID"""
+  deployment: String!
+  """If `true`, the subgraph encountered indexing errors at some past block"""
+  hasIndexingErrors: Boolean!
+}
+
+enum _SubgraphErrorPolicy_ {
+  """Data will be returned even if the subgraph has indexing errors"""
+  allow
+  """
+  If the subgraph has indexing errors, data will be omitted. The default.
+  """
+  deny
+}

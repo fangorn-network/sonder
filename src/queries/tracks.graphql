@@ -1,0 +1,60 @@
+query GetTracks($first: Int!, $skip: Int!) {
+  manifestStates(first: $first, skip: $skip) {
+    owner
+    schema_name
+    manifest {
+      files {
+        fields {
+          name
+          value
+          atType
+          acc
+          price { price currency }
+        }
+      }
+    }
+  }
+}
+
+query SearchTracks($search: String!) {
+  byArtist: fields(
+    where: { name: "artist", value_contains_nocase: $search }
+    first: 50
+  ) {
+    manifestState {
+      owner
+      schema_name
+      manifest {
+        files {
+          fields {
+            name
+            value
+            atType
+            acc
+            price { price currency }
+          }
+        }
+      }
+    }
+  }
+  byTitle: fields(
+    where: { name: "title", value_contains_nocase: $search }
+    first: 50
+  ) {
+    manifestState {
+      owner
+      schema_name
+      manifest {
+        files {
+          fields {
+            name
+            value
+            atType
+            acc
+            price { price currency }
+          }
+        }
+      }
+    }
+  }
+}

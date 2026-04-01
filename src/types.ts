@@ -5,6 +5,7 @@ export interface Track {
   title: string
   artist: string
   album: string
+  trackNumber: string
   duration: string
   price: string
   genre: string

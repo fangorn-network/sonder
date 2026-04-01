@@ -1,431 +1,524 @@
-// import { useState, useCallback } from 'react'
-// import { usePrivy } from '@privy-io/react-auth'
-// import { Fangorn, fieldToHex } from '@fangorn-network/sdk'
-// import { useFangorn } from '../hooks/useFangorn'
-// import type { UploadStatus, UploadPanel, AlbumView, ManifestEntry } from '../types'
-// import type { PublishRecord } from '@fangorn-network/sdk/lib/roles/publisher'
+import { useState, useCallback, useEffect, useRef } from 'react'
+import { usePrivy, useWallets } from '@privy-io/react-auth'
+import { createWalletClient, custom, type Hex } from 'viem'
+import { Fangorn, FangornConfig } from '@fangorn-network/sdk'
+import * as MUSIC_SCHEMA from '../../schema.json';
+import '../App.css';
 
-// import * as SCHEMA from '../../schema.json';
-// import type { SchemaDefinition } from '@fangorn-network/sdk/lib/roles/schema'
-// import { SettlementRegistry } from '@fangorn-network/sdk/lib/registries/settlement-registry'
+// ─────────────────────────────────────────────────────────────────────────────
+// Minimal browser-native ID3v2 parser (no dependencies)
+// ─────────────────────────────────────────────────────────────────────────────
 
-// // everything but the encrypted field
-// interface TrackForm {
-//     title: string           // string, public
-//     artist: string          // string, public
-//     price: string           // USDC per play — not a schema field, drives the gadget
-// }
-// // const SETTLEMENT_TRACKER: Record<string, string> = {
-// //     arbitrumSepolia: '0x7c6ae9eb3398234eb69b2f3acfae69065505ff69',
-// //     baseSepolia: '0x708751829f5f5f584da4142b62cd5cc9235c8a18',
-// // }
-// // const settlementAddress = () =>
-// //     SETTLEMENT_TRACKER[CHAIN_CONFIG.chainName] ?? SETTLEMENT_TRACKER.arbitrumSepolia
+function parseId3v2(buf: Uint8Array): {
+    title?: string; artist?: string; genre?: string
+    album?: string; trackNumber?: string
+} {
+    const result: { title?: string; artist?: string; genre?: string; album?: string; trackNumber?: string } = {}
+    if (buf[0] !== 0x49 || buf[1] !== 0x44 || buf[2] !== 0x33) return result
 
-// function shareLink(owner: string, schemaId: string, tag: string) {
-//     return `${window.location.origin}/play?owner=${owner}&schema=${encodeURIComponent(schemaId)}&tag=${encodeURIComponent(tag)}`
-// }
-// function copyToClipboard(text: string) {
-//     navigator.clipboard.writeText(text).catch(() => { })
-// }
+    const version = buf[3]
+    const size =
+        ((buf[6] & 0x7f) << 21) | ((buf[7] & 0x7f) << 14) |
+        ((buf[8] & 0x7f) << 7) | (buf[9] & 0x7f)
 
-// // Attempt to read audio duration from the File before upload
-// function readAudioDuration(file: File): Promise<number> {
-//     return new Promise(resolve => {
-//         const url = URL.createObjectURL(file)
-//         const audio = new Audio(url)
-//         audio.addEventListener('loadedmetadata', () => {
-//             URL.revokeObjectURL(url)
-//             resolve(Math.round(audio.duration) || 0)
-//         })
-//         audio.addEventListener('error', () => { URL.revokeObjectURL(url); resolve(0) })
-//     })
-// }
+    let offset = 10
+    const end = Math.min(10 + size, buf.length)
+    const decUtf8 = new TextDecoder('utf-8')
+    const decLatin = new TextDecoder('iso-8859-1')
+    const FRAMES = new Set(['TIT2', 'TPE1', 'TCON', 'TALB', 'TRCK'])
 
-// /// TrackRow
-// function TrackRow({ entry, owner, schemaId }: {
-//     entry: ManifestEntry; owner: string; schemaId: string
-// }) {
-//     const [copied, setCopied] = useState(false)
-//     const link = shareLink(owner, schemaId, entry.tag)
-//     return (
-//         <div className="manifest-row">
-//             <div className="manifest-row-info">
-//                 <span className="manifest-tag">{entry.tag}</span>
-//                 <span className="manifest-cid" title={entry.cid}>cid: {entry.cid.slice(0, 14)}…</span>
-//             </div>
-//             <button className="btn-copy" onClick={() => {
-//                 copyToClipboard(link); setCopied(true); setTimeout(() => setCopied(false), 2000)
-//             }}>
-//                 {copied ? '✓ Copied' : 'Copy link'}
-//             </button>
-//         </div>
-//     )
-// }
+    while (offset + 10 <= end) {
+        const frameId = String.fromCharCode(buf[offset], buf[offset + 1], buf[offset + 2], buf[offset + 3])
+        if (frameId === '\0\0\0\0') break
 
-// // UploadPanel
-// const EMPTY_FORM: TrackForm = {
-//     title: '', artist: '', price: '0.50',
-// }
+        const frameSize = version >= 4
+            ? ((buf[offset + 4] & 0x7f) << 21) | ((buf[offset + 5] & 0x7f) << 14) |
+            ((buf[offset + 6] & 0x7f) << 7) | (buf[offset + 7] & 0x7f)
+            : (buf[offset + 4] << 24) | (buf[offset + 5] << 16) |
+            (buf[offset + 6] << 8) | buf[offset + 7]
 
-// function UploadPanel({ fangorn, ownerAddress }: {
-//     fangorn: Fangorn,
-//     ownerAddress: string,
-//     //   schemaId: `0x${string}` | null
-// }) {
-//     const [form, setForm] = useState<TrackForm>(EMPTY_FORM)
-//     const [file, setFile] = useState<File | null>(null)
-//     const [status, setStatus] = useState<UploadStatus>('idle')
-//     const [statusMsg, setStatusMsg] = useState('')
-//     const [shareUrl, setShareUrl] = useState<string | null>(null)
-//     const [copied, setCopied] = useState(false)
+        offset += 10
+        if (frameSize <= 0 || offset + frameSize > end) break
 
-//     const setField = (key: keyof TrackForm) =>
-//         (e: React.ChangeEvent<HTMLInputElement>) => setForm(f => ({ ...f, [key]: e.target.value }))
+        if (FRAMES.has(frameId)) {
+            const encoding = buf[offset]
+            const raw = buf.subarray(offset + 1, offset + frameSize)
+            const text = (encoding === 0 ? decLatin : decUtf8).decode(raw).replace(/\0/g, '').trim()
+            if (frameId === 'TIT2') result.title       = text
+            if (frameId === 'TPE1') result.artist      = text
+            if (frameId === 'TCON') result.genre       = text.replace(/^\(\d+\)/, '').trim() || text
+            if (frameId === 'TALB') result.album       = text
+            if (frameId === 'TRCK') result.trackNumber = text.split('/')[0] // "3/12" → "3"
+        }
 
-//     const handleDrop = useCallback((e: React.DragEvent) => {
-//         e.preventDefault()
-//         const dropped = e.dataTransfer.files[0]
-//         if (!dropped?.type.startsWith('audio/')) return
-//         setFile(dropped)
-//         // Auto-fill duration from audio metadata
-//         readAudioDuration(dropped).then(secs => {
-//             if (secs) setForm(f => ({ ...f, duration_seconds: String(secs) }))
-//         })
-//     }, [])
+        offset += frameSize
+    }
 
-//     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-//         const picked = e.target.files?.[0] ?? null
-//         setFile(picked)
-//         if (picked) {
-//             readAudioDuration(picked).then(secs => {
-//                 if (secs) setForm(f => ({ ...f, duration_seconds: String(secs) }))
-//             })
-//         }
-//     }
+    return result
+}
 
-//     const handleUpload = async (e: React.FormEvent) => {
-//         e.preventDefault()
-//         if (!file || !fangorn) return
+// ─────────────────────────────────────────────────────────────────────────────
+// Schema
+// ─────────────────────────────────────────────────────────────────────────────
 
-//         try {
-//             setStatus('uploading')
-//             setStatusMsg('Reading file…')
-//             // Read as base64 in chunks to avoid stack overflow on large files
-//             const arrayBuffer = await file.arrayBuffer()
-//             const bytes = new Uint8Array(arrayBuffer)
-//             const CHUNK = 0x8000
-//             let binary = ''
-//             for (let i = 0; i < bytes.length; i += CHUNK) {
-//                 binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK))
-//             }
-//             const base64 = btoa(binary)
-//             // file extension
-//             const ext = file.name.split('.').pop() ?? 'mp3'
-//             // format tag
-//             const tag = `${form.title.toLowerCase().replace(/\s+/g, '-')}.${ext}`
+const SCHEMA_NAME = 'fangorn.music.test.v1'
+const SCHEMA_ID   = '0x946978c428adcf76d2db7a20b5becff7627a37feaf6c3054a2a3cd053d8ce44c' as Hex
 
-//             // Filedata carries the audio; schema public fields travel as `metadata`
-//             // so the manifest entry surfaces them alongside audio_cid (the stored CID)
-//             const records: PublishRecord[] = [
-//                 {
-//                     tag,
-//                     // Public schema fields stored as metadata on the entry
-//                     fields: {
-//                         title: form.title,
-//                         artist: form.artist,
-//                         audio: new TextEncoder().encode(base64)
-//                     },
-//                 }
-//             ]
+// ─────────────────────────────────────────────────────────────────────────────
+// Types
+// ─────────────────────────────────────────────────────────────────────────────
 
-//             setStatusMsg('Encrypting & uploading to IPFS…')
-//             // get the schema definition (cached locally)
-//             // get the schemaId from the chain based on schema name
-//             const schemaId = "0x0";
-//             // encrypt and upload
-//             const { manifestCid } = await fangorn.publisher.upload({
-//                 records,
-//                 SCHEMA,
-//                 schemaId,
-//                 "todo",
-//                 gadgetFactory: (tag) => new <SettledGadget></SettledGadget>({
-//                     resourceId: SettlementRegistry.deriveResourceId(owner, schemaId, tag),
-//                     settlementRegistryAddress: this.config.settlementRegistryContractAddress,
-//                     chainName: this.config.chainName,
-//                     pinataJwt: this.pinataJwt,
-//                 }),
-//             }, price);
+type UploadStatus = 'idle' | 'parsing' | 'uploading' | 'done' | 'error'
 
-//             setShareUrl(shareLink(ownerAddress, schemaId, tag))
-//             setStatus('done')
-//             setStatusMsg('')
-//         } catch (err: any) {
-//             setStatus('error')
-//             setStatusMsg(err.message ?? 'Upload failed')
-//         }
-//     }
+interface TrackForm {
+    title:       string
+    artist:      string
+    album:       string
+    trackNumber: string
+    genre:       string
+    duration:    string  // ISO 8601 e.g. "PT3M42S"
+    price:       string
+}
 
-//     const reset = () => {
-//         setFile(null); setStatus('idle'); setStatusMsg(''); setShareUrl(null); setCopied(false)
-//         setForm(EMPTY_FORM)
-//     }
+const EMPTY_FORM: TrackForm = {
+    title: '', artist: '', album: '', trackNumber: '', genre: '', duration: '', price: '1',
+}
 
-//     if (!schemaId) {
-//         return (
-//             <div className="upload-form">
-//                 <div className="upload-status">
-//                     <span className="upload-spinner" />
-//                     Resolving schema {MUSIC_SCHEMA_NAME}…
-//                 </div>
-//             </div>
-//         )
-//     }
+// ─────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────────────────
 
-//     const canSubmit = !!file && !!form.title && !!form.artist && status !== 'uploading'
+function slug(s: string) {
+    return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+}
 
-//     return (
-//         <form className="upload-form" onSubmit={handleUpload}>
-//             {/* Schema badge */}
-//             <div className="schema-badge">
-//                 <span className="schema-label">schema</span>
-//                 <code className="schema-name">{MUSIC_SCHEMA_NAME}</code>
-//             </div>
+function secondsToIso(secs: number): string {
+    if (!secs) return ''
+    const h = Math.floor(secs / 3600)
+    const m = Math.floor((secs % 3600) / 60)
+    const s = Math.floor(secs % 60)
+    let d = 'PT'
+    if (h) d += `${h}H`
+    if (m) d += `${m}M`
+    if (s || (!h && !m)) d += `${s}S`
+    return d
+}
 
-//             {/* Drop zone */}
-//             <div
-//                 className={`drop-zone ${file ? 'has-file' : ''}`}
-//                 onClick={() => document.getElementById('file-input')?.click()}
-//                 onDrop={handleDrop}
-//                 onDragOver={e => e.preventDefault()}
-//             >
-//                 {file ? (
-//                     <span className="drop-label">✓ {file.name}</span>
-//                 ) : (
-//                     <>
-//                         <span className="drop-icon">♪</span>
-//                         <span className="drop-label">Drop audio file or click to browse</span>
-//                         <span className="drop-hint">.mp3 · .wav · .flac · .aac</span>
-//                     </>
-//                 )}
-//                 <input id="file-input" type="file" accept="audio/*"
-//                     style={{ display: 'none' }} onChange={handleFileChange} />
-//             </div>
+function isoToDisplay(iso: string): string {
+    const match = iso.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/)
+    if (!match) return iso
+    const h = parseInt(match[1] ?? '0')
+    const m = parseInt(match[2] ?? '0')
+    const s = parseInt(match[3] ?? '0')
+    const total = h * 3600 + m * 60 + s
+    const mm = Math.floor(total / 60)
+    const ss = total % 60
+    return `${mm}:${String(ss).padStart(2, '0')}`
+}
 
-//             {/* Schema fields */}
-//             <div className="form-grid">
-//                 {/* title */}
-//                 <div className="field">
-//                     <label>Title <span className="field-required">*</span></label>
-//                     <input type="text" placeholder="Lagos at 3am"
-//                         value={form.title} onChange={setField('title')} />
-//                 </div>
+function formatSize(bytes: number): string {
+    if (bytes < 1_048_576) return `${(bytes / 1024).toFixed(0)} KB`
+    return `${(bytes / 1_048_576).toFixed(1)} MB`
+}
 
-//                 {/* artist */}
-//                 <div className="field">
-//                     <label>Artist <span className="field-required">*</span></label>
-//                     <input type="text" placeholder="Tunde Okafor"
-//                         value={form.artist} onChange={setField('artist')} />
-//                 </div>
+async function parseAudioFile(file: File): Promise<Partial<TrackForm>> {
+    const result: Partial<TrackForm> = {}
 
-//                 {/* genre */}
-//                 <div className="field">
-//                     <label>Genre</label>
-//                     <input type="text" placeholder="Afrobeats"
-//                         value={form.genre} onChange={setField('genre')} />
-//                 </div>
+    // 1. Embedded ID3v2 tags
+    try {
+        const slice = await file.slice(0, 256 * 1024).arrayBuffer()
+        const tags = parseId3v2(new Uint8Array(slice))
+        if (tags.title)       result.title       = tags.title
+        if (tags.artist)      result.artist      = tags.artist
+        if (tags.genre)       result.genre       = tags.genre
+        if (tags.album)       result.album       = tags.album
+        if (tags.trackNumber) result.trackNumber = tags.trackNumber
+    } catch { /* silent */ }
 
-//                 {/* duration_seconds — auto-filled from audio, editable */}
-//                 <div className="field">
-//                     <label>Duration (seconds)</label>
-//                     <input type="number" min="0" placeholder="auto-detected"
-//                         value={form.duration_seconds} onChange={setField('duration_seconds')} />
-//                 </div>
+    // 2. Filename heuristic: "Artist - Title.mp3"
+    if (!result.title || !result.artist) {
+        const stem = file.name.replace(/\.[^.]+$/, '')
+        if (stem.includes(' - ')) {
+            const [a, t] = stem.split(' - ', 2)
+            if (!result.artist) result.artist = a.trim()
+            if (!result.title)  result.title  = t.trim()
+        } else {
+            if (!result.title) result.title = stem
+        }
+    }
 
-//                 {/* cover_art_url */}
-//                 <div className="field" style={{ gridColumn: '1 / -1' }}>
-//                     <label>Cover art URL <span style={{ color: 'var(--text-dim)', fontWeight: 400 }}>(optional)</span></label>
-//                     <input type="url" placeholder="https://cdn.example.com/cover.jpg"
-//                         value={form.cover_art_url} onChange={setField('cover_art_url')} />
-//                 </div>
+    // 3. Duration via Audio element → ISO 8601
+    const durationSecs = await new Promise<number>(resolve => {
+        const url = URL.createObjectURL(file)
+        const audio = new Audio(url)
+        audio.addEventListener('loadedmetadata', () => { URL.revokeObjectURL(url); resolve(Math.round(audio.duration) || 0) })
+        audio.addEventListener('error', () => { URL.revokeObjectURL(url); resolve(0) })
+    })
+    if (durationSecs) result.duration = secondsToIso(durationSecs)
 
-//                 {/* price — not a schema field, drives PaymentGadget */}
-//                 <div className="field">
-//                     <label>Price per play (USDC) <span className="field-required">*</span></label>
-//                     <input type="number" step="0.000001" min="0.000001"
-//                         value={form.price} onChange={setField('price')} />
-//                 </div>
-//             </div>
+    return result
+}
 
-//             {status === 'uploading' && (
-//                 <div className="upload-status"><span className="upload-spinner" />{statusMsg}</div>
-//             )}
-//             {status === 'error' && <div className="upload-error">{statusMsg}</div>}
+// ─────────────────────────────────────────────────────────────────────────────
+// Hook: publisher Fangorn instance
+// ─────────────────────────────────────────────────────────────────────────────
 
-//             <div style={{ display: 'flex', gap: 10 }}>
-//                 <button className="btn-primary" type="submit" disabled={!canSubmit}>
-//                     {status === 'uploading' ? 'Encrypting & uploading…' : 'Encrypt & Publish'}
-//                 </button>
-//                 {status === 'done' && (
-//                     <button type="button" className="btn-primary" onClick={reset}
-//                         style={{ background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-dim)' }}>
-//                         Upload another
-//                     </button>
-//                 )}
-//             </div>
+function usePublisherFangorn() {
+    const { user } = usePrivy()
+    const { wallets } = useWallets()
+    const [fangorn, setFangorn] = useState<Fangorn | null>(null)
+    const [address, setAddress] = useState<Hex | null>(null)
+    const [ready, setReady]     = useState(false)
+    const [error, setError]     = useState<string | null>(null)
+    const wallet = wallets[0]
 
-//             {status === 'done' && shareUrl && (
-//                 <div className="share-link">
-//                     <span className="share-label">Share link</span>
-//                     <div className="share-row">
-//                         <code className="share-url">{shareUrl}</code>
-//                         <button type="button" className="btn-copy" onClick={() => {
-//                             copyToClipboard(shareUrl); setCopied(true); setTimeout(() => setCopied(false), 2000)
-//                         }}>{copied ? '✓ Copied' : 'Copy'}</button>
-//                     </div>
-//                     <p className="field-hint">
-//                         Anyone with this link pays ${form.price} USDC to unlock the track.
-//                     </p>
-//                 </div>
-//             )}
-//         </form>
-//     )
-// }
+    useEffect(() => {
+        if (!wallet) return
+        let cancelled = false
+        setReady(false)
+        setError(null)
 
-// // ─── ManagePanel ──────────────────────────────────────────────────────────────
+        const init = async () => {
+            const email =
+                user?.email?.address ??
+                (user as any)?.google?.email ??
+                'driemworks@fangorn.network'
 
-// function ManagePanel({ ownerAddress, schemaId, fetchTracks }: {
-//     ownerAddress: string
-//     schemaId: `0x${string}` | null
-//     fetchTracks: () => Promise<AlbumView[]>
-// }) {
-//     const [albums, setAlbums] = useState<AlbumView[]>([])
-//     const [loading, setLoading] = useState(false)
-//     const [error, setError] = useState<string | null>(null)
-//     const [fetched, setFetched] = useState(false)
+            const provider = await wallet.getEthereumProvider()
+            const wc = createWalletClient({
+                account: wallet.address as Hex,
+                chain: {
+                    ...FangornConfig.ArbitrumSepolia.chain,
+                    fees: { baseFeeMultiplier: 2 },
+                },
+                transport: custom(provider),
+            })
+            const fg = await Fangorn.create({
+                walletClient: wc,
+                storage: { storacha: { email } },
+                encryption: { lit: true },
+                config: FangornConfig.ArbitrumSepolia,
+                domain: window.location.host,
+            })
+            if (cancelled) return
+            setFangorn(fg)
+            setAddress(wallet.address as Hex)
+            setReady(true)
+        }
 
-//     const handleFetch = async () => {
-//         if (!schemaId) return
-//         setLoading(true); setError(null)
-//         try {
-//             const result = await fetchTracks()
-//             setAlbums(result)
-//             setFetched(true)
-//             if (!result.length || !result[0].entries.length) {
-//                 setError(`No tracks found under ${MUSIC_SCHEMA_NAME} for this wallet.`)
-//             }
-//         } catch (e: any) {
-//             setError(e.message)
-//         } finally {
-//             setLoading(false)
-//         }
-//     }
+        init().catch(e => { if (!cancelled) setError(e.message ?? String(e)) })
+        return () => { cancelled = true }
+    }, [wallet?.address, user?.email?.address])
 
-//     const totalTracks = albums.reduce((n, a) => n + a.entries.length, 0)
+    return { fangorn, address, ready, error }
+}
 
-//     return (
-//         <div className="manage-panel">
-//             <div className="schema-badge" style={{ marginBottom: 16 }}>
-//                 <span className="schema-label">schema</span>
-//                 <code className="schema-name">{MUSIC_SCHEMA_NAME}</code>
-//             </div>
+// ─────────────────────────────────────────────────────────────────────────────
+// UploadPanel
+// ─────────────────────────────────────────────────────────────────────────────
 
-//             <button className="btn-primary" onClick={handleFetch}
-//                 disabled={loading || !schemaId} style={{ marginBottom: 16 }}>
-//                 {loading ? 'Loading…' : fetched ? `Refresh (${totalTracks} tracks)` : 'Load my tracks'}
-//             </button>
+function UploadPanel({ fangorn, address }: { fangorn: Fangorn; address: Hex }) {
+    const [form, setForm]           = useState<TrackForm>(EMPTY_FORM)
+    const [file, setFile]           = useState<File | null>(null)
+    const [status, setStatus]       = useState<UploadStatus>('idle')
+    const [statusMsg, setStatusMsg] = useState('')
+    const [manifestCid, setManifestCid] = useState<string | null>(null)
+    const [dragging, setDragging]   = useState(false)
+    const [copied, setCopied]       = useState(false)
+    const fileInputRef = useRef<HTMLInputElement>(null)
 
-//             {error && <div className="upload-error" style={{ marginBottom: 12 }}>{error}</div>}
+    const setField = (key: keyof TrackForm) =>
+        (e: React.ChangeEvent<HTMLInputElement>) =>
+            setForm(f => ({ ...f, [key]: e.target.value }))
 
-//             {albums.flatMap(album =>
-//                 album.entries.map(entry => (
-//                     <TrackRow
-//                         key={entry.tag}
-//                         entry={entry}
-//                         owner={ownerAddress}
-//                         schemaId={schemaId ?? ''}
-//                     />
-//                 ))
-//             )}
-//         </div>
-//     )
-// }
+    const pickFile = useCallback(async (f: File) => {
+        if (!f.type.startsWith('audio/')) return
+        setFile(f)
+        setStatus('parsing')
+        try {
+            const parsed = await parseAudioFile(f)
+            setForm(prev => ({
+                ...prev,
+                title:       parsed.title       ?? prev.title,
+                artist:      parsed.artist      ?? prev.artist,
+                album:       parsed.album       ?? prev.album,
+                trackNumber: parsed.trackNumber ?? prev.trackNumber,
+                genre:       parsed.genre       ?? prev.genre,
+                duration:    parsed.duration    ?? prev.duration,
+            }))
+        } finally {
+            setStatus('idle')
+        }
+    }, [])
 
-// // ─── UploadView ───────────────────────────────────────────────────────────────
-// // Register tab removed — DataSourceRegistry has no registerDataSource method.
-// // Publishing a manifest for the first time IS the registration.
+    const handleDrop = useCallback((e: React.DragEvent) => {
+        e.preventDefault()
+        setDragging(false)
+        const dropped = e.dataTransfer.files[0]
+        if (dropped) pickFile(dropped)
+    }, [pickFile])
 
-// export function UploadView() {
-//     const { authenticated, login } = usePrivy()
-//     const [panel, setPanel] = useState<UploadPanel>('upload')
+    const handleUpload = async () => {
+        if (!file || !form.title || !form.artist) return
+        try {
+            setStatus('uploading')
+            setStatusMsg('Reading audio…')
+            const arrayBuffer = await file.arrayBuffer()
+            const audioBytes  = new Uint8Array(arrayBuffer)
+            const tag         = `${slug(form.artist)}-${slug(form.title)}-${Date.now()}`
+            const price       = BigInt(Math.round(parseFloat(form.price) || 1))
 
-//     const { fangorn, walletClient, address, loading, error } = useFangorn()
+            setStatusMsg('Encrypting & uploading to IPFS…')
+            const { manifestCid: cid } = await fangorn.publisher.upload(
+                {
+                    records: [{
+                        tag,
+                        fields: {
+                            title:       form.title,
+                            artist:      form.artist,
+                            album:       form.album       || '',
+                            trackNumber: form.trackNumber || '',
+                            genre:       form.genre       || '',
+                            duration:    form.duration    || '',
+                            audio: { data: audioBytes, fileType: file.type || 'audio/mpeg' },
+                        },
+                    }],
+                    schema:   MUSIC_SCHEMA,
+                    schemaId: SCHEMA_ID,
+                    gateway:  '',
+                },
+                price,
+            )
 
-//     if (!authenticated) {
-//         return (
-//             <div className="view upload-view">
-//                 <div className="empty-state">
-//                     <div className="empty-icon">🎙️</div>
-//                     <p>Connect to publish your music</p>
-//                     <button className="btn-primary" onClick={login}>Connect</button>
-//                 </div>
-//             </div>
-//         )
-//     }
+            setManifestCid(cid)
+            setStatus('done')
+            setStatusMsg('')
+        } catch (e: any) {
+            setStatus('error')
+            setStatusMsg(e.message ?? 'Upload failed')
+        }
+    }
 
-//     if (loading) {
-//         return (
-//             <div className="view upload-view">
-//                 <div className="empty-state">
-//                     <span className="upload-spinner" style={{ width: 20, height: 20 }} />
-//                     <p>Initializing Fangorn…</p>
-//                 </div>
-//             </div>
-//         )
-//     }
+    const reset = () => {
+        setFile(null)
+        setForm(EMPTY_FORM)
+        setStatus('idle')
+        setStatusMsg('')
+        setManifestCid(null)
+        setCopied(false)
+    }
 
-//     if (error) {
-//         return (
-//             <div className="view upload-view">
-//                 <div className="upload-error">Failed to initialize: {error}</div>
-//             </div>
-//         )
-//     }
+    const canSubmit = !!file && !!form.title && !!form.artist
+        && status !== 'uploading' && status !== 'parsing'
 
-//     if (!fangorn || !address) {
-//         return (
-//             <div className="view upload-view">
-//                 <div className="empty-state"><p>Wallet not ready — connect above.</p></div>
-//             </div>
-//         )
-//     }
+    // ── Done ──────────────────────────────────────────────────────────────────
+    if (status === 'done' && manifestCid) {
+        return (
+            <div className="studio-done">
+                <div className="studio-done-glyph">✦</div>
+                <h3 className="studio-done-title">Published</h3>
+                <p className="studio-done-sub">{form.title} · {form.artist}</p>
+                <div className="studio-cid-row">
+                    <span className="studio-cid-label">manifest</span>
+                    <code className="studio-cid-value">{manifestCid.slice(0, 24)}…</code>
+                    <button className="studio-cid-copy" onClick={() => {
+                        navigator.clipboard.writeText(manifestCid)
+                        setCopied(true)
+                        setTimeout(() => setCopied(false), 2000)
+                    }}>{copied ? '✓' : 'copy'}</button>
+                </div>
+                <button className="btn-primary studio-done-action" onClick={reset}>
+                    Publish another
+                </button>
+            </div>
+        )
+    }
 
-//     return (
-//         <div className="view upload-view">
-//             <div className="view-header">
-//                 <h2 className="view-title">Artist Studio</h2>
-//                 <div className="panel-tabs">
-//                     {(['upload', 'manage'] as UploadPanel[]).map(p => (
-//                         <button key={p} className={`panel-tab ${panel === p ? 'active' : ''}`}
-//                             onClick={() => setPanel(p)}>
-//                             {p.charAt(0).toUpperCase() + p.slice(1)}
-//                         </button>
-//                     ))}
-//                 </div>
-//             </div>
+    return (
+        <div className="studio-form">
 
-//             {panel === 'upload' && (
-//                 <UploadPanel
-//                     fangorn={fangorn}
-//                     ownerAddress={address}
-//                 />
-//             )}
-//             {panel === 'manage' && (
-//                 <ManagePanel
-//                     ownerAddress={address}
-//                     schemaId={musicSchemaId}
-//                 />
-//             )}
-//         </div>
-//     )
-// }
+            {/* Badges */}
+            <div className="studio-badge-row">
+                <div className="studio-badge">
+                    <span className="studio-badge-key">schema</span>
+                    <code className="studio-badge-val">{SCHEMA_NAME}</code>
+                </div>
+                <div className="studio-badge">
+                    <span className="studio-badge-key">owner</span>
+                    <code className="studio-badge-val">{address.slice(0, 6)}…{address.slice(-4)}</code>
+                </div>
+            </div>
+
+            {/* Drop zone */}
+            <div
+                className={[
+                    'studio-drop',
+                    file                 ? 'has-file'    : '',
+                    dragging             ? 'is-dragging' : '',
+                    status === 'parsing' ? 'is-parsing'  : '',
+                ].filter(Boolean).join(' ')}
+                onClick={() => !file && fileInputRef.current?.click()}
+                onDrop={handleDrop}
+                onDragOver={e => { e.preventDefault(); setDragging(true) }}
+                onDragLeave={() => setDragging(false)}
+            >
+                {status === 'parsing' ? (
+                    <div className="studio-drop-state">
+                        <span className="upload-spinner" />
+                        <span className="studio-drop-label">Reading metadata…</span>
+                    </div>
+                ) : file ? (
+                    <div className="studio-drop-state studio-drop-filled">
+                        <div className="studio-drop-note">♪</div>
+                        <div className="studio-drop-info">
+                            <span className="studio-drop-filename">{file.name}</span>
+                            <span className="studio-drop-meta">
+                                {formatSize(file.size)}
+                                {form.duration && <> · {isoToDisplay(form.duration)}</>}
+                            </span>
+                        </div>
+                        <button className="studio-drop-clear"
+                            onClick={e => { e.stopPropagation(); reset() }}>✕</button>
+                    </div>
+                ) : (
+                    <div className="studio-drop-state">
+                        <div className="studio-drop-arrow">↓</div>
+                        <p className="studio-drop-label">Drop an audio file</p>
+                        <p className="studio-drop-hint">ID3 tags auto-populated · mp3 wav flac aac ogg</p>
+                        <button className="studio-drop-browse"
+                            onClick={e => { e.stopPropagation(); fileInputRef.current?.click() }}>
+                            Browse
+                        </button>
+                    </div>
+                )}
+                <input ref={fileInputRef} type="file" accept="audio/*" style={{ display: 'none' }}
+                    onChange={e => { const f = e.target.files?.[0]; if (f) pickFile(f) }} />
+            </div>
+
+            {/* Fields */}
+            <div className="studio-fields">
+                <div className="studio-field">
+                    <label className="studio-label">Title <span className="studio-required">*</span></label>
+                    <input className="studio-input" type="text" placeholder="Cassini Division"
+                        value={form.title} onChange={setField('title')} disabled={status === 'uploading'} />
+                </div>
+
+                <div className="studio-field">
+                    <label className="studio-label">Artist <span className="studio-required">*</span></label>
+                    <input className="studio-input" type="text" placeholder="Arca"
+                        value={form.artist} onChange={setField('artist')} disabled={status === 'uploading'} />
+                </div>
+
+                <div className="studio-field">
+                    <label className="studio-label">Album</label>
+                    <input className="studio-input" type="text" placeholder="Mutant"
+                        value={form.album} onChange={setField('album')} disabled={status === 'uploading'} />
+                </div>
+
+                <div className="studio-field">
+                    <label className="studio-label">Track #</label>
+                    <input className="studio-input" type="text" placeholder="1"
+                        value={form.trackNumber} onChange={setField('trackNumber')} disabled={status === 'uploading'} />
+                </div>
+
+                <div className="studio-field">
+                    <label className="studio-label">Genre</label>
+                    <input className="studio-input" type="text" placeholder="Electronic"
+                        value={form.genre} onChange={setField('genre')} disabled={status === 'uploading'} />
+                </div>
+
+                <div className="studio-field">
+                    <label className="studio-label">
+                        Duration <span className="studio-label-dim">(auto-detected)</span>
+                    </label>
+                    <input className="studio-input" type="text" placeholder="PT3M42S"
+                        value={form.duration} onChange={setField('duration')} disabled={status === 'uploading'} />
+                </div>
+
+                <div className="studio-field" style={{ gridColumn: '1 / -1' }}>
+                    <label className="studio-label">
+                        Price <span className="studio-label-dim">(USDC units)</span>
+                    </label>
+                    <input className="studio-input" type="number" min="1" step="1" placeholder="1"
+                        value={form.price} onChange={setField('price')} disabled={status === 'uploading'} />
+                </div>
+            </div>
+
+            {/* Status */}
+            {status === 'uploading' && (
+                <div className="chain-loading" style={{ padding: '12px 0', justifyContent: 'flex-start' }}>
+                    <span className="upload-spinner" />
+                    <span style={{ fontSize: 13, color: 'var(--text-dim)' }}>{statusMsg}</span>
+                </div>
+            )}
+            {status === 'error' && <div className="upload-error">{statusMsg}</div>}
+
+            {/* Submit */}
+            <div className="studio-actions">
+                <button className="btn-primary studio-submit" onClick={handleUpload} disabled={!canSubmit}>
+                    {status === 'uploading' ? 'Publishing…' : 'Encrypt & Publish'}
+                </button>
+                <p className="studio-hint">
+                    Audio is threshold-encrypted on publish.
+                    Listeners pay <strong>{form.price || '1'}</strong> USDC unit{form.price === '1' ? '' : 's'} to unlock.
+                </p>
+            </div>
+        </div>
+    )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// UploadView
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function UploadView() {
+    const { authenticated, login } = usePrivy()
+    const { fangorn, address, ready, error } = usePublisherFangorn()
+
+    if (!authenticated) {
+        return (
+            <div className="view upload-view">
+                <div className="empty-state">
+                    <div className="empty-icon" style={{ fontSize: 48 }}>🎙</div>
+                    <p>Connect your wallet to publish music</p>
+                    <button className="btn-primary" style={{ marginTop: 20 }} onClick={login}>
+                        Connect wallet
+                    </button>
+                </div>
+            </div>
+        )
+    }
+
+    if (error) {
+        return (
+            <div className="view upload-view">
+                <div className="upload-error" style={{ maxWidth: 560, margin: '40px auto 0' }}>
+                    Failed to initialize: {error}
+                </div>
+            </div>
+        )
+    }
+
+    if (!ready || !fangorn || !address) {
+        return (
+            <div className="view upload-view">
+                <div className="chain-loading">
+                    <span className="upload-spinner" />
+                    Initializing Fangorn…
+                </div>
+            </div>
+        )
+    }
+
+    return (
+        <div className="view upload-view">
+            <div className="studio-wrap">
+                <div className="studio-header">
+                    <h2 className="studio-title">Artist Studio</h2>
+                    <p className="studio-sub">Publish encrypted music to the Fangorn network.</p>
+                </div>
+                <UploadPanel fangorn={fangorn} address={address} />
+            </div>
+        </div>
+    )
+}

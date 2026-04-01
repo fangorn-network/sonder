@@ -18,18 +18,19 @@ function normalizeManifestState(state: any): Track[] {
         const price = fields['audio']?.price ?? null
         return {
             id: `${owner}-${tag}`,
-            title: fields['title']?.value ?? tag,
-            artist: fields['artist']?.value ?? owner.slice(0, 8) + '…',
-            album: schema_name,
-            duration: '—',
-            genre: fields['genre']?.value ?? '',
+            title:          fields['title']?.value    ?? tag,
+            artist:         fields['artist']?.value   ?? owner.slice(0, 8) + '…',
+            album:          fields['album']?.value    ?? schema_name,
+            trackNumber:    fields['trackNumber']?.value ?? null,
+            duration:       fields['duration']?.value ?? '—',
+            genre:          fields['genre']?.value    ?? '',
             owner,
             datasourceName: schema_name,
             tag,
-            art: fields['cover_art']?.value ?? null,
-            price: price?.price ?? '0',
-            currency: price?.currency ?? 'USDC',
-            acc: fields['audio']?.acc ?? null,
+            art:            fields['cover_art']?.value ?? null,
+            price:          price?.price    ?? '0',
+            currency:       price?.currency ?? 'USDC',
+            acc:            fields['audio']?.acc ?? null,
         } satisfies Track
     })
 }
@@ -38,13 +39,17 @@ function normalizeResults(data: GetTracksQuery): Track[] {
     return (data.manifestStates ?? []).flatMap(normalizeManifestState)
 }
 
+const SEARCH_FIELDS = new Set(['artist', 'title', 'album', 'genre'])
+
 function normalizeSearchResults(data: SearchTracksQuery, term: string): Track[] {
-    const seen = new Set<string>()
+    const seen  = new Set<string>()
     const lower = term.toLowerCase()
 
     const allFields = [
         ...(data.byArtist ?? []),
-        ...(data.byTitle ?? []),
+        ...(data.byTitle  ?? []),
+        ...(data.byAlbum  ?? []),
+        ...(data.byGenre  ?? []),
     ]
 
     return allFields
@@ -53,35 +58,35 @@ function normalizeSearchResults(data: SearchTracksQuery, term: string): Track[] 
             const state = f.manifestState
             if (!state?.manifest?.files) return []
 
-            // only keep files where at least one field matches the search term
             return state.manifest.files
-                .filter((file: any) => {
-                    return (file.fields ?? []).some((field: any) =>
-                        (field.name === 'artist' || field.name === 'title') &&
+                .filter((file: any) =>
+                    (file.fields ?? []).some((field: any) =>
+                        SEARCH_FIELDS.has(field.name) &&
                         field.value?.toLowerCase().includes(lower)
                     )
-                })
+                )
                 .map((file: any, i: number) => {
                     const fields: Record<string, any> = {}
                     for (const field of file.fields ?? []) {
                         fields[field.name ?? ''] = field
                     }
-                    const tag = fields['audio']?.value ?? `track-${i}`
+                    const tag   = fields['audio']?.value ?? `track-${i}`
                     const price = fields['audio']?.price ?? null
                     const track: Track = {
-                        id: `${state.owner}-${tag}`,
-                        title: fields['title']?.value ?? tag,
-                        artist: fields['artist']?.value ?? state.owner.slice(0, 8) + '…',
-                        album: state.schema_name,
-                        duration: '—',
-                        genre: fields['genre']?.value ?? '',
-                        owner: state.owner,
+                        id:             `${state.owner}-${tag}`,
+                        title:          fields['title']?.value    ?? tag,
+                        artist:         fields['artist']?.value   ?? state.owner.slice(0, 8) + '…',
+                        album:          fields['album']?.value    ?? state.schema_name,
+                        trackNumber:    fields['trackNumber']?.value ?? null,
+                        duration:       fields['duration']?.value ?? '—',
+                        genre:          fields['genre']?.value    ?? '',
+                        owner:          state.owner,
                         datasourceName: state.schema_name,
                         tag,
-                        art: fields['cover_art']?.value ?? null,
-                        price: price?.price ?? '0',
-                        currency: price?.currency ?? 'USDC',
-                        acc: fields['audio']?.acc ?? null,
+                        art:            fields['cover_art']?.value ?? null,
+                        price:          price?.price    ?? '0',
+                        currency:       price?.currency ?? 'USDC',
+                        acc:            fields['audio']?.acc ?? null,
                     }
                     return track
                 })
@@ -105,17 +110,16 @@ export interface UseGraphResult {
 }
 
 export function useGraph(): UseGraphResult {
-    const [tracks, setTracks] = useState<Track[]>([])
-    const [loading, setLoading] = useState(true)
+    const [tracks, setTracks]           = useState<Track[]>([])
+    const [loading, setLoading]         = useState(true)
     const [loadingMore, setLoadingMore] = useState(false)
-    const [error, setError] = useState<string | null>(null)
-    const [skip, setSkip] = useState(0)
-    const [hasMore, setHasMore] = useState(true)
-    const [search, setSearch] = useState('')
-    const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const [error, setError]             = useState<string | null>(null)
+    const [skip, setSkip]               = useState(0)
+    const [hasMore, setHasMore]         = useState(true)
+    const [search, setSearch]           = useState('')
+    const debounceRef  = useRef<ReturnType<typeof setTimeout> | null>(null)
     const cancelledRef = useRef(false)
 
-    // paginated fetch (no search)
     const fetchPage = useCallback(async (pageSkip: number, replace: boolean) => {
         replace ? setLoading(true) : setLoadingMore(true)
         try {
@@ -134,7 +138,6 @@ export function useGraph(): UseGraphResult {
         }
     }, [])
 
-    // search fetch (no pagination — Graph returns up to 50 per field type)
     const fetchSearch = useCallback(async (term: string) => {
         setLoading(true)
         setHasMore(false)
@@ -152,29 +155,22 @@ export function useGraph(): UseGraphResult {
         }
     }, [])
 
-    // initial load
     useEffect(() => {
         cancelledRef.current = false
         fetchPage(0, true)
         return () => { cancelledRef.current = true }
     }, [fetchPage])
 
-    // debounced search
     useEffect(() => {
         if (debounceRef.current) clearTimeout(debounceRef.current)
         if (!search.trim()) {
-            // cleared — go back to paginated browse
             setSkip(0)
             setHasMore(true)
             fetchPage(0, true)
             return
         }
-        debounceRef.current = setTimeout(() => {
-            fetchSearch(search.trim())
-        }, 350)
-        return () => {
-            if (debounceRef.current) clearTimeout(debounceRef.current)
-        }
+        debounceRef.current = setTimeout(() => fetchSearch(search.trim()), 350)
+        return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
     }, [search, fetchPage, fetchSearch])
 
     const loadMore = useCallback(() => {

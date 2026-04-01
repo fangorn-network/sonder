@@ -1,20 +1,43 @@
-query GetTracks($first: Int!, $skip: Int!) {
-  manifestStates(first: $first, skip: $skip) {
-    owner
-    schema_name
-    manifest {
-      files {
-        fields {
-          name
-          value
-          atType
-          acc
-          price { price currency }
+# ─────────────────────────────────────────────────────────────────────────────
+# Fragments
+# ─────────────────────────────────────────────────────────────────────────────
+
+fragment TrackFields on ManifestState {
+  owner
+  schema_name
+  manifest {
+    files {
+      fields {
+        name
+        value
+        atType
+        acc
+        price {
+          price
+          currency
         }
       }
     }
   }
 }
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Get a paginated list of all music tracks
+# ─────────────────────────────────────────────────────────────────────────────
+
+query GetTracks($first: Int!, $skip: Int!) {
+  manifestStates(
+    first: $first
+    skip: $skip
+    where: { schema_name: "fangorn.music.test.v1" }
+  ) {
+    ...TrackFields
+  }
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Search tracks by artist, title, album, or genre
+# ─────────────────────────────────────────────────────────────────────────────
 
 query SearchTracks($search: String!) {
   byArtist: fields(
@@ -22,39 +45,114 @@ query SearchTracks($search: String!) {
     first: 50
   ) {
     manifestState {
-      owner
-      schema_name
-      manifest {
-        files {
-          fields {
-            name
-            value
-            atType
-            acc
-            price { price currency }
-          }
-        }
-      }
+      ...TrackFields
     }
   }
+
   byTitle: fields(
     where: { name: "title", value_contains_nocase: $search }
     first: 50
   ) {
     manifestState {
-      owner
-      schema_name
-      manifest {
-        files {
-          fields {
-            name
-            value
-            atType
-            acc
-            price { price currency }
-          }
-        }
-      }
+      ...TrackFields
+    }
+  }
+
+  byAlbum: fields(
+    where: { name: "album", value_contains_nocase: $search }
+    first: 50
+  ) {
+    manifestState {
+      ...TrackFields
+    }
+  }
+
+  byGenre: fields(
+    where: { name: "genre", value_contains_nocase: $search }
+    first: 50
+  ) {
+    manifestState {
+      ...TrackFields
+    }
+  }
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Get all tracks by a specific artist (exact match)
+# ─────────────────────────────────────────────────────────────────────────────
+
+query GetTracksByArtist($artist: String!, $first: Int!, $skip: Int!) {
+  fields(
+    where: { name: "artist", value: $artist }
+    first: $first
+    skip: $skip
+  ) {
+    manifestState {
+      ...TrackFields
+    }
+  }
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Get all tracks on a specific album
+# ─────────────────────────────────────────────────────────────────────────────
+
+query GetAlbumTracks($album: String!, $first: Int!, $skip: Int!) {
+  fields(
+    where: { name: "album", value: $album }
+    first: $first
+    skip: $skip
+  ) {
+    manifestState {
+      ...TrackFields
+    }
+  }
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Get all tracks by genre
+# ─────────────────────────────────────────────────────────────────────────────
+
+query GetTracksByGenre($genre: String!, $first: Int!, $skip: Int!) {
+  fields(
+    where: { name: "genre", value_contains_nocase: $genre }
+    first: $first
+    skip: $skip
+  ) {
+    manifestState {
+      ...TrackFields
+    }
+  }
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Get all tracks owned by a specific address
+# ─────────────────────────────────────────────────────────────────────────────
+
+query GetTracksByOwner($owner: Bytes!, $first: Int!, $skip: Int!) {
+  manifestStates(
+    where: {
+      owner: $owner
+      schema_name: "pl-genesis.fangorn.music"
+    }
+    first: $first
+    skip: $skip
+  ) {
+    ...TrackFields
+  }
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Get a single track by owner + title (unique enough for demo purposes)
+# ─────────────────────────────────────────────────────────────────────────────
+
+query GetTrack($owner: Bytes!, $title: String!) {
+  fields(
+    where: { name: "title", value: $title }
+    first: 1
+  ) {
+    manifestState {
+      ...TrackFields
     }
   }
 }

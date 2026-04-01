@@ -5,6 +5,18 @@
     "artist": {
         "@type": "string"
     },
+    "album": {
+        "@type": "string"
+    },
+    "trackNumber": {
+        "@type": "string"
+    },
+    "genre": {
+        "@type": "string"
+    },
+    "duration": {
+        "@type": "string"
+    },
     "audio": {
         "@type": "encrypted",
         "gadget": "settled"

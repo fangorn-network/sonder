@@ -7,6 +7,7 @@ import { BrowseView } from './views/BrowseView'
 import { useGraph } from './hooks/useGraph'
 import type { Track, ViewName } from './types'
 import './App.css'
+import { UploadView } from './views/UploadView'
 
 export default function App() {
   const [view, setView] = useState<ViewName>('Browse')
@@ -41,9 +42,9 @@ export default function App() {
         {/* {view === 'Library' && (
           <LibraryView onPlay={setCurrentTrack} currentTrack={currentTrack} />
         )} */}
-        {/* {view === 'Upload' && (
+        {view === 'Upload' && (
           <UploadView />
-        )} */}
+        )}
       </main>
     </div>
   )

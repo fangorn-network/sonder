@@ -4,6 +4,14 @@
 
 ## Build
 
+Schema:    `fangorn.music.test.v0`
+Schema ID: 0x7a69b1c49f16834707fe1d8bcc69ec485ea1b3c7bc68dd3ab81b05ec539952cd
+CID:       bafkreifkcdjqa76qlknzubwas5wxgfodyeligvm6jol6krl2ht75ikrmtu
+
+Schema:    `fangorn.music.test.v1`
+0x946978c428adcf76d2db7a20b5becff7627a37feaf6c3054a2a3cd053d8ce44c
+bafkreiggwdlk6cwpg5mkdvi5lzxybpirezqte5xvqhn7lq7zltywerovji
+
 ### Graph Codegen
 
 This project is built on top of the graph. On first setup, run codegen: 

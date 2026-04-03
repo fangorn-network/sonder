@@ -2,8 +2,9 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { usePrivy, useWallets } from '@privy-io/react-auth'
 import { createWalletClient, custom, type Hex } from 'viem'
 import { Fangorn, FangornConfig } from '@fangorn-network/sdk'
-import * as MUSIC_SCHEMA from '../../schema.json';
+// import * as MUSIC_SCHEMA from '../../schema.json';
 import '../App.css';
+import type { SchemaDefinition } from '@fangorn-network/sdk/lib/roles/schema';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Minimal browser-native ID3v2 parser (no dependencies)
@@ -44,10 +45,10 @@ function parseId3v2(buf: Uint8Array): {
             const encoding = buf[offset]
             const raw = buf.subarray(offset + 1, offset + frameSize)
             const text = (encoding === 0 ? decLatin : decUtf8).decode(raw).replace(/\0/g, '').trim()
-            if (frameId === 'TIT2') result.title       = text
-            if (frameId === 'TPE1') result.artist      = text
-            if (frameId === 'TCON') result.genre       = text.replace(/^\(\d+\)/, '').trim() || text
-            if (frameId === 'TALB') result.album       = text
+            if (frameId === 'TIT2') result.title = text
+            if (frameId === 'TPE1') result.artist = text
+            if (frameId === 'TCON') result.genre = text.replace(/^\(\d+\)/, '').trim() || text
+            if (frameId === 'TALB') result.album = text
             if (frameId === 'TRCK') result.trackNumber = text.split('/')[0] // "3/12" → "3"
         }
 
@@ -61,8 +62,8 @@ function parseId3v2(buf: Uint8Array): {
 // Schema
 // ─────────────────────────────────────────────────────────────────────────────
 
-const SCHEMA_NAME = 'fangorn.music.test.v1'
-const SCHEMA_ID   = '0x946978c428adcf76d2db7a20b5becff7627a37feaf6c3054a2a3cd053d8ce44c' as Hex
+const SCHEMA_NAME = 'fangorn.music.test.v3'
+const SCHEMA_ID = '0x773dae8ae3b545f8824005428deabf97c65672d31887c7ed02d55b09b69e576a' as Hex
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -71,13 +72,13 @@ const SCHEMA_ID   = '0x946978c428adcf76d2db7a20b5becff7627a37feaf6c3054a2a3cd053
 type UploadStatus = 'idle' | 'parsing' | 'uploading' | 'done' | 'error'
 
 interface TrackForm {
-    title:       string
-    artist:      string
-    album:       string
+    title: string
+    artist: string
+    album: string
     trackNumber: string
-    genre:       string
-    duration:    string  // ISO 8601 e.g. "PT3M42S"
-    price:       string
+    genre: string
+    duration: string  // ISO 8601 e.g. "PT3M42S"
+    price: string
 }
 
 const EMPTY_FORM: TrackForm = {
@@ -128,10 +129,10 @@ async function parseAudioFile(file: File): Promise<Partial<TrackForm>> {
     try {
         const slice = await file.slice(0, 256 * 1024).arrayBuffer()
         const tags = parseId3v2(new Uint8Array(slice))
-        if (tags.title)       result.title       = tags.title
-        if (tags.artist)      result.artist      = tags.artist
-        if (tags.genre)       result.genre       = tags.genre
-        if (tags.album)       result.album       = tags.album
+        if (tags.title) result.title = tags.title
+        if (tags.artist) result.artist = tags.artist
+        if (tags.genre) result.genre = tags.genre
+        if (tags.album) result.album = tags.album
         if (tags.trackNumber) result.trackNumber = tags.trackNumber
     } catch { /* silent */ }
 
@@ -141,7 +142,7 @@ async function parseAudioFile(file: File): Promise<Partial<TrackForm>> {
         if (stem.includes(' - ')) {
             const [a, t] = stem.split(' - ', 2)
             if (!result.artist) result.artist = a.trim()
-            if (!result.title)  result.title  = t.trim()
+            if (!result.title) result.title = t.trim()
         } else {
             if (!result.title) result.title = stem
         }
@@ -168,8 +169,8 @@ function usePublisherFangorn() {
     const { wallets } = useWallets()
     const [fangorn, setFangorn] = useState<Fangorn | null>(null)
     const [address, setAddress] = useState<Hex | null>(null)
-    const [ready, setReady]     = useState(false)
-    const [error, setError]     = useState<string | null>(null)
+    const [ready, setReady] = useState(false)
+    const [error, setError] = useState<string | null>(null)
     const wallet = wallets[0]
 
     useEffect(() => {
@@ -218,13 +219,13 @@ function usePublisherFangorn() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function UploadPanel({ fangorn, address }: { fangorn: Fangorn; address: Hex }) {
-    const [form, setForm]           = useState<TrackForm>(EMPTY_FORM)
-    const [file, setFile]           = useState<File | null>(null)
-    const [status, setStatus]       = useState<UploadStatus>('idle')
+    const [form, setForm] = useState<TrackForm>(EMPTY_FORM)
+    const [file, setFile] = useState<File | null>(null)
+    const [status, setStatus] = useState<UploadStatus>('idle')
     const [statusMsg, setStatusMsg] = useState('')
     const [manifestCid, setManifestCid] = useState<string | null>(null)
-    const [dragging, setDragging]   = useState(false)
-    const [copied, setCopied]       = useState(false)
+    const [dragging, setDragging] = useState(false)
+    const [copied, setCopied] = useState(false)
     const fileInputRef = useRef<HTMLInputElement>(null)
 
     const setField = (key: keyof TrackForm) =>
@@ -239,12 +240,12 @@ function UploadPanel({ fangorn, address }: { fangorn: Fangorn; address: Hex }) {
             const parsed = await parseAudioFile(f)
             setForm(prev => ({
                 ...prev,
-                title:       parsed.title       ?? prev.title,
-                artist:      parsed.artist      ?? prev.artist,
-                album:       parsed.album       ?? prev.album,
+                title: parsed.title ?? prev.title,
+                artist: parsed.artist ?? prev.artist,
+                album: parsed.album ?? prev.album,
                 trackNumber: parsed.trackNumber ?? prev.trackNumber,
-                genre:       parsed.genre       ?? prev.genre,
-                duration:    parsed.duration    ?? prev.duration,
+                genre: parsed.genre ?? prev.genre,
+                duration: parsed.duration ?? prev.duration,
             }))
         } finally {
             setStatus('idle')
@@ -258,15 +259,41 @@ function UploadPanel({ fangorn, address }: { fangorn: Fangorn; address: Hex }) {
         if (dropped) pickFile(dropped)
     }, [pickFile])
 
+    const schemaDef: SchemaDefinition =
+    {
+        "title": {
+            "@type": "string"
+        },
+        "artist": {
+            "@type": "string"
+        },
+        "album": {
+            "@type": "string"
+        },
+        "trackNumber": {
+            "@type": "string"
+        },
+        "genre": {
+            "@type": "string"
+        },
+        "duration": {
+            "@type": "string"
+        },
+        "audio": {
+            "@type": "encrypted",
+            "gadget": "settled"
+        }
+    };
+
     const handleUpload = async () => {
         if (!file || !form.title || !form.artist) return
         try {
             setStatus('uploading')
             setStatusMsg('Reading audio…')
             const arrayBuffer = await file.arrayBuffer()
-            const audioBytes  = new Uint8Array(arrayBuffer)
-            const tag         = `${slug(form.artist)}-${slug(form.title)}-${Date.now()}`
-            const price       = BigInt(Math.round(parseFloat(form.price) || 1))
+            const audioBytes = new Uint8Array(arrayBuffer)
+            const tag = `${slug(form.artist)}-${slug(form.title)}-${Date.now()}`
+            const price = BigInt(Math.round(parseFloat(form.price) || 1))
 
             setStatusMsg('Encrypting & uploading to IPFS…')
             const { manifestCid: cid } = await fangorn.publisher.upload(
@@ -274,18 +301,18 @@ function UploadPanel({ fangorn, address }: { fangorn: Fangorn; address: Hex }) {
                     records: [{
                         tag,
                         fields: {
-                            title:       form.title,
-                            artist:      form.artist,
-                            album:       form.album       || '',
+                            title: form.title,
+                            artist: form.artist,
+                            album: form.album || '',
                             trackNumber: form.trackNumber || '',
-                            genre:       form.genre       || '',
-                            duration:    form.duration    || '',
+                            genre: form.genre || '',
+                            duration: form.duration || '',
                             audio: { data: audioBytes, fileType: file.type || 'audio/mpeg' },
                         },
                     }],
-                    schema:   MUSIC_SCHEMA,
+                    schema: schemaDef,
                     schemaId: SCHEMA_ID,
-                    gateway:  '',
+                    gateway: '',
                 },
                 price,
             )
@@ -353,9 +380,9 @@ function UploadPanel({ fangorn, address }: { fangorn: Fangorn; address: Hex }) {
             <div
                 className={[
                     'studio-drop',
-                    file                 ? 'has-file'    : '',
-                    dragging             ? 'is-dragging' : '',
-                    status === 'parsing' ? 'is-parsing'  : '',
+                    file ? 'has-file' : '',
+                    dragging ? 'is-dragging' : '',
+                    status === 'parsing' ? 'is-parsing' : '',
                 ].filter(Boolean).join(' ')}
                 onClick={() => !file && fileInputRef.current?.click()}
                 onDrop={handleDrop}

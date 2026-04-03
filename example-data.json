@@ -1,0 +1,15 @@
+{
+    "tag": "test-2524126",
+    "fields": {
+        "title": "test",
+        "artist": "test",
+        "album": "test",
+        "trackNumber": "1",
+        "genre": "test",
+        "duration": "test",
+        "audio": {
+            "data": [1,2,3,4],
+            "fileType": "audio/mpeg"
+        }
+    }
+}

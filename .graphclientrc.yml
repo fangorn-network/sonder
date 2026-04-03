@@ -2,7 +2,7 @@ sources:
   - name: FangornMusic
     handler:
       graphql:
-        endpoint: https://api.studio.thegraph.com/query/1745244/fangorn-data-discovery/version/latest
+        endpoint: https://api.studio.thegraph.com/query/1745244/test-graph/version/latest
 
 documents:
   - ./src/queries/*.graphql

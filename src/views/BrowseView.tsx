@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import { TrackCard } from '../components/TrackCard'
 import type { Track } from '../types'
 

@@ -3,8 +3,12 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 fragment TrackFields on ManifestState {
+  id
   owner
-  schema_name
+  schemaName
+  manifestCid
+  version
+  lastUpdated
   manifest {
     files {
       fields {
@@ -12,7 +16,7 @@ fragment TrackFields on ManifestState {
         value
         atType
         acc
-        price {
+        pricing {
           price
           currency
         }
@@ -29,7 +33,7 @@ query GetTracks($first: Int!, $skip: Int!) {
   manifestStates(
     first: $first
     skip: $skip
-    where: { schema_name: "fangorn.music.test.v1" }
+    where: { schema_: { name: "fangorn.music.test.v3" } }
   ) {
     ...TrackFields
   }
@@ -40,7 +44,7 @@ query GetTracks($first: Int!, $skip: Int!) {
 # ─────────────────────────────────────────────────────────────────────────────
 
 query SearchTracks($search: String!) {
-  byArtist: fields(
+  byArtist: fileFields(
     where: { name: "artist", value_contains_nocase: $search }
     first: 50
   ) {
@@ -49,7 +53,7 @@ query SearchTracks($search: String!) {
     }
   }
 
-  byTitle: fields(
+  byTitle: fileFields(
     where: { name: "title", value_contains_nocase: $search }
     first: 50
   ) {
@@ -58,7 +62,7 @@ query SearchTracks($search: String!) {
     }
   }
 
-  byAlbum: fields(
+  byAlbum: fileFields(
     where: { name: "album", value_contains_nocase: $search }
     first: 50
   ) {
@@ -67,7 +71,7 @@ query SearchTracks($search: String!) {
     }
   }
 
-  byGenre: fields(
+  byGenre: fileFields(
     where: { name: "genre", value_contains_nocase: $search }
     first: 50
   ) {
@@ -82,7 +86,7 @@ query SearchTracks($search: String!) {
 # ─────────────────────────────────────────────────────────────────────────────
 
 query GetTracksByArtist($artist: String!, $first: Int!, $skip: Int!) {
-  fields(
+  fileFields(
     where: { name: "artist", value: $artist }
     first: $first
     skip: $skip
@@ -98,7 +102,7 @@ query GetTracksByArtist($artist: String!, $first: Int!, $skip: Int!) {
 # ─────────────────────────────────────────────────────────────────────────────
 
 query GetAlbumTracks($album: String!, $first: Int!, $skip: Int!) {
-  fields(
+  fileFields(
     where: { name: "album", value: $album }
     first: $first
     skip: $skip
@@ -114,7 +118,7 @@ query GetAlbumTracks($album: String!, $first: Int!, $skip: Int!) {
 # ─────────────────────────────────────────────────────────────────────────────
 
 query GetTracksByGenre($genre: String!, $first: Int!, $skip: Int!) {
-  fields(
+  fileFields(
     where: { name: "genre", value_contains_nocase: $genre }
     first: $first
     skip: $skip
@@ -133,7 +137,7 @@ query GetTracksByOwner($owner: Bytes!, $first: Int!, $skip: Int!) {
   manifestStates(
     where: {
       owner: $owner
-      schema_name: "pl-genesis.fangorn.music"
+      schema_: { name: "fangorn.music.test.v3" }
     }
     first: $first
     skip: $skip
@@ -143,11 +147,11 @@ query GetTracksByOwner($owner: Bytes!, $first: Int!, $skip: Int!) {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Get a single track by owner + title (unique enough for demo purposes)
+# Get a single track by owner + title
 # ─────────────────────────────────────────────────────────────────────────────
 
 query GetTrack($owner: Bytes!, $title: String!) {
-  fields(
+  fileFields(
     where: { name: "title", value: $title }
     first: 1
   ) {

@@ -15,10 +15,10 @@ export interface UseFangornResult {
 
 export function useFangorn(): UseFangornResult {
   const { wallets } = useWallets()
-  const [fangorn, setFangorn]           = useState<Fangorn | null>(null)
+  const [fangorn, setFangorn] = useState<Fangorn | null>(null)
   const [walletClient, setWalletClient] = useState<WalletClient | null>(null)
-  const [loading, setLoading]           = useState(false)
-  const [error, setError]               = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const wallet = wallets[0]
 
@@ -38,13 +38,23 @@ export function useFangorn(): UseFangornResult {
 
       const wc = createWalletClient({
         account: wallet.address as Hex,
-        chain: FangornConfig.ArbitrumSepolia.chain,
+        chain: {
+          ...FangornConfig.ArbitrumSepolia.chain,
+          fees: {
+            baseFeeMultiplier: 1.5,
+          },
+        },
         transport: custom(provider),
       })
 
       const fangorn = await Fangorn.create({
         walletClient: wc,
-        storage: { storacha: { readOnly: true } },
+        storage: {
+          pinata: {
+            jwt: import.meta.env.VITE_PINATA_JWT ?? '',
+            gateway: import.meta.env.VITE_PINATA_GATEWAY ?? ''
+          }
+        },
         encryption: { lit: true },
         config: FangornConfig.ArbitrumSepolia,
         domain: window.location.host,

@@ -49,12 +49,12 @@ export type Block_height = {
 export type File = {
   id: Scalars['ID']['output'];
   tag?: Maybe<Scalars['String']['output']>;
-  manifest?: Maybe<Manifest>;
-  fields?: Maybe<Array<FileField>>;
+  manifest: Manifest;
+  fileFields?: Maybe<Array<FileField>>;
 };
 
 
-export type FilefieldsArgs = {
+export type FilefileFieldsArgs = {
   skip?: InputMaybe<Scalars['Int']['input']>;
   first?: InputMaybe<Scalars['Int']['input']>;
   orderBy?: InputMaybe<FileField_orderBy>;
@@ -68,8 +68,7 @@ export type FileField = {
   value?: Maybe<Scalars['String']['output']>;
   atType?: Maybe<Scalars['String']['output']>;
   acc?: Maybe<Scalars['String']['output']>;
-  manifestState: ManifestState;
-  parentFile?: Maybe<File>;
+  file: File;
   pricing?: Maybe<PricingResource>;
 };
 
@@ -162,48 +161,27 @@ export type FileField_filter = {
   acc_ends_with_nocase?: InputMaybe<Scalars['String']['input']>;
   acc_not_ends_with?: InputMaybe<Scalars['String']['input']>;
   acc_not_ends_with_nocase?: InputMaybe<Scalars['String']['input']>;
-  manifestState?: InputMaybe<Scalars['String']['input']>;
-  manifestState_not?: InputMaybe<Scalars['String']['input']>;
-  manifestState_gt?: InputMaybe<Scalars['String']['input']>;
-  manifestState_lt?: InputMaybe<Scalars['String']['input']>;
-  manifestState_gte?: InputMaybe<Scalars['String']['input']>;
-  manifestState_lte?: InputMaybe<Scalars['String']['input']>;
-  manifestState_in?: InputMaybe<Array<Scalars['String']['input']>>;
-  manifestState_not_in?: InputMaybe<Array<Scalars['String']['input']>>;
-  manifestState_contains?: InputMaybe<Scalars['String']['input']>;
-  manifestState_contains_nocase?: InputMaybe<Scalars['String']['input']>;
-  manifestState_not_contains?: InputMaybe<Scalars['String']['input']>;
-  manifestState_not_contains_nocase?: InputMaybe<Scalars['String']['input']>;
-  manifestState_starts_with?: InputMaybe<Scalars['String']['input']>;
-  manifestState_starts_with_nocase?: InputMaybe<Scalars['String']['input']>;
-  manifestState_not_starts_with?: InputMaybe<Scalars['String']['input']>;
-  manifestState_not_starts_with_nocase?: InputMaybe<Scalars['String']['input']>;
-  manifestState_ends_with?: InputMaybe<Scalars['String']['input']>;
-  manifestState_ends_with_nocase?: InputMaybe<Scalars['String']['input']>;
-  manifestState_not_ends_with?: InputMaybe<Scalars['String']['input']>;
-  manifestState_not_ends_with_nocase?: InputMaybe<Scalars['String']['input']>;
-  manifestState_?: InputMaybe<ManifestState_filter>;
-  parentFile?: InputMaybe<Scalars['String']['input']>;
-  parentFile_not?: InputMaybe<Scalars['String']['input']>;
-  parentFile_gt?: InputMaybe<Scalars['String']['input']>;
-  parentFile_lt?: InputMaybe<Scalars['String']['input']>;
-  parentFile_gte?: InputMaybe<Scalars['String']['input']>;
-  parentFile_lte?: InputMaybe<Scalars['String']['input']>;
-  parentFile_in?: InputMaybe<Array<Scalars['String']['input']>>;
-  parentFile_not_in?: InputMaybe<Array<Scalars['String']['input']>>;
-  parentFile_contains?: InputMaybe<Scalars['String']['input']>;
-  parentFile_contains_nocase?: InputMaybe<Scalars['String']['input']>;
-  parentFile_not_contains?: InputMaybe<Scalars['String']['input']>;
-  parentFile_not_contains_nocase?: InputMaybe<Scalars['String']['input']>;
-  parentFile_starts_with?: InputMaybe<Scalars['String']['input']>;
-  parentFile_starts_with_nocase?: InputMaybe<Scalars['String']['input']>;
-  parentFile_not_starts_with?: InputMaybe<Scalars['String']['input']>;
-  parentFile_not_starts_with_nocase?: InputMaybe<Scalars['String']['input']>;
-  parentFile_ends_with?: InputMaybe<Scalars['String']['input']>;
-  parentFile_ends_with_nocase?: InputMaybe<Scalars['String']['input']>;
-  parentFile_not_ends_with?: InputMaybe<Scalars['String']['input']>;
-  parentFile_not_ends_with_nocase?: InputMaybe<Scalars['String']['input']>;
-  parentFile_?: InputMaybe<File_filter>;
+  file?: InputMaybe<Scalars['String']['input']>;
+  file_not?: InputMaybe<Scalars['String']['input']>;
+  file_gt?: InputMaybe<Scalars['String']['input']>;
+  file_lt?: InputMaybe<Scalars['String']['input']>;
+  file_gte?: InputMaybe<Scalars['String']['input']>;
+  file_lte?: InputMaybe<Scalars['String']['input']>;
+  file_in?: InputMaybe<Array<Scalars['String']['input']>>;
+  file_not_in?: InputMaybe<Array<Scalars['String']['input']>>;
+  file_contains?: InputMaybe<Scalars['String']['input']>;
+  file_contains_nocase?: InputMaybe<Scalars['String']['input']>;
+  file_not_contains?: InputMaybe<Scalars['String']['input']>;
+  file_not_contains_nocase?: InputMaybe<Scalars['String']['input']>;
+  file_starts_with?: InputMaybe<Scalars['String']['input']>;
+  file_starts_with_nocase?: InputMaybe<Scalars['String']['input']>;
+  file_not_starts_with?: InputMaybe<Scalars['String']['input']>;
+  file_not_starts_with_nocase?: InputMaybe<Scalars['String']['input']>;
+  file_ends_with?: InputMaybe<Scalars['String']['input']>;
+  file_ends_with_nocase?: InputMaybe<Scalars['String']['input']>;
+  file_not_ends_with?: InputMaybe<Scalars['String']['input']>;
+  file_not_ends_with_nocase?: InputMaybe<Scalars['String']['input']>;
+  file_?: InputMaybe<File_filter>;
   pricing?: InputMaybe<Scalars['String']['input']>;
   pricing_not?: InputMaybe<Scalars['String']['input']>;
   pricing_gt?: InputMaybe<Scalars['String']['input']>;
@@ -237,17 +215,9 @@ export type FileField_orderBy =
   | 'value'
   | 'atType'
   | 'acc'
-  | 'manifestState'
-  | 'manifestState__id'
-  | 'manifestState__owner'
-  | 'manifestState__schemaId'
-  | 'manifestState__schemaName'
-  | 'manifestState__manifestCid'
-  | 'manifestState__version'
-  | 'manifestState__lastUpdated'
-  | 'parentFile'
-  | 'parentFile__id'
-  | 'parentFile__tag'
+  | 'file'
+  | 'file__id'
+  | 'file__tag'
   | 'pricing'
   | 'pricing__id'
   | 'pricing__owner'
@@ -304,13 +274,7 @@ export type File_filter = {
   manifest_not_ends_with?: InputMaybe<Scalars['String']['input']>;
   manifest_not_ends_with_nocase?: InputMaybe<Scalars['String']['input']>;
   manifest_?: InputMaybe<Manifest_filter>;
-  fields?: InputMaybe<Array<Scalars['String']['input']>>;
-  fields_not?: InputMaybe<Array<Scalars['String']['input']>>;
-  fields_contains?: InputMaybe<Array<Scalars['String']['input']>>;
-  fields_contains_nocase?: InputMaybe<Array<Scalars['String']['input']>>;
-  fields_not_contains?: InputMaybe<Array<Scalars['String']['input']>>;
-  fields_not_contains_nocase?: InputMaybe<Array<Scalars['String']['input']>>;
-  fields_?: InputMaybe<FileField_filter>;
+  fileFields_?: InputMaybe<FileField_filter>;
   /** Filter for the block changed event. */
   _change_block?: InputMaybe<BlockChangedFilter>;
   and?: InputMaybe<Array<InputMaybe<File_filter>>>;
@@ -324,12 +288,13 @@ export type File_orderBy =
   | 'manifest__id'
   | 'manifest__manifestVersion'
   | 'manifest__schemaId'
-  | 'fields';
+  | 'fileFields';
 
 export type Manifest = {
   id: Scalars['ID']['output'];
   manifestVersion?: Maybe<Scalars['BigInt']['output']>;
   schemaId?: Maybe<Scalars['String']['output']>;
+  manifestState: ManifestState;
   files?: Maybe<Array<File>>;
 };
 
@@ -458,7 +423,7 @@ export type ManifestState = {
   id: Scalars['Bytes']['output'];
   owner: Scalars['Bytes']['output'];
   schemaId: Scalars['Bytes']['output'];
-  schema?: Maybe<SchemaState>;
+  schema?: Maybe<Schema>;
   schemaName: Scalars['String']['output'];
   manifestCid: Scalars['String']['output'];
   manifest?: Maybe<Manifest>;
@@ -517,7 +482,7 @@ export type ManifestState_filter = {
   schema_ends_with_nocase?: InputMaybe<Scalars['String']['input']>;
   schema_not_ends_with?: InputMaybe<Scalars['String']['input']>;
   schema_not_ends_with_nocase?: InputMaybe<Scalars['String']['input']>;
-  schema_?: InputMaybe<SchemaState_filter>;
+  schema_?: InputMaybe<Schema_filter>;
   schemaName?: InputMaybe<Scalars['String']['input']>;
   schemaName_not?: InputMaybe<Scalars['String']['input']>;
   schemaName_gt?: InputMaybe<Scalars['String']['input']>;
@@ -607,9 +572,8 @@ export type ManifestState_orderBy =
   | 'schemaId'
   | 'schema'
   | 'schema__id'
-  | 'schema__schemaId'
-  | 'schema__owner'
-  | 'schema__name'
+  | 'schema__version'
+  | 'schema__agentId'
   | 'schemaName'
   | 'manifestCid'
   | 'manifest'
@@ -768,12 +732,27 @@ export type Manifest_filter = {
   schemaId_ends_with_nocase?: InputMaybe<Scalars['String']['input']>;
   schemaId_not_ends_with?: InputMaybe<Scalars['String']['input']>;
   schemaId_not_ends_with_nocase?: InputMaybe<Scalars['String']['input']>;
-  files?: InputMaybe<Array<Scalars['String']['input']>>;
-  files_not?: InputMaybe<Array<Scalars['String']['input']>>;
-  files_contains?: InputMaybe<Array<Scalars['String']['input']>>;
-  files_contains_nocase?: InputMaybe<Array<Scalars['String']['input']>>;
-  files_not_contains?: InputMaybe<Array<Scalars['String']['input']>>;
-  files_not_contains_nocase?: InputMaybe<Array<Scalars['String']['input']>>;
+  manifestState?: InputMaybe<Scalars['String']['input']>;
+  manifestState_not?: InputMaybe<Scalars['String']['input']>;
+  manifestState_gt?: InputMaybe<Scalars['String']['input']>;
+  manifestState_lt?: InputMaybe<Scalars['String']['input']>;
+  manifestState_gte?: InputMaybe<Scalars['String']['input']>;
+  manifestState_lte?: InputMaybe<Scalars['String']['input']>;
+  manifestState_in?: InputMaybe<Array<Scalars['String']['input']>>;
+  manifestState_not_in?: InputMaybe<Array<Scalars['String']['input']>>;
+  manifestState_contains?: InputMaybe<Scalars['String']['input']>;
+  manifestState_contains_nocase?: InputMaybe<Scalars['String']['input']>;
+  manifestState_not_contains?: InputMaybe<Scalars['String']['input']>;
+  manifestState_not_contains_nocase?: InputMaybe<Scalars['String']['input']>;
+  manifestState_starts_with?: InputMaybe<Scalars['String']['input']>;
+  manifestState_starts_with_nocase?: InputMaybe<Scalars['String']['input']>;
+  manifestState_not_starts_with?: InputMaybe<Scalars['String']['input']>;
+  manifestState_not_starts_with_nocase?: InputMaybe<Scalars['String']['input']>;
+  manifestState_ends_with?: InputMaybe<Scalars['String']['input']>;
+  manifestState_ends_with_nocase?: InputMaybe<Scalars['String']['input']>;
+  manifestState_not_ends_with?: InputMaybe<Scalars['String']['input']>;
+  manifestState_not_ends_with_nocase?: InputMaybe<Scalars['String']['input']>;
+  manifestState_?: InputMaybe<ManifestState_filter>;
   files_?: InputMaybe<File_filter>;
   /** Filter for the block changed event. */
   _change_block?: InputMaybe<BlockChangedFilter>;
@@ -785,6 +764,14 @@ export type Manifest_orderBy =
   | 'id'
   | 'manifestVersion'
   | 'schemaId'
+  | 'manifestState'
+  | 'manifestState__id'
+  | 'manifestState__owner'
+  | 'manifestState__schemaId'
+  | 'manifestState__schemaName'
+  | 'manifestState__manifestCid'
+  | 'manifestState__version'
+  | 'manifestState__lastUpdated'
   | 'files';
 
 /** Defines the order direction, either ascending or descending */
@@ -923,12 +910,12 @@ export type Query = {
   manifestUpdateds: Array<ManifestUpdated>;
   schemaRegistered?: Maybe<SchemaRegistered>;
   schemaRegistereds: Array<SchemaRegistered>;
+  schemaUpdated?: Maybe<SchemaUpdated>;
+  schemaUpdateds: Array<SchemaUpdated>;
   resourceCreated?: Maybe<ResourceCreated>;
   resourceCreateds: Array<ResourceCreated>;
   priceUpdated?: Maybe<PriceUpdated>;
   priceUpdateds: Array<PriceUpdated>;
-  schemaUpdated?: Maybe<SchemaUpdated>;
-  schemaUpdateds: Array<SchemaUpdated>;
   schemaState?: Maybe<SchemaState>;
   schemaStates: Array<SchemaState>;
   schema?: Maybe<Schema>;
@@ -1004,6 +991,24 @@ export type QueryschemaRegisteredsArgs = {
 };
 
 
+export type QueryschemaUpdatedArgs = {
+  id: Scalars['ID']['input'];
+  block?: InputMaybe<Block_height>;
+  subgraphError?: _SubgraphErrorPolicy_;
+};
+
+
+export type QueryschemaUpdatedsArgs = {
+  skip?: InputMaybe<Scalars['Int']['input']>;
+  first?: InputMaybe<Scalars['Int']['input']>;
+  orderBy?: InputMaybe<SchemaUpdated_orderBy>;
+  orderDirection?: InputMaybe<OrderDirection>;
+  where?: InputMaybe<SchemaUpdated_filter>;
+  block?: InputMaybe<Block_height>;
+  subgraphError?: _SubgraphErrorPolicy_;
+};
+
+
 export type QueryresourceCreatedArgs = {
   id: Scalars['ID']['input'];
   block?: InputMaybe<Block_height>;
@@ -1035,24 +1040,6 @@ export type QuerypriceUpdatedsArgs = {
   orderBy?: InputMaybe<PriceUpdated_orderBy>;
   orderDirection?: InputMaybe<OrderDirection>;
   where?: InputMaybe<PriceUpdated_filter>;
-  block?: InputMaybe<Block_height>;
-  subgraphError?: _SubgraphErrorPolicy_;
-};
-
-
-export type QueryschemaUpdatedArgs = {
-  id: Scalars['ID']['input'];
-  block?: InputMaybe<Block_height>;
-  subgraphError?: _SubgraphErrorPolicy_;
-};
-
-
-export type QueryschemaUpdatedsArgs = {
-  skip?: InputMaybe<Scalars['Int']['input']>;
-  first?: InputMaybe<Scalars['Int']['input']>;
-  orderBy?: InputMaybe<SchemaUpdated_orderBy>;
-  orderDirection?: InputMaybe<OrderDirection>;
-  where?: InputMaybe<SchemaUpdated_filter>;
   block?: InputMaybe<Block_height>;
   subgraphError?: _SubgraphErrorPolicy_;
 };
@@ -1276,9 +1263,19 @@ export type ResourceCreated_orderBy =
 
 export type Schema = {
   id: Scalars['ID']['output'];
+  manifests?: Maybe<Array<ManifestState>>;
   version?: Maybe<Scalars['String']['output']>;
   agentId?: Maybe<Scalars['String']['output']>;
   fields?: Maybe<Array<SchemaField>>;
+};
+
+
+export type SchemamanifestsArgs = {
+  skip?: InputMaybe<Scalars['Int']['input']>;
+  first?: InputMaybe<Scalars['Int']['input']>;
+  orderBy?: InputMaybe<ManifestState_orderBy>;
+  orderDirection?: InputMaybe<OrderDirection>;
+  where?: InputMaybe<ManifestState_filter>;
 };
 
 
@@ -1471,7 +1468,7 @@ export type SchemaRegistered_orderBy =
   | 'agentId';
 
 export type SchemaState = {
-  id: Scalars['ID']['output'];
+  id: Scalars['Bytes']['output'];
   schemaId: Scalars['Bytes']['output'];
   owner: Scalars['Bytes']['output'];
   name: Scalars['String']['output'];
@@ -1488,14 +1485,16 @@ export type SchemaStateversionsArgs = {
 };
 
 export type SchemaState_filter = {
-  id?: InputMaybe<Scalars['ID']['input']>;
-  id_not?: InputMaybe<Scalars['ID']['input']>;
-  id_gt?: InputMaybe<Scalars['ID']['input']>;
-  id_lt?: InputMaybe<Scalars['ID']['input']>;
-  id_gte?: InputMaybe<Scalars['ID']['input']>;
-  id_lte?: InputMaybe<Scalars['ID']['input']>;
-  id_in?: InputMaybe<Array<Scalars['ID']['input']>>;
-  id_not_in?: InputMaybe<Array<Scalars['ID']['input']>>;
+  id?: InputMaybe<Scalars['Bytes']['input']>;
+  id_not?: InputMaybe<Scalars['Bytes']['input']>;
+  id_gt?: InputMaybe<Scalars['Bytes']['input']>;
+  id_lt?: InputMaybe<Scalars['Bytes']['input']>;
+  id_gte?: InputMaybe<Scalars['Bytes']['input']>;
+  id_lte?: InputMaybe<Scalars['Bytes']['input']>;
+  id_in?: InputMaybe<Array<Scalars['Bytes']['input']>>;
+  id_not_in?: InputMaybe<Array<Scalars['Bytes']['input']>>;
+  id_contains?: InputMaybe<Scalars['Bytes']['input']>;
+  id_not_contains?: InputMaybe<Scalars['Bytes']['input']>;
   schemaId?: InputMaybe<Scalars['Bytes']['input']>;
   schemaId_not?: InputMaybe<Scalars['Bytes']['input']>;
   schemaId_gt?: InputMaybe<Scalars['Bytes']['input']>;
@@ -1645,6 +1644,7 @@ export type Schema_filter = {
   id_lte?: InputMaybe<Scalars['ID']['input']>;
   id_in?: InputMaybe<Array<Scalars['ID']['input']>>;
   id_not_in?: InputMaybe<Array<Scalars['ID']['input']>>;
+  manifests_?: InputMaybe<ManifestState_filter>;
   version?: InputMaybe<Scalars['String']['input']>;
   version_not?: InputMaybe<Scalars['String']['input']>;
   version_gt?: InputMaybe<Scalars['String']['input']>;
@@ -1700,6 +1700,7 @@ export type Schema_filter = {
 
 export type Schema_orderBy =
   | 'id'
+  | 'manifests'
   | 'version'
   | 'agentId'
   | 'fields';
@@ -1750,6 +1751,10 @@ export type _SubgraphErrorPolicy_ =
   /** null **/
   schemaRegistereds: InContextSdkMethod<Query['schemaRegistereds'], QueryschemaRegisteredsArgs, MeshContext>,
   /** null **/
+  schemaUpdated: InContextSdkMethod<Query['schemaUpdated'], QueryschemaUpdatedArgs, MeshContext>,
+  /** null **/
+  schemaUpdateds: InContextSdkMethod<Query['schemaUpdateds'], QueryschemaUpdatedsArgs, MeshContext>,
+  /** null **/
   resourceCreated: InContextSdkMethod<Query['resourceCreated'], QueryresourceCreatedArgs, MeshContext>,
   /** null **/
   resourceCreateds: InContextSdkMethod<Query['resourceCreateds'], QueryresourceCreatedsArgs, MeshContext>,
@@ -1757,10 +1762,6 @@ export type _SubgraphErrorPolicy_ =
   priceUpdated: InContextSdkMethod<Query['priceUpdated'], QuerypriceUpdatedArgs, MeshContext>,
   /** null **/
   priceUpdateds: InContextSdkMethod<Query['priceUpdateds'], QuerypriceUpdatedsArgs, MeshContext>,
-  /** null **/
-  schemaUpdated: InContextSdkMethod<Query['schemaUpdated'], QueryschemaUpdatedArgs, MeshContext>,
-  /** null **/
-  schemaUpdateds: InContextSdkMethod<Query['schemaUpdateds'], QueryschemaUpdatedsArgs, MeshContext>,
   /** null **/
   schemaState: InContextSdkMethod<Query['schemaState'], QueryschemaStateArgs, MeshContext>,
   /** null **/

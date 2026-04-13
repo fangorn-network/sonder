@@ -67,7 +67,7 @@
 
 //     try {
 //       // Decrypt using Lit via the internal encryptionService
-//       const result = await fangorn.decryptFile(ownerAddress as `0x${string}`, computeSchemaId("test.fangorn.music.library.v1"), "library.json");
+//       const result = await fangorn.decryptFile(ownerAddress as `0x${string}`, computeSchemaId("test.fangorn.music.demo.v0"), "library.json");
 //       const json = JSON.parse(atob(new TextDecoder().decode(result)))
 //       setLibrary(json.entries)
 //     } catch (e: any) {
@@ -109,7 +109,7 @@
 //             "arbitrumSepolia",
 //             ownerAddress,
 //         ),
-//         computeSchemaId("test.fangorn.music.library.v1")
+//         computeSchemaId("test.fangorn.music.demo.v0")
 //     );
 
 //     localStorage.setItem(localKey(ownerAddress), cid)

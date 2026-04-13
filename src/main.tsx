@@ -6,7 +6,7 @@ import ReactDOM from 'react-dom/client';
 
 import './index.css';
 
-import {PrivyProvider} from '@privy-io/react-auth';
+import { PrivyProvider } from '@privy-io/react-auth';
 
 import App from './App';
 
@@ -21,6 +21,11 @@ root.render(
         embeddedWallets: {
           ethereum: {
             createOnLogin: 'users-without-wallets'
+          }
+        },
+        fundingMethodConfig: {
+          moonpay: {
+            useSandbox: true, // false for production
           }
         }
       }}

@@ -62,8 +62,8 @@ function parseId3v2(buf: Uint8Array): {
 // Schema
 // ─────────────────────────────────────────────────────────────────────────────
 
-const SCHEMA_NAME = 'fangorn.music.test.v3'
-const SCHEMA_ID = '0x773dae8ae3b545f8824005428deabf97c65672d31887c7ed02d55b09b69e576a' as Hex
+const SCHEMA_NAME = 'fangorn.music.demo.v0'
+const SCHEMA_ID = '0xe6ed6e175ef6277d28ef468c7c9b9be6c79d337e6c642d65a877b145fabd0d1a' as Hex
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -180,11 +180,6 @@ function usePublisherFangorn() {
         setError(null)
 
         const init = async () => {
-            const email =
-                user?.email?.address ??
-                (user as any)?.google?.email ??
-                'driemworks@fangorn.network'
-
             const provider = await wallet.getEthereumProvider()
             const wc = createWalletClient({
                 account: wallet.address as Hex,
@@ -196,7 +191,12 @@ function usePublisherFangorn() {
             })
             const fg = await Fangorn.create({
                 walletClient: wc,
-                storage: { storacha: { email } },
+                storage: {
+                    pinata: {
+                        jwt: import.meta.env.VITE_PINATA_JWT ?? '',
+                        gateway: import.meta.env.VITE_PINATA_GATEWAY ?? ''
+                    }
+                },
                 encryption: { lit: true },
                 config: FangornConfig.ArbitrumSepolia,
                 domain: window.location.host,
@@ -292,14 +292,14 @@ function UploadPanel({ fangorn, address }: { fangorn: Fangorn; address: Hex }) {
             setStatusMsg('Reading audio…')
             const arrayBuffer = await file.arrayBuffer()
             const audioBytes = new Uint8Array(arrayBuffer)
-            const tag = `${slug(form.artist)}-${slug(form.title)}-${Date.now()}`
+            const name = `${slug(form.artist)}-${slug(form.title)}-${Date.now()}`
             const price = BigInt(Math.round(parseFloat(form.price) || 1))
 
             setStatusMsg('Encrypting & uploading to IPFS…')
             const { manifestCid: cid } = await fangorn.publisher.upload(
                 {
                     records: [{
-                        tag,
+                        name,
                         fields: {
                             title: form.title,
                             artist: form.artist,
@@ -310,9 +310,9 @@ function UploadPanel({ fangorn, address }: { fangorn: Fangorn; address: Hex }) {
                             audio: { data: audioBytes, fileType: file.type || 'audio/mpeg' },
                         },
                     }],
-                    schema: schemaDef,
-                    schemaId: SCHEMA_ID,
-                    gateway: '',
+                    schemaName: "fangorn.music.demo.v0",
+                    gateway: 'https://ipfs.io',
+                    // gas: 10_000_000n
                 },
                 price,
             )

@@ -343,10 +343,13 @@ const schemaAST = {
           },
           "arguments": [],
           "type": {
-            "kind": "NamedType",
-            "name": {
-              "kind": "Name",
-              "value": "Manifest"
+            "kind": "NonNullType",
+            "type": {
+              "kind": "NamedType",
+              "name": {
+                "kind": "Name",
+                "value": "Manifest"
+              }
             }
           },
           "directives": []
@@ -355,7 +358,7 @@ const schemaAST = {
           "kind": "FieldDefinition",
           "name": {
             "kind": "Name",
-            "value": "fields"
+            "value": "fileFields"
           },
           "arguments": [
             {
@@ -555,7 +558,7 @@ const schemaAST = {
           "kind": "FieldDefinition",
           "name": {
             "kind": "Name",
-            "value": "manifestState"
+            "value": "file"
           },
           "arguments": [],
           "type": {
@@ -564,24 +567,8 @@ const schemaAST = {
               "kind": "NamedType",
               "name": {
                 "kind": "Name",
-                "value": "ManifestState"
+                "value": "File"
               }
-            }
-          },
-          "directives": []
-        },
-        {
-          "kind": "FieldDefinition",
-          "name": {
-            "kind": "Name",
-            "value": "parentFile"
-          },
-          "arguments": [],
-          "type": {
-            "kind": "NamedType",
-            "name": {
-              "kind": "Name",
-              "value": "File"
             }
           },
           "directives": []
@@ -1997,7 +1984,7 @@ const schemaAST = {
           "kind": "InputValueDefinition",
           "name": {
             "kind": "Name",
-            "value": "manifestState"
+            "value": "file"
           },
           "type": {
             "kind": "NamedType",
@@ -2012,7 +1999,7 @@ const schemaAST = {
           "kind": "InputValueDefinition",
           "name": {
             "kind": "Name",
-            "value": "manifestState_not"
+            "value": "file_not"
           },
           "type": {
             "kind": "NamedType",
@@ -2027,7 +2014,7 @@ const schemaAST = {
           "kind": "InputValueDefinition",
           "name": {
             "kind": "Name",
-            "value": "manifestState_gt"
+            "value": "file_gt"
           },
           "type": {
             "kind": "NamedType",
@@ -2042,7 +2029,7 @@ const schemaAST = {
           "kind": "InputValueDefinition",
           "name": {
             "kind": "Name",
-            "value": "manifestState_lt"
+            "value": "file_lt"
           },
           "type": {
             "kind": "NamedType",
@@ -2057,7 +2044,7 @@ const schemaAST = {
           "kind": "InputValueDefinition",
           "name": {
             "kind": "Name",
-            "value": "manifestState_gte"
+            "value": "file_gte"
           },
           "type": {
             "kind": "NamedType",
@@ -2072,7 +2059,7 @@ const schemaAST = {
           "kind": "InputValueDefinition",
           "name": {
             "kind": "Name",
-            "value": "manifestState_lte"
+            "value": "file_lte"
           },
           "type": {
             "kind": "NamedType",
@@ -2087,7 +2074,7 @@ const schemaAST = {
           "kind": "InputValueDefinition",
           "name": {
             "kind": "Name",
-            "value": "manifestState_in"
+            "value": "file_in"
           },
           "type": {
             "kind": "ListType",
@@ -2108,7 +2095,7 @@ const schemaAST = {
           "kind": "InputValueDefinition",
           "name": {
             "kind": "Name",
-            "value": "manifestState_not_in"
+            "value": "file_not_in"
           },
           "type": {
             "kind": "ListType",
@@ -2129,7 +2116,7 @@ const schemaAST = {
           "kind": "InputValueDefinition",
           "name": {
             "kind": "Name",
-            "value": "manifestState_contains"
+            "value": "file_contains"
           },
           "type": {
             "kind": "NamedType",
@@ -2144,7 +2131,7 @@ const schemaAST = {
           "kind": "InputValueDefinition",
           "name": {
             "kind": "Name",
-            "value": "manifestState_contains_nocase"
+            "value": "file_contains_nocase"
           },
           "type": {
             "kind": "NamedType",
@@ -2159,7 +2146,7 @@ const schemaAST = {
           "kind": "InputValueDefinition",
           "name": {
             "kind": "Name",
-            "value": "manifestState_not_contains"
+            "value": "file_not_contains"
           },
           "type": {
             "kind": "NamedType",
@@ -2174,7 +2161,7 @@ const schemaAST = {
           "kind": "InputValueDefinition",
           "name": {
             "kind": "Name",
-            "value": "manifestState_not_contains_nocase"
+            "value": "file_not_contains_nocase"
           },
           "type": {
             "kind": "NamedType",
@@ -2189,7 +2176,7 @@ const schemaAST = {
           "kind": "InputValueDefinition",
           "name": {
             "kind": "Name",
-            "value": "manifestState_starts_with"
+            "value": "file_starts_with"
           },
           "type": {
             "kind": "NamedType",
@@ -2204,7 +2191,7 @@ const schemaAST = {
           "kind": "InputValueDefinition",
           "name": {
             "kind": "Name",
-            "value": "manifestState_starts_with_nocase"
+            "value": "file_starts_with_nocase"
           },
           "type": {
             "kind": "NamedType",
@@ -2219,7 +2206,7 @@ const schemaAST = {
           "kind": "InputValueDefinition",
           "name": {
             "kind": "Name",
-            "value": "manifestState_not_starts_with"
+            "value": "file_not_starts_with"
           },
           "type": {
             "kind": "NamedType",
@@ -2234,7 +2221,7 @@ const schemaAST = {
           "kind": "InputValueDefinition",
           "name": {
             "kind": "Name",
-            "value": "manifestState_not_starts_with_nocase"
+            "value": "file_not_starts_with_nocase"
           },
           "type": {
             "kind": "NamedType",
@@ -2249,7 +2236,7 @@ const schemaAST = {
           "kind": "InputValueDefinition",
           "name": {
             "kind": "Name",
-            "value": "manifestState_ends_with"
+            "value": "file_ends_with"
           },
           "type": {
             "kind": "NamedType",
@@ -2264,7 +2251,7 @@ const schemaAST = {
           "kind": "InputValueDefinition",
           "name": {
             "kind": "Name",
-            "value": "manifestState_ends_with_nocase"
+            "value": "file_ends_with_nocase"
           },
           "type": {
             "kind": "NamedType",
@@ -2279,7 +2266,7 @@ const schemaAST = {
           "kind": "InputValueDefinition",
           "name": {
             "kind": "Name",
-            "value": "manifestState_not_ends_with"
+            "value": "file_not_ends_with"
           },
           "type": {
             "kind": "NamedType",
@@ -2294,7 +2281,7 @@ const schemaAST = {
           "kind": "InputValueDefinition",
           "name": {
             "kind": "Name",
-            "value": "manifestState_not_ends_with_nocase"
+            "value": "file_not_ends_with_nocase"
           },
           "type": {
             "kind": "NamedType",
@@ -2309,334 +2296,7 @@ const schemaAST = {
           "kind": "InputValueDefinition",
           "name": {
             "kind": "Name",
-            "value": "manifestState_"
-          },
-          "type": {
-            "kind": "NamedType",
-            "name": {
-              "kind": "Name",
-              "value": "ManifestState_filter"
-            }
-          },
-          "directives": []
-        },
-        {
-          "kind": "InputValueDefinition",
-          "name": {
-            "kind": "Name",
-            "value": "parentFile"
-          },
-          "type": {
-            "kind": "NamedType",
-            "name": {
-              "kind": "Name",
-              "value": "String"
-            }
-          },
-          "directives": []
-        },
-        {
-          "kind": "InputValueDefinition",
-          "name": {
-            "kind": "Name",
-            "value": "parentFile_not"
-          },
-          "type": {
-            "kind": "NamedType",
-            "name": {
-              "kind": "Name",
-              "value": "String"
-            }
-          },
-          "directives": []
-        },
-        {
-          "kind": "InputValueDefinition",
-          "name": {
-            "kind": "Name",
-            "value": "parentFile_gt"
-          },
-          "type": {
-            "kind": "NamedType",
-            "name": {
-              "kind": "Name",
-              "value": "String"
-            }
-          },
-          "directives": []
-        },
-        {
-          "kind": "InputValueDefinition",
-          "name": {
-            "kind": "Name",
-            "value": "parentFile_lt"
-          },
-          "type": {
-            "kind": "NamedType",
-            "name": {
-              "kind": "Name",
-              "value": "String"
-            }
-          },
-          "directives": []
-        },
-        {
-          "kind": "InputValueDefinition",
-          "name": {
-            "kind": "Name",
-            "value": "parentFile_gte"
-          },
-          "type": {
-            "kind": "NamedType",
-            "name": {
-              "kind": "Name",
-              "value": "String"
-            }
-          },
-          "directives": []
-        },
-        {
-          "kind": "InputValueDefinition",
-          "name": {
-            "kind": "Name",
-            "value": "parentFile_lte"
-          },
-          "type": {
-            "kind": "NamedType",
-            "name": {
-              "kind": "Name",
-              "value": "String"
-            }
-          },
-          "directives": []
-        },
-        {
-          "kind": "InputValueDefinition",
-          "name": {
-            "kind": "Name",
-            "value": "parentFile_in"
-          },
-          "type": {
-            "kind": "ListType",
-            "type": {
-              "kind": "NonNullType",
-              "type": {
-                "kind": "NamedType",
-                "name": {
-                  "kind": "Name",
-                  "value": "String"
-                }
-              }
-            }
-          },
-          "directives": []
-        },
-        {
-          "kind": "InputValueDefinition",
-          "name": {
-            "kind": "Name",
-            "value": "parentFile_not_in"
-          },
-          "type": {
-            "kind": "ListType",
-            "type": {
-              "kind": "NonNullType",
-              "type": {
-                "kind": "NamedType",
-                "name": {
-                  "kind": "Name",
-                  "value": "String"
-                }
-              }
-            }
-          },
-          "directives": []
-        },
-        {
-          "kind": "InputValueDefinition",
-          "name": {
-            "kind": "Name",
-            "value": "parentFile_contains"
-          },
-          "type": {
-            "kind": "NamedType",
-            "name": {
-              "kind": "Name",
-              "value": "String"
-            }
-          },
-          "directives": []
-        },
-        {
-          "kind": "InputValueDefinition",
-          "name": {
-            "kind": "Name",
-            "value": "parentFile_contains_nocase"
-          },
-          "type": {
-            "kind": "NamedType",
-            "name": {
-              "kind": "Name",
-              "value": "String"
-            }
-          },
-          "directives": []
-        },
-        {
-          "kind": "InputValueDefinition",
-          "name": {
-            "kind": "Name",
-            "value": "parentFile_not_contains"
-          },
-          "type": {
-            "kind": "NamedType",
-            "name": {
-              "kind": "Name",
-              "value": "String"
-            }
-          },
-          "directives": []
-        },
-        {
-          "kind": "InputValueDefinition",
-          "name": {
-            "kind": "Name",
-            "value": "parentFile_not_contains_nocase"
-          },
-          "type": {
-            "kind": "NamedType",
-            "name": {
-              "kind": "Name",
-              "value": "String"
-            }
-          },
-          "directives": []
-        },
-        {
-          "kind": "InputValueDefinition",
-          "name": {
-            "kind": "Name",
-            "value": "parentFile_starts_with"
-          },
-          "type": {
-            "kind": "NamedType",
-            "name": {
-              "kind": "Name",
-              "value": "String"
-            }
-          },
-          "directives": []
-        },
-        {
-          "kind": "InputValueDefinition",
-          "name": {
-            "kind": "Name",
-            "value": "parentFile_starts_with_nocase"
-          },
-          "type": {
-            "kind": "NamedType",
-            "name": {
-              "kind": "Name",
-              "value": "String"
-            }
-          },
-          "directives": []
-        },
-        {
-          "kind": "InputValueDefinition",
-          "name": {
-            "kind": "Name",
-            "value": "parentFile_not_starts_with"
-          },
-          "type": {
-            "kind": "NamedType",
-            "name": {
-              "kind": "Name",
-              "value": "String"
-            }
-          },
-          "directives": []
-        },
-        {
-          "kind": "InputValueDefinition",
-          "name": {
-            "kind": "Name",
-            "value": "parentFile_not_starts_with_nocase"
-          },
-          "type": {
-            "kind": "NamedType",
-            "name": {
-              "kind": "Name",
-              "value": "String"
-            }
-          },
-          "directives": []
-        },
-        {
-          "kind": "InputValueDefinition",
-          "name": {
-            "kind": "Name",
-            "value": "parentFile_ends_with"
-          },
-          "type": {
-            "kind": "NamedType",
-            "name": {
-              "kind": "Name",
-              "value": "String"
-            }
-          },
-          "directives": []
-        },
-        {
-          "kind": "InputValueDefinition",
-          "name": {
-            "kind": "Name",
-            "value": "parentFile_ends_with_nocase"
-          },
-          "type": {
-            "kind": "NamedType",
-            "name": {
-              "kind": "Name",
-              "value": "String"
-            }
-          },
-          "directives": []
-        },
-        {
-          "kind": "InputValueDefinition",
-          "name": {
-            "kind": "Name",
-            "value": "parentFile_not_ends_with"
-          },
-          "type": {
-            "kind": "NamedType",
-            "name": {
-              "kind": "Name",
-              "value": "String"
-            }
-          },
-          "directives": []
-        },
-        {
-          "kind": "InputValueDefinition",
-          "name": {
-            "kind": "Name",
-            "value": "parentFile_not_ends_with_nocase"
-          },
-          "type": {
-            "kind": "NamedType",
-            "name": {
-              "kind": "Name",
-              "value": "String"
-            }
-          },
-          "directives": []
-        },
-        {
-          "kind": "InputValueDefinition",
-          "name": {
-            "kind": "Name",
-            "value": "parentFile_"
+            "value": "file_"
           },
           "type": {
             "kind": "NamedType",
@@ -3084,7 +2744,7 @@ const schemaAST = {
           "kind": "EnumValueDefinition",
           "name": {
             "kind": "Name",
-            "value": "manifestState"
+            "value": "file"
           },
           "directives": []
         },
@@ -3092,7 +2752,7 @@ const schemaAST = {
           "kind": "EnumValueDefinition",
           "name": {
             "kind": "Name",
-            "value": "manifestState__id"
+            "value": "file__id"
           },
           "directives": []
         },
@@ -3100,71 +2760,7 @@ const schemaAST = {
           "kind": "EnumValueDefinition",
           "name": {
             "kind": "Name",
-            "value": "manifestState__owner"
-          },
-          "directives": []
-        },
-        {
-          "kind": "EnumValueDefinition",
-          "name": {
-            "kind": "Name",
-            "value": "manifestState__schemaId"
-          },
-          "directives": []
-        },
-        {
-          "kind": "EnumValueDefinition",
-          "name": {
-            "kind": "Name",
-            "value": "manifestState__schemaName"
-          },
-          "directives": []
-        },
-        {
-          "kind": "EnumValueDefinition",
-          "name": {
-            "kind": "Name",
-            "value": "manifestState__manifestCid"
-          },
-          "directives": []
-        },
-        {
-          "kind": "EnumValueDefinition",
-          "name": {
-            "kind": "Name",
-            "value": "manifestState__version"
-          },
-          "directives": []
-        },
-        {
-          "kind": "EnumValueDefinition",
-          "name": {
-            "kind": "Name",
-            "value": "manifestState__lastUpdated"
-          },
-          "directives": []
-        },
-        {
-          "kind": "EnumValueDefinition",
-          "name": {
-            "kind": "Name",
-            "value": "parentFile"
-          },
-          "directives": []
-        },
-        {
-          "kind": "EnumValueDefinition",
-          "name": {
-            "kind": "Name",
-            "value": "parentFile__id"
-          },
-          "directives": []
-        },
-        {
-          "kind": "EnumValueDefinition",
-          "name": {
-            "kind": "Name",
-            "value": "parentFile__tag"
+            "value": "file__tag"
           },
           "directives": []
         },
@@ -3993,133 +3589,7 @@ const schemaAST = {
           "kind": "InputValueDefinition",
           "name": {
             "kind": "Name",
-            "value": "fields"
-          },
-          "type": {
-            "kind": "ListType",
-            "type": {
-              "kind": "NonNullType",
-              "type": {
-                "kind": "NamedType",
-                "name": {
-                  "kind": "Name",
-                  "value": "String"
-                }
-              }
-            }
-          },
-          "directives": []
-        },
-        {
-          "kind": "InputValueDefinition",
-          "name": {
-            "kind": "Name",
-            "value": "fields_not"
-          },
-          "type": {
-            "kind": "ListType",
-            "type": {
-              "kind": "NonNullType",
-              "type": {
-                "kind": "NamedType",
-                "name": {
-                  "kind": "Name",
-                  "value": "String"
-                }
-              }
-            }
-          },
-          "directives": []
-        },
-        {
-          "kind": "InputValueDefinition",
-          "name": {
-            "kind": "Name",
-            "value": "fields_contains"
-          },
-          "type": {
-            "kind": "ListType",
-            "type": {
-              "kind": "NonNullType",
-              "type": {
-                "kind": "NamedType",
-                "name": {
-                  "kind": "Name",
-                  "value": "String"
-                }
-              }
-            }
-          },
-          "directives": []
-        },
-        {
-          "kind": "InputValueDefinition",
-          "name": {
-            "kind": "Name",
-            "value": "fields_contains_nocase"
-          },
-          "type": {
-            "kind": "ListType",
-            "type": {
-              "kind": "NonNullType",
-              "type": {
-                "kind": "NamedType",
-                "name": {
-                  "kind": "Name",
-                  "value": "String"
-                }
-              }
-            }
-          },
-          "directives": []
-        },
-        {
-          "kind": "InputValueDefinition",
-          "name": {
-            "kind": "Name",
-            "value": "fields_not_contains"
-          },
-          "type": {
-            "kind": "ListType",
-            "type": {
-              "kind": "NonNullType",
-              "type": {
-                "kind": "NamedType",
-                "name": {
-                  "kind": "Name",
-                  "value": "String"
-                }
-              }
-            }
-          },
-          "directives": []
-        },
-        {
-          "kind": "InputValueDefinition",
-          "name": {
-            "kind": "Name",
-            "value": "fields_not_contains_nocase"
-          },
-          "type": {
-            "kind": "ListType",
-            "type": {
-              "kind": "NonNullType",
-              "type": {
-                "kind": "NamedType",
-                "name": {
-                  "kind": "Name",
-                  "value": "String"
-                }
-              }
-            }
-          },
-          "directives": []
-        },
-        {
-          "kind": "InputValueDefinition",
-          "name": {
-            "kind": "Name",
-            "value": "fields_"
+            "value": "fileFields_"
           },
           "type": {
             "kind": "NamedType",
@@ -4248,7 +3718,7 @@ const schemaAST = {
           "kind": "EnumValueDefinition",
           "name": {
             "kind": "Name",
-            "value": "fields"
+            "value": "fileFields"
           },
           "directives": []
         }
@@ -4322,6 +3792,25 @@ const schemaAST = {
             "name": {
               "kind": "Name",
               "value": "String"
+            }
+          },
+          "directives": []
+        },
+        {
+          "kind": "FieldDefinition",
+          "name": {
+            "kind": "Name",
+            "value": "manifestState"
+          },
+          "arguments": [],
+          "type": {
+            "kind": "NonNullType",
+            "type": {
+              "kind": "NamedType",
+              "name": {
+                "kind": "Name",
+                "value": "ManifestState"
+              }
             }
           },
           "directives": []
@@ -6170,7 +5659,7 @@ const schemaAST = {
             "kind": "NamedType",
             "name": {
               "kind": "Name",
-              "value": "SchemaState"
+              "value": "Schema"
             }
           },
           "directives": []
@@ -7086,7 +6575,7 @@ const schemaAST = {
             "kind": "NamedType",
             "name": {
               "kind": "Name",
-              "value": "SchemaState_filter"
+              "value": "Schema_filter"
             }
           },
           "directives": []
@@ -8416,7 +7905,7 @@ const schemaAST = {
           "kind": "EnumValueDefinition",
           "name": {
             "kind": "Name",
-            "value": "schema__schemaId"
+            "value": "schema__version"
           },
           "directives": []
         },
@@ -8424,15 +7913,7 @@ const schemaAST = {
           "kind": "EnumValueDefinition",
           "name": {
             "kind": "Name",
-            "value": "schema__owner"
-          },
-          "directives": []
-        },
-        {
-          "kind": "EnumValueDefinition",
-          "name": {
-            "kind": "Name",
-            "value": "schema__name"
+            "value": "schema__agentId"
           },
           "directives": []
         },
@@ -10749,7 +10230,97 @@ const schemaAST = {
           "kind": "InputValueDefinition",
           "name": {
             "kind": "Name",
-            "value": "files"
+            "value": "manifestState"
+          },
+          "type": {
+            "kind": "NamedType",
+            "name": {
+              "kind": "Name",
+              "value": "String"
+            }
+          },
+          "directives": []
+        },
+        {
+          "kind": "InputValueDefinition",
+          "name": {
+            "kind": "Name",
+            "value": "manifestState_not"
+          },
+          "type": {
+            "kind": "NamedType",
+            "name": {
+              "kind": "Name",
+              "value": "String"
+            }
+          },
+          "directives": []
+        },
+        {
+          "kind": "InputValueDefinition",
+          "name": {
+            "kind": "Name",
+            "value": "manifestState_gt"
+          },
+          "type": {
+            "kind": "NamedType",
+            "name": {
+              "kind": "Name",
+              "value": "String"
+            }
+          },
+          "directives": []
+        },
+        {
+          "kind": "InputValueDefinition",
+          "name": {
+            "kind": "Name",
+            "value": "manifestState_lt"
+          },
+          "type": {
+            "kind": "NamedType",
+            "name": {
+              "kind": "Name",
+              "value": "String"
+            }
+          },
+          "directives": []
+        },
+        {
+          "kind": "InputValueDefinition",
+          "name": {
+            "kind": "Name",
+            "value": "manifestState_gte"
+          },
+          "type": {
+            "kind": "NamedType",
+            "name": {
+              "kind": "Name",
+              "value": "String"
+            }
+          },
+          "directives": []
+        },
+        {
+          "kind": "InputValueDefinition",
+          "name": {
+            "kind": "Name",
+            "value": "manifestState_lte"
+          },
+          "type": {
+            "kind": "NamedType",
+            "name": {
+              "kind": "Name",
+              "value": "String"
+            }
+          },
+          "directives": []
+        },
+        {
+          "kind": "InputValueDefinition",
+          "name": {
+            "kind": "Name",
+            "value": "manifestState_in"
           },
           "type": {
             "kind": "ListType",
@@ -10770,7 +10341,7 @@ const schemaAST = {
           "kind": "InputValueDefinition",
           "name": {
             "kind": "Name",
-            "value": "files_not"
+            "value": "manifestState_not_in"
           },
           "type": {
             "kind": "ListType",
@@ -10791,19 +10362,13 @@ const schemaAST = {
           "kind": "InputValueDefinition",
           "name": {
             "kind": "Name",
-            "value": "files_contains"
+            "value": "manifestState_contains"
           },
           "type": {
-            "kind": "ListType",
-            "type": {
-              "kind": "NonNullType",
-              "type": {
-                "kind": "NamedType",
-                "name": {
-                  "kind": "Name",
-                  "value": "String"
-                }
-              }
+            "kind": "NamedType",
+            "name": {
+              "kind": "Name",
+              "value": "String"
             }
           },
           "directives": []
@@ -10812,19 +10377,13 @@ const schemaAST = {
           "kind": "InputValueDefinition",
           "name": {
             "kind": "Name",
-            "value": "files_contains_nocase"
+            "value": "manifestState_contains_nocase"
           },
           "type": {
-            "kind": "ListType",
-            "type": {
-              "kind": "NonNullType",
-              "type": {
-                "kind": "NamedType",
-                "name": {
-                  "kind": "Name",
-                  "value": "String"
-                }
-              }
+            "kind": "NamedType",
+            "name": {
+              "kind": "Name",
+              "value": "String"
             }
           },
           "directives": []
@@ -10833,19 +10392,13 @@ const schemaAST = {
           "kind": "InputValueDefinition",
           "name": {
             "kind": "Name",
-            "value": "files_not_contains"
+            "value": "manifestState_not_contains"
           },
           "type": {
-            "kind": "ListType",
-            "type": {
-              "kind": "NonNullType",
-              "type": {
-                "kind": "NamedType",
-                "name": {
-                  "kind": "Name",
-                  "value": "String"
-                }
-              }
+            "kind": "NamedType",
+            "name": {
+              "kind": "Name",
+              "value": "String"
             }
           },
           "directives": []
@@ -10854,19 +10407,148 @@ const schemaAST = {
           "kind": "InputValueDefinition",
           "name": {
             "kind": "Name",
-            "value": "files_not_contains_nocase"
+            "value": "manifestState_not_contains_nocase"
           },
           "type": {
-            "kind": "ListType",
-            "type": {
-              "kind": "NonNullType",
-              "type": {
-                "kind": "NamedType",
-                "name": {
-                  "kind": "Name",
-                  "value": "String"
-                }
-              }
+            "kind": "NamedType",
+            "name": {
+              "kind": "Name",
+              "value": "String"
+            }
+          },
+          "directives": []
+        },
+        {
+          "kind": "InputValueDefinition",
+          "name": {
+            "kind": "Name",
+            "value": "manifestState_starts_with"
+          },
+          "type": {
+            "kind": "NamedType",
+            "name": {
+              "kind": "Name",
+              "value": "String"
+            }
+          },
+          "directives": []
+        },
+        {
+          "kind": "InputValueDefinition",
+          "name": {
+            "kind": "Name",
+            "value": "manifestState_starts_with_nocase"
+          },
+          "type": {
+            "kind": "NamedType",
+            "name": {
+              "kind": "Name",
+              "value": "String"
+            }
+          },
+          "directives": []
+        },
+        {
+          "kind": "InputValueDefinition",
+          "name": {
+            "kind": "Name",
+            "value": "manifestState_not_starts_with"
+          },
+          "type": {
+            "kind": "NamedType",
+            "name": {
+              "kind": "Name",
+              "value": "String"
+            }
+          },
+          "directives": []
+        },
+        {
+          "kind": "InputValueDefinition",
+          "name": {
+            "kind": "Name",
+            "value": "manifestState_not_starts_with_nocase"
+          },
+          "type": {
+            "kind": "NamedType",
+            "name": {
+              "kind": "Name",
+              "value": "String"
+            }
+          },
+          "directives": []
+        },
+        {
+          "kind": "InputValueDefinition",
+          "name": {
+            "kind": "Name",
+            "value": "manifestState_ends_with"
+          },
+          "type": {
+            "kind": "NamedType",
+            "name": {
+              "kind": "Name",
+              "value": "String"
+            }
+          },
+          "directives": []
+        },
+        {
+          "kind": "InputValueDefinition",
+          "name": {
+            "kind": "Name",
+            "value": "manifestState_ends_with_nocase"
+          },
+          "type": {
+            "kind": "NamedType",
+            "name": {
+              "kind": "Name",
+              "value": "String"
+            }
+          },
+          "directives": []
+        },
+        {
+          "kind": "InputValueDefinition",
+          "name": {
+            "kind": "Name",
+            "value": "manifestState_not_ends_with"
+          },
+          "type": {
+            "kind": "NamedType",
+            "name": {
+              "kind": "Name",
+              "value": "String"
+            }
+          },
+          "directives": []
+        },
+        {
+          "kind": "InputValueDefinition",
+          "name": {
+            "kind": "Name",
+            "value": "manifestState_not_ends_with_nocase"
+          },
+          "type": {
+            "kind": "NamedType",
+            "name": {
+              "kind": "Name",
+              "value": "String"
+            }
+          },
+          "directives": []
+        },
+        {
+          "kind": "InputValueDefinition",
+          "name": {
+            "kind": "Name",
+            "value": "manifestState_"
+          },
+          "type": {
+            "kind": "NamedType",
+            "name": {
+              "kind": "Name",
+              "value": "ManifestState_filter"
             }
           },
           "directives": []
@@ -10973,6 +10655,70 @@ const schemaAST = {
           "name": {
             "kind": "Name",
             "value": "schemaId"
+          },
+          "directives": []
+        },
+        {
+          "kind": "EnumValueDefinition",
+          "name": {
+            "kind": "Name",
+            "value": "manifestState"
+          },
+          "directives": []
+        },
+        {
+          "kind": "EnumValueDefinition",
+          "name": {
+            "kind": "Name",
+            "value": "manifestState__id"
+          },
+          "directives": []
+        },
+        {
+          "kind": "EnumValueDefinition",
+          "name": {
+            "kind": "Name",
+            "value": "manifestState__owner"
+          },
+          "directives": []
+        },
+        {
+          "kind": "EnumValueDefinition",
+          "name": {
+            "kind": "Name",
+            "value": "manifestState__schemaId"
+          },
+          "directives": []
+        },
+        {
+          "kind": "EnumValueDefinition",
+          "name": {
+            "kind": "Name",
+            "value": "manifestState__schemaName"
+          },
+          "directives": []
+        },
+        {
+          "kind": "EnumValueDefinition",
+          "name": {
+            "kind": "Name",
+            "value": "manifestState__manifestCid"
+          },
+          "directives": []
+        },
+        {
+          "kind": "EnumValueDefinition",
+          "name": {
+            "kind": "Name",
+            "value": "manifestState__version"
+          },
+          "directives": []
+        },
+        {
+          "kind": "EnumValueDefinition",
+          "name": {
+            "kind": "Name",
+            "value": "manifestState__lastUpdated"
           },
           "directives": []
         },
@@ -13489,6 +13235,244 @@ const schemaAST = {
           "kind": "FieldDefinition",
           "name": {
             "kind": "Name",
+            "value": "schemaUpdated"
+          },
+          "arguments": [
+            {
+              "kind": "InputValueDefinition",
+              "name": {
+                "kind": "Name",
+                "value": "id"
+              },
+              "type": {
+                "kind": "NonNullType",
+                "type": {
+                  "kind": "NamedType",
+                  "name": {
+                    "kind": "Name",
+                    "value": "ID"
+                  }
+                }
+              },
+              "directives": []
+            },
+            {
+              "kind": "InputValueDefinition",
+              "description": {
+                "kind": "StringValue",
+                "value": "The block at which the query should be executed. Can either be a `{ hash: Bytes }` value containing a block hash, a `{ number: Int }` containing the block number, or a `{ number_gte: Int }` containing the minimum block number. In the case of `number_gte`, the query will be executed on the latest block only if the subgraph has progressed to or past the minimum block number. Defaults to the latest block when omitted.",
+                "block": true
+              },
+              "name": {
+                "kind": "Name",
+                "value": "block"
+              },
+              "type": {
+                "kind": "NamedType",
+                "name": {
+                  "kind": "Name",
+                  "value": "Block_height"
+                }
+              },
+              "directives": []
+            },
+            {
+              "kind": "InputValueDefinition",
+              "description": {
+                "kind": "StringValue",
+                "value": "Set to `allow` to receive data even if the subgraph has skipped over errors while syncing.",
+                "block": true
+              },
+              "name": {
+                "kind": "Name",
+                "value": "subgraphError"
+              },
+              "type": {
+                "kind": "NonNullType",
+                "type": {
+                  "kind": "NamedType",
+                  "name": {
+                    "kind": "Name",
+                    "value": "_SubgraphErrorPolicy_"
+                  }
+                }
+              },
+              "defaultValue": {
+                "kind": "EnumValue",
+                "value": "deny"
+              },
+              "directives": []
+            }
+          ],
+          "type": {
+            "kind": "NamedType",
+            "name": {
+              "kind": "Name",
+              "value": "SchemaUpdated"
+            }
+          },
+          "directives": []
+        },
+        {
+          "kind": "FieldDefinition",
+          "name": {
+            "kind": "Name",
+            "value": "schemaUpdateds"
+          },
+          "arguments": [
+            {
+              "kind": "InputValueDefinition",
+              "name": {
+                "kind": "Name",
+                "value": "skip"
+              },
+              "type": {
+                "kind": "NamedType",
+                "name": {
+                  "kind": "Name",
+                  "value": "Int"
+                }
+              },
+              "defaultValue": {
+                "kind": "IntValue",
+                "value": "0"
+              },
+              "directives": []
+            },
+            {
+              "kind": "InputValueDefinition",
+              "name": {
+                "kind": "Name",
+                "value": "first"
+              },
+              "type": {
+                "kind": "NamedType",
+                "name": {
+                  "kind": "Name",
+                  "value": "Int"
+                }
+              },
+              "defaultValue": {
+                "kind": "IntValue",
+                "value": "100"
+              },
+              "directives": []
+            },
+            {
+              "kind": "InputValueDefinition",
+              "name": {
+                "kind": "Name",
+                "value": "orderBy"
+              },
+              "type": {
+                "kind": "NamedType",
+                "name": {
+                  "kind": "Name",
+                  "value": "SchemaUpdated_orderBy"
+                }
+              },
+              "directives": []
+            },
+            {
+              "kind": "InputValueDefinition",
+              "name": {
+                "kind": "Name",
+                "value": "orderDirection"
+              },
+              "type": {
+                "kind": "NamedType",
+                "name": {
+                  "kind": "Name",
+                  "value": "OrderDirection"
+                }
+              },
+              "directives": []
+            },
+            {
+              "kind": "InputValueDefinition",
+              "name": {
+                "kind": "Name",
+                "value": "where"
+              },
+              "type": {
+                "kind": "NamedType",
+                "name": {
+                  "kind": "Name",
+                  "value": "SchemaUpdated_filter"
+                }
+              },
+              "directives": []
+            },
+            {
+              "kind": "InputValueDefinition",
+              "description": {
+                "kind": "StringValue",
+                "value": "The block at which the query should be executed. Can either be a `{ hash: Bytes }` value containing a block hash, a `{ number: Int }` containing the block number, or a `{ number_gte: Int }` containing the minimum block number. In the case of `number_gte`, the query will be executed on the latest block only if the subgraph has progressed to or past the minimum block number. Defaults to the latest block when omitted.",
+                "block": true
+              },
+              "name": {
+                "kind": "Name",
+                "value": "block"
+              },
+              "type": {
+                "kind": "NamedType",
+                "name": {
+                  "kind": "Name",
+                  "value": "Block_height"
+                }
+              },
+              "directives": []
+            },
+            {
+              "kind": "InputValueDefinition",
+              "description": {
+                "kind": "StringValue",
+                "value": "Set to `allow` to receive data even if the subgraph has skipped over errors while syncing.",
+                "block": true
+              },
+              "name": {
+                "kind": "Name",
+                "value": "subgraphError"
+              },
+              "type": {
+                "kind": "NonNullType",
+                "type": {
+                  "kind": "NamedType",
+                  "name": {
+                    "kind": "Name",
+                    "value": "_SubgraphErrorPolicy_"
+                  }
+                }
+              },
+              "defaultValue": {
+                "kind": "EnumValue",
+                "value": "deny"
+              },
+              "directives": []
+            }
+          ],
+          "type": {
+            "kind": "NonNullType",
+            "type": {
+              "kind": "ListType",
+              "type": {
+                "kind": "NonNullType",
+                "type": {
+                  "kind": "NamedType",
+                  "name": {
+                    "kind": "Name",
+                    "value": "SchemaUpdated"
+                  }
+                }
+              }
+            }
+          },
+          "directives": []
+        },
+        {
+          "kind": "FieldDefinition",
+          "name": {
+            "kind": "Name",
             "value": "resourceCreated"
           },
           "arguments": [
@@ -13954,244 +13938,6 @@ const schemaAST = {
                   "name": {
                     "kind": "Name",
                     "value": "PriceUpdated"
-                  }
-                }
-              }
-            }
-          },
-          "directives": []
-        },
-        {
-          "kind": "FieldDefinition",
-          "name": {
-            "kind": "Name",
-            "value": "schemaUpdated"
-          },
-          "arguments": [
-            {
-              "kind": "InputValueDefinition",
-              "name": {
-                "kind": "Name",
-                "value": "id"
-              },
-              "type": {
-                "kind": "NonNullType",
-                "type": {
-                  "kind": "NamedType",
-                  "name": {
-                    "kind": "Name",
-                    "value": "ID"
-                  }
-                }
-              },
-              "directives": []
-            },
-            {
-              "kind": "InputValueDefinition",
-              "description": {
-                "kind": "StringValue",
-                "value": "The block at which the query should be executed. Can either be a `{ hash: Bytes }` value containing a block hash, a `{ number: Int }` containing the block number, or a `{ number_gte: Int }` containing the minimum block number. In the case of `number_gte`, the query will be executed on the latest block only if the subgraph has progressed to or past the minimum block number. Defaults to the latest block when omitted.",
-                "block": true
-              },
-              "name": {
-                "kind": "Name",
-                "value": "block"
-              },
-              "type": {
-                "kind": "NamedType",
-                "name": {
-                  "kind": "Name",
-                  "value": "Block_height"
-                }
-              },
-              "directives": []
-            },
-            {
-              "kind": "InputValueDefinition",
-              "description": {
-                "kind": "StringValue",
-                "value": "Set to `allow` to receive data even if the subgraph has skipped over errors while syncing.",
-                "block": true
-              },
-              "name": {
-                "kind": "Name",
-                "value": "subgraphError"
-              },
-              "type": {
-                "kind": "NonNullType",
-                "type": {
-                  "kind": "NamedType",
-                  "name": {
-                    "kind": "Name",
-                    "value": "_SubgraphErrorPolicy_"
-                  }
-                }
-              },
-              "defaultValue": {
-                "kind": "EnumValue",
-                "value": "deny"
-              },
-              "directives": []
-            }
-          ],
-          "type": {
-            "kind": "NamedType",
-            "name": {
-              "kind": "Name",
-              "value": "SchemaUpdated"
-            }
-          },
-          "directives": []
-        },
-        {
-          "kind": "FieldDefinition",
-          "name": {
-            "kind": "Name",
-            "value": "schemaUpdateds"
-          },
-          "arguments": [
-            {
-              "kind": "InputValueDefinition",
-              "name": {
-                "kind": "Name",
-                "value": "skip"
-              },
-              "type": {
-                "kind": "NamedType",
-                "name": {
-                  "kind": "Name",
-                  "value": "Int"
-                }
-              },
-              "defaultValue": {
-                "kind": "IntValue",
-                "value": "0"
-              },
-              "directives": []
-            },
-            {
-              "kind": "InputValueDefinition",
-              "name": {
-                "kind": "Name",
-                "value": "first"
-              },
-              "type": {
-                "kind": "NamedType",
-                "name": {
-                  "kind": "Name",
-                  "value": "Int"
-                }
-              },
-              "defaultValue": {
-                "kind": "IntValue",
-                "value": "100"
-              },
-              "directives": []
-            },
-            {
-              "kind": "InputValueDefinition",
-              "name": {
-                "kind": "Name",
-                "value": "orderBy"
-              },
-              "type": {
-                "kind": "NamedType",
-                "name": {
-                  "kind": "Name",
-                  "value": "SchemaUpdated_orderBy"
-                }
-              },
-              "directives": []
-            },
-            {
-              "kind": "InputValueDefinition",
-              "name": {
-                "kind": "Name",
-                "value": "orderDirection"
-              },
-              "type": {
-                "kind": "NamedType",
-                "name": {
-                  "kind": "Name",
-                  "value": "OrderDirection"
-                }
-              },
-              "directives": []
-            },
-            {
-              "kind": "InputValueDefinition",
-              "name": {
-                "kind": "Name",
-                "value": "where"
-              },
-              "type": {
-                "kind": "NamedType",
-                "name": {
-                  "kind": "Name",
-                  "value": "SchemaUpdated_filter"
-                }
-              },
-              "directives": []
-            },
-            {
-              "kind": "InputValueDefinition",
-              "description": {
-                "kind": "StringValue",
-                "value": "The block at which the query should be executed. Can either be a `{ hash: Bytes }` value containing a block hash, a `{ number: Int }` containing the block number, or a `{ number_gte: Int }` containing the minimum block number. In the case of `number_gte`, the query will be executed on the latest block only if the subgraph has progressed to or past the minimum block number. Defaults to the latest block when omitted.",
-                "block": true
-              },
-              "name": {
-                "kind": "Name",
-                "value": "block"
-              },
-              "type": {
-                "kind": "NamedType",
-                "name": {
-                  "kind": "Name",
-                  "value": "Block_height"
-                }
-              },
-              "directives": []
-            },
-            {
-              "kind": "InputValueDefinition",
-              "description": {
-                "kind": "StringValue",
-                "value": "Set to `allow` to receive data even if the subgraph has skipped over errors while syncing.",
-                "block": true
-              },
-              "name": {
-                "kind": "Name",
-                "value": "subgraphError"
-              },
-              "type": {
-                "kind": "NonNullType",
-                "type": {
-                  "kind": "NamedType",
-                  "name": {
-                    "kind": "Name",
-                    "value": "_SubgraphErrorPolicy_"
-                  }
-                }
-              },
-              "defaultValue": {
-                "kind": "EnumValue",
-                "value": "deny"
-              },
-              "directives": []
-            }
-          ],
-          "type": {
-            "kind": "NonNullType",
-            "type": {
-              "kind": "ListType",
-              "type": {
-                "kind": "NonNullType",
-                "type": {
-                  "kind": "NamedType",
-                  "name": {
-                    "kind": "Name",
-                    "value": "SchemaUpdated"
                   }
                 }
               }
@@ -17146,6 +16892,112 @@ const schemaAST = {
           "kind": "FieldDefinition",
           "name": {
             "kind": "Name",
+            "value": "manifests"
+          },
+          "arguments": [
+            {
+              "kind": "InputValueDefinition",
+              "name": {
+                "kind": "Name",
+                "value": "skip"
+              },
+              "type": {
+                "kind": "NamedType",
+                "name": {
+                  "kind": "Name",
+                  "value": "Int"
+                }
+              },
+              "defaultValue": {
+                "kind": "IntValue",
+                "value": "0"
+              },
+              "directives": []
+            },
+            {
+              "kind": "InputValueDefinition",
+              "name": {
+                "kind": "Name",
+                "value": "first"
+              },
+              "type": {
+                "kind": "NamedType",
+                "name": {
+                  "kind": "Name",
+                  "value": "Int"
+                }
+              },
+              "defaultValue": {
+                "kind": "IntValue",
+                "value": "100"
+              },
+              "directives": []
+            },
+            {
+              "kind": "InputValueDefinition",
+              "name": {
+                "kind": "Name",
+                "value": "orderBy"
+              },
+              "type": {
+                "kind": "NamedType",
+                "name": {
+                  "kind": "Name",
+                  "value": "ManifestState_orderBy"
+                }
+              },
+              "directives": []
+            },
+            {
+              "kind": "InputValueDefinition",
+              "name": {
+                "kind": "Name",
+                "value": "orderDirection"
+              },
+              "type": {
+                "kind": "NamedType",
+                "name": {
+                  "kind": "Name",
+                  "value": "OrderDirection"
+                }
+              },
+              "directives": []
+            },
+            {
+              "kind": "InputValueDefinition",
+              "name": {
+                "kind": "Name",
+                "value": "where"
+              },
+              "type": {
+                "kind": "NamedType",
+                "name": {
+                  "kind": "Name",
+                  "value": "ManifestState_filter"
+                }
+              },
+              "directives": []
+            }
+          ],
+          "type": {
+            "kind": "ListType",
+            "type": {
+              "kind": "NonNullType",
+              "type": {
+                "kind": "NamedType",
+                "name": {
+                  "kind": "Name",
+                  "value": "ManifestState"
+                }
+              }
+            }
+          },
+          "directives": []
+        },
+        {
+          "kind": "FieldDefinition",
+          "name": {
+            "kind": "Name",
             "value": "version"
           },
           "arguments": [],
@@ -19899,7 +19751,7 @@ const schemaAST = {
               "kind": "NamedType",
               "name": {
                 "kind": "Name",
-                "value": "ID"
+                "value": "Bytes"
               }
             }
           },
@@ -20089,7 +19941,7 @@ const schemaAST = {
             "kind": "NamedType",
             "name": {
               "kind": "Name",
-              "value": "ID"
+              "value": "Bytes"
             }
           },
           "directives": []
@@ -20104,7 +19956,7 @@ const schemaAST = {
             "kind": "NamedType",
             "name": {
               "kind": "Name",
-              "value": "ID"
+              "value": "Bytes"
             }
           },
           "directives": []
@@ -20119,7 +19971,7 @@ const schemaAST = {
             "kind": "NamedType",
             "name": {
               "kind": "Name",
-              "value": "ID"
+              "value": "Bytes"
             }
           },
           "directives": []
@@ -20134,7 +19986,7 @@ const schemaAST = {
             "kind": "NamedType",
             "name": {
               "kind": "Name",
-              "value": "ID"
+              "value": "Bytes"
             }
           },
           "directives": []
@@ -20149,7 +20001,7 @@ const schemaAST = {
             "kind": "NamedType",
             "name": {
               "kind": "Name",
-              "value": "ID"
+              "value": "Bytes"
             }
           },
           "directives": []
@@ -20164,7 +20016,7 @@ const schemaAST = {
             "kind": "NamedType",
             "name": {
               "kind": "Name",
-              "value": "ID"
+              "value": "Bytes"
             }
           },
           "directives": []
@@ -20183,7 +20035,7 @@ const schemaAST = {
                 "kind": "NamedType",
                 "name": {
                   "kind": "Name",
-                  "value": "ID"
+                  "value": "Bytes"
                 }
               }
             }
@@ -20204,9 +20056,39 @@ const schemaAST = {
                 "kind": "NamedType",
                 "name": {
                   "kind": "Name",
-                  "value": "ID"
+                  "value": "Bytes"
                 }
               }
+            }
+          },
+          "directives": []
+        },
+        {
+          "kind": "InputValueDefinition",
+          "name": {
+            "kind": "Name",
+            "value": "id_contains"
+          },
+          "type": {
+            "kind": "NamedType",
+            "name": {
+              "kind": "Name",
+              "value": "Bytes"
+            }
+          },
+          "directives": []
+        },
+        {
+          "kind": "InputValueDefinition",
+          "name": {
+            "kind": "Name",
+            "value": "id_not_contains"
+          },
+          "type": {
+            "kind": "NamedType",
+            "name": {
+              "kind": "Name",
+              "value": "Bytes"
             }
           },
           "directives": []
@@ -22383,6 +22265,21 @@ const schemaAST = {
           "kind": "InputValueDefinition",
           "name": {
             "kind": "Name",
+            "value": "manifests_"
+          },
+          "type": {
+            "kind": "NamedType",
+            "name": {
+              "kind": "Name",
+              "value": "ManifestState_filter"
+            }
+          },
+          "directives": []
+        },
+        {
+          "kind": "InputValueDefinition",
+          "name": {
+            "kind": "Name",
             "value": "version"
           },
           "type": {
@@ -23215,6 +23112,14 @@ const schemaAST = {
           "name": {
             "kind": "Name",
             "value": "id"
+          },
+          "directives": []
+        },
+        {
+          "kind": "EnumValueDefinition",
+          "name": {
+            "kind": "Name",
+            "value": "manifests"
           },
           "directives": []
         },

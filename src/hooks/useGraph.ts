@@ -7,30 +7,31 @@ import type { Track } from '../types'
 const PAGE_SIZE = 10
 
 function normalizeManifestState(state: any): Track[] {
-    const { owner, schema_name, manifest } = state
+    const { owner, schemaName, manifest } = state
     if (!manifest?.files) return []
     return manifest.files.map((file: any, i: number) => {
         const fields: Record<string, any> = {}
-        for (const f of file.fields ?? []) {
+        for (const f of file.fileFields ?? []) {
             fields[f.name ?? ''] = f
         }
-        const tag = fields['audio']?.value ?? `track-${i}`
-        const price = fields['audio']?.price ?? null
+        const tag     = file.tag ?? `track-${i}`
+        const pricing = fields['audio']?.pricing ?? null
+
         return {
-            id: `${owner}-${tag}`,
-            title:          fields['title']?.value    ?? tag,
-            artist:         fields['artist']?.value   ?? owner.slice(0, 8) + '…',
-            album:          fields['album']?.value    ?? schema_name,
+            id:             `${owner}-${tag}`,
+            title:          fields['title']?.value       ?? tag,
+            artist:         fields['artist']?.value      ?? owner.slice(0, 8) + '…',
+            album:          fields['album']?.value       ?? schemaName,
             trackNumber:    fields['trackNumber']?.value ?? null,
-            duration:       fields['duration']?.value ?? '—',
-            genre:          fields['genre']?.value    ?? '',
+            duration:       fields['duration']?.value    ?? '—',
+            genre:          fields['genre']?.value       ?? '',
             owner,
-            datasourceName: schema_name,
+            datasourceName: schemaName,
             tag,
-            art:            fields['cover_art']?.value ?? null,
-            price:          price?.price    ?? '0',
-            currency:       price?.currency ?? 'USDC',
-            acc:            fields['audio']?.acc ?? null,
+            art:            fields['cover_art']?.value   ?? null,
+            price:          pricing?.price               ?? '0',
+            currency:       pricing?.currency            ?? 'USDC',
+            acc:            fields['audio']?.acc         ?? null,
         } satisfies Track
     })
 }
@@ -39,62 +40,22 @@ function normalizeResults(data: GetTracksQuery): Track[] {
     return (data.manifestStates ?? []).flatMap(normalizeManifestState)
 }
 
-const SEARCH_FIELDS = new Set(['artist', 'title', 'album', 'genre'])
-
 function normalizeSearchResults(data: SearchTracksQuery, term: string): Track[] {
     const seen  = new Set<string>()
     const lower = term.toLowerCase()
 
-    const allFields = [
-        ...(data.byArtist ?? []),
-        ...(data.byTitle  ?? []),
-        ...(data.byAlbum  ?? []),
-        ...(data.byGenre  ?? []),
-    ]
-
-    return allFields
+    return (data.manifestStates ?? [])
         .filter(Boolean)
-        .flatMap((f: any) => {
-            const state = f.manifestState
-            if (!state?.manifest?.files) return []
-
-            return state.manifest.files
-                .filter((file: any) =>
-                    (file.fields ?? []).some((field: any) =>
-                        SEARCH_FIELDS.has(field.name) &&
-                        field.value?.toLowerCase().includes(lower)
-                    )
-                )
-                .map((file: any, i: number) => {
-                    const fields: Record<string, any> = {}
-                    for (const field of file.fields ?? []) {
-                        fields[field.name ?? ''] = field
-                    }
-                    const tag   = fields['audio']?.value ?? `track-${i}`
-                    const price = fields['audio']?.price ?? null
-                    const track: Track = {
-                        id:             `${state.owner}-${tag}`,
-                        title:          fields['title']?.value    ?? tag,
-                        artist:         fields['artist']?.value   ?? state.owner.slice(0, 8) + '…',
-                        album:          fields['album']?.value    ?? state.schema_name,
-                        trackNumber:    fields['trackNumber']?.value ?? null,
-                        duration:       fields['duration']?.value ?? '—',
-                        genre:          fields['genre']?.value    ?? '',
-                        owner:          state.owner,
-                        datasourceName: state.schema_name,
-                        tag,
-                        art:            fields['cover_art']?.value ?? null,
-                        price:          price?.price    ?? '0',
-                        currency:       price?.currency ?? 'USDC',
-                        acc:            fields['audio']?.acc ?? null,
-                    }
-                    return track
-                })
-        })
-        .filter(t => {
-            if (seen.has(t.id)) return false
-            seen.add(t.id)
-            return true
+        .flatMap((state: any) => normalizeManifestState(state))
+        .filter(track => {
+            if (seen.has(track.id)) return false
+            seen.add(track.id)
+            return (
+                track.title.toLowerCase().includes(lower)         ||
+                track.artist.toLowerCase().includes(lower)        ||
+                (track.album ?? '').toLowerCase().includes(lower) ||
+                (track.genre ?? '').toLowerCase().includes(lower)
+            )
         })
 }
 

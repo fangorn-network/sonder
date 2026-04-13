@@ -72,12 +72,12 @@ export type Block_height = {
 export type File = {
   id: Scalars['ID']['output'];
   tag?: Maybe<Scalars['String']['output']>;
-  manifest?: Maybe<Manifest>;
-  fields?: Maybe<Array<FileField>>;
+  manifest: Manifest;
+  fileFields?: Maybe<Array<FileField>>;
 };
 
 
-export type FilefieldsArgs = {
+export type FilefileFieldsArgs = {
   skip?: InputMaybe<Scalars['Int']['input']>;
   first?: InputMaybe<Scalars['Int']['input']>;
   orderBy?: InputMaybe<FileField_orderBy>;
@@ -91,8 +91,7 @@ export type FileField = {
   value?: Maybe<Scalars['String']['output']>;
   atType?: Maybe<Scalars['String']['output']>;
   acc?: Maybe<Scalars['String']['output']>;
-  manifestState: ManifestState;
-  parentFile?: Maybe<File>;
+  file: File;
   pricing?: Maybe<PricingResource>;
 };
 
@@ -185,48 +184,27 @@ export type FileField_filter = {
   acc_ends_with_nocase?: InputMaybe<Scalars['String']['input']>;
   acc_not_ends_with?: InputMaybe<Scalars['String']['input']>;
   acc_not_ends_with_nocase?: InputMaybe<Scalars['String']['input']>;
-  manifestState?: InputMaybe<Scalars['String']['input']>;
-  manifestState_not?: InputMaybe<Scalars['String']['input']>;
-  manifestState_gt?: InputMaybe<Scalars['String']['input']>;
-  manifestState_lt?: InputMaybe<Scalars['String']['input']>;
-  manifestState_gte?: InputMaybe<Scalars['String']['input']>;
-  manifestState_lte?: InputMaybe<Scalars['String']['input']>;
-  manifestState_in?: InputMaybe<Array<Scalars['String']['input']>>;
-  manifestState_not_in?: InputMaybe<Array<Scalars['String']['input']>>;
-  manifestState_contains?: InputMaybe<Scalars['String']['input']>;
-  manifestState_contains_nocase?: InputMaybe<Scalars['String']['input']>;
-  manifestState_not_contains?: InputMaybe<Scalars['String']['input']>;
-  manifestState_not_contains_nocase?: InputMaybe<Scalars['String']['input']>;
-  manifestState_starts_with?: InputMaybe<Scalars['String']['input']>;
-  manifestState_starts_with_nocase?: InputMaybe<Scalars['String']['input']>;
-  manifestState_not_starts_with?: InputMaybe<Scalars['String']['input']>;
-  manifestState_not_starts_with_nocase?: InputMaybe<Scalars['String']['input']>;
-  manifestState_ends_with?: InputMaybe<Scalars['String']['input']>;
-  manifestState_ends_with_nocase?: InputMaybe<Scalars['String']['input']>;
-  manifestState_not_ends_with?: InputMaybe<Scalars['String']['input']>;
-  manifestState_not_ends_with_nocase?: InputMaybe<Scalars['String']['input']>;
-  manifestState_?: InputMaybe<ManifestState_filter>;
-  parentFile?: InputMaybe<Scalars['String']['input']>;
-  parentFile_not?: InputMaybe<Scalars['String']['input']>;
-  parentFile_gt?: InputMaybe<Scalars['String']['input']>;
-  parentFile_lt?: InputMaybe<Scalars['String']['input']>;
-  parentFile_gte?: InputMaybe<Scalars['String']['input']>;
-  parentFile_lte?: InputMaybe<Scalars['String']['input']>;
-  parentFile_in?: InputMaybe<Array<Scalars['String']['input']>>;
-  parentFile_not_in?: InputMaybe<Array<Scalars['String']['input']>>;
-  parentFile_contains?: InputMaybe<Scalars['String']['input']>;
-  parentFile_contains_nocase?: InputMaybe<Scalars['String']['input']>;
-  parentFile_not_contains?: InputMaybe<Scalars['String']['input']>;
-  parentFile_not_contains_nocase?: InputMaybe<Scalars['String']['input']>;
-  parentFile_starts_with?: InputMaybe<Scalars['String']['input']>;
-  parentFile_starts_with_nocase?: InputMaybe<Scalars['String']['input']>;
-  parentFile_not_starts_with?: InputMaybe<Scalars['String']['input']>;
-  parentFile_not_starts_with_nocase?: InputMaybe<Scalars['String']['input']>;
-  parentFile_ends_with?: InputMaybe<Scalars['String']['input']>;
-  parentFile_ends_with_nocase?: InputMaybe<Scalars['String']['input']>;
-  parentFile_not_ends_with?: InputMaybe<Scalars['String']['input']>;
-  parentFile_not_ends_with_nocase?: InputMaybe<Scalars['String']['input']>;
-  parentFile_?: InputMaybe<File_filter>;
+  file?: InputMaybe<Scalars['String']['input']>;
+  file_not?: InputMaybe<Scalars['String']['input']>;
+  file_gt?: InputMaybe<Scalars['String']['input']>;
+  file_lt?: InputMaybe<Scalars['String']['input']>;
+  file_gte?: InputMaybe<Scalars['String']['input']>;
+  file_lte?: InputMaybe<Scalars['String']['input']>;
+  file_in?: InputMaybe<Array<Scalars['String']['input']>>;
+  file_not_in?: InputMaybe<Array<Scalars['String']['input']>>;
+  file_contains?: InputMaybe<Scalars['String']['input']>;
+  file_contains_nocase?: InputMaybe<Scalars['String']['input']>;
+  file_not_contains?: InputMaybe<Scalars['String']['input']>;
+  file_not_contains_nocase?: InputMaybe<Scalars['String']['input']>;
+  file_starts_with?: InputMaybe<Scalars['String']['input']>;
+  file_starts_with_nocase?: InputMaybe<Scalars['String']['input']>;
+  file_not_starts_with?: InputMaybe<Scalars['String']['input']>;
+  file_not_starts_with_nocase?: InputMaybe<Scalars['String']['input']>;
+  file_ends_with?: InputMaybe<Scalars['String']['input']>;
+  file_ends_with_nocase?: InputMaybe<Scalars['String']['input']>;
+  file_not_ends_with?: InputMaybe<Scalars['String']['input']>;
+  file_not_ends_with_nocase?: InputMaybe<Scalars['String']['input']>;
+  file_?: InputMaybe<File_filter>;
   pricing?: InputMaybe<Scalars['String']['input']>;
   pricing_not?: InputMaybe<Scalars['String']['input']>;
   pricing_gt?: InputMaybe<Scalars['String']['input']>;
@@ -260,17 +238,9 @@ export type FileField_orderBy =
   | 'value'
   | 'atType'
   | 'acc'
-  | 'manifestState'
-  | 'manifestState__id'
-  | 'manifestState__owner'
-  | 'manifestState__schemaId'
-  | 'manifestState__schemaName'
-  | 'manifestState__manifestCid'
-  | 'manifestState__version'
-  | 'manifestState__lastUpdated'
-  | 'parentFile'
-  | 'parentFile__id'
-  | 'parentFile__tag'
+  | 'file'
+  | 'file__id'
+  | 'file__tag'
   | 'pricing'
   | 'pricing__id'
   | 'pricing__owner'
@@ -327,13 +297,7 @@ export type File_filter = {
   manifest_not_ends_with?: InputMaybe<Scalars['String']['input']>;
   manifest_not_ends_with_nocase?: InputMaybe<Scalars['String']['input']>;
   manifest_?: InputMaybe<Manifest_filter>;
-  fields?: InputMaybe<Array<Scalars['String']['input']>>;
-  fields_not?: InputMaybe<Array<Scalars['String']['input']>>;
-  fields_contains?: InputMaybe<Array<Scalars['String']['input']>>;
-  fields_contains_nocase?: InputMaybe<Array<Scalars['String']['input']>>;
-  fields_not_contains?: InputMaybe<Array<Scalars['String']['input']>>;
-  fields_not_contains_nocase?: InputMaybe<Array<Scalars['String']['input']>>;
-  fields_?: InputMaybe<FileField_filter>;
+  fileFields_?: InputMaybe<FileField_filter>;
   /** Filter for the block changed event. */
   _change_block?: InputMaybe<BlockChangedFilter>;
   and?: InputMaybe<Array<InputMaybe<File_filter>>>;
@@ -347,12 +311,13 @@ export type File_orderBy =
   | 'manifest__id'
   | 'manifest__manifestVersion'
   | 'manifest__schemaId'
-  | 'fields';
+  | 'fileFields';
 
 export type Manifest = {
   id: Scalars['ID']['output'];
   manifestVersion?: Maybe<Scalars['BigInt']['output']>;
   schemaId?: Maybe<Scalars['String']['output']>;
+  manifestState: ManifestState;
   files?: Maybe<Array<File>>;
 };
 
@@ -481,7 +446,7 @@ export type ManifestState = {
   id: Scalars['Bytes']['output'];
   owner: Scalars['Bytes']['output'];
   schemaId: Scalars['Bytes']['output'];
-  schema?: Maybe<SchemaState>;
+  schema?: Maybe<Schema>;
   schemaName: Scalars['String']['output'];
   manifestCid: Scalars['String']['output'];
   manifest?: Maybe<Manifest>;
@@ -540,7 +505,7 @@ export type ManifestState_filter = {
   schema_ends_with_nocase?: InputMaybe<Scalars['String']['input']>;
   schema_not_ends_with?: InputMaybe<Scalars['String']['input']>;
   schema_not_ends_with_nocase?: InputMaybe<Scalars['String']['input']>;
-  schema_?: InputMaybe<SchemaState_filter>;
+  schema_?: InputMaybe<Schema_filter>;
   schemaName?: InputMaybe<Scalars['String']['input']>;
   schemaName_not?: InputMaybe<Scalars['String']['input']>;
   schemaName_gt?: InputMaybe<Scalars['String']['input']>;
@@ -630,9 +595,8 @@ export type ManifestState_orderBy =
   | 'schemaId'
   | 'schema'
   | 'schema__id'
-  | 'schema__schemaId'
-  | 'schema__owner'
-  | 'schema__name'
+  | 'schema__version'
+  | 'schema__agentId'
   | 'schemaName'
   | 'manifestCid'
   | 'manifest'
@@ -791,12 +755,27 @@ export type Manifest_filter = {
   schemaId_ends_with_nocase?: InputMaybe<Scalars['String']['input']>;
   schemaId_not_ends_with?: InputMaybe<Scalars['String']['input']>;
   schemaId_not_ends_with_nocase?: InputMaybe<Scalars['String']['input']>;
-  files?: InputMaybe<Array<Scalars['String']['input']>>;
-  files_not?: InputMaybe<Array<Scalars['String']['input']>>;
-  files_contains?: InputMaybe<Array<Scalars['String']['input']>>;
-  files_contains_nocase?: InputMaybe<Array<Scalars['String']['input']>>;
-  files_not_contains?: InputMaybe<Array<Scalars['String']['input']>>;
-  files_not_contains_nocase?: InputMaybe<Array<Scalars['String']['input']>>;
+  manifestState?: InputMaybe<Scalars['String']['input']>;
+  manifestState_not?: InputMaybe<Scalars['String']['input']>;
+  manifestState_gt?: InputMaybe<Scalars['String']['input']>;
+  manifestState_lt?: InputMaybe<Scalars['String']['input']>;
+  manifestState_gte?: InputMaybe<Scalars['String']['input']>;
+  manifestState_lte?: InputMaybe<Scalars['String']['input']>;
+  manifestState_in?: InputMaybe<Array<Scalars['String']['input']>>;
+  manifestState_not_in?: InputMaybe<Array<Scalars['String']['input']>>;
+  manifestState_contains?: InputMaybe<Scalars['String']['input']>;
+  manifestState_contains_nocase?: InputMaybe<Scalars['String']['input']>;
+  manifestState_not_contains?: InputMaybe<Scalars['String']['input']>;
+  manifestState_not_contains_nocase?: InputMaybe<Scalars['String']['input']>;
+  manifestState_starts_with?: InputMaybe<Scalars['String']['input']>;
+  manifestState_starts_with_nocase?: InputMaybe<Scalars['String']['input']>;
+  manifestState_not_starts_with?: InputMaybe<Scalars['String']['input']>;
+  manifestState_not_starts_with_nocase?: InputMaybe<Scalars['String']['input']>;
+  manifestState_ends_with?: InputMaybe<Scalars['String']['input']>;
+  manifestState_ends_with_nocase?: InputMaybe<Scalars['String']['input']>;
+  manifestState_not_ends_with?: InputMaybe<Scalars['String']['input']>;
+  manifestState_not_ends_with_nocase?: InputMaybe<Scalars['String']['input']>;
+  manifestState_?: InputMaybe<ManifestState_filter>;
   files_?: InputMaybe<File_filter>;
   /** Filter for the block changed event. */
   _change_block?: InputMaybe<BlockChangedFilter>;
@@ -808,6 +787,14 @@ export type Manifest_orderBy =
   | 'id'
   | 'manifestVersion'
   | 'schemaId'
+  | 'manifestState'
+  | 'manifestState__id'
+  | 'manifestState__owner'
+  | 'manifestState__schemaId'
+  | 'manifestState__schemaName'
+  | 'manifestState__manifestCid'
+  | 'manifestState__version'
+  | 'manifestState__lastUpdated'
   | 'files';
 
 /** Defines the order direction, either ascending or descending */
@@ -946,12 +933,12 @@ export type Query = {
   manifestUpdateds: Array<ManifestUpdated>;
   schemaRegistered?: Maybe<SchemaRegistered>;
   schemaRegistereds: Array<SchemaRegistered>;
+  schemaUpdated?: Maybe<SchemaUpdated>;
+  schemaUpdateds: Array<SchemaUpdated>;
   resourceCreated?: Maybe<ResourceCreated>;
   resourceCreateds: Array<ResourceCreated>;
   priceUpdated?: Maybe<PriceUpdated>;
   priceUpdateds: Array<PriceUpdated>;
-  schemaUpdated?: Maybe<SchemaUpdated>;
-  schemaUpdateds: Array<SchemaUpdated>;
   schemaState?: Maybe<SchemaState>;
   schemaStates: Array<SchemaState>;
   schema?: Maybe<Schema>;
@@ -1027,6 +1014,24 @@ export type QueryschemaRegisteredsArgs = {
 };
 
 
+export type QueryschemaUpdatedArgs = {
+  id: Scalars['ID']['input'];
+  block?: InputMaybe<Block_height>;
+  subgraphError?: _SubgraphErrorPolicy_;
+};
+
+
+export type QueryschemaUpdatedsArgs = {
+  skip?: InputMaybe<Scalars['Int']['input']>;
+  first?: InputMaybe<Scalars['Int']['input']>;
+  orderBy?: InputMaybe<SchemaUpdated_orderBy>;
+  orderDirection?: InputMaybe<OrderDirection>;
+  where?: InputMaybe<SchemaUpdated_filter>;
+  block?: InputMaybe<Block_height>;
+  subgraphError?: _SubgraphErrorPolicy_;
+};
+
+
 export type QueryresourceCreatedArgs = {
   id: Scalars['ID']['input'];
   block?: InputMaybe<Block_height>;
@@ -1058,24 +1063,6 @@ export type QuerypriceUpdatedsArgs = {
   orderBy?: InputMaybe<PriceUpdated_orderBy>;
   orderDirection?: InputMaybe<OrderDirection>;
   where?: InputMaybe<PriceUpdated_filter>;
-  block?: InputMaybe<Block_height>;
-  subgraphError?: _SubgraphErrorPolicy_;
-};
-
-
-export type QueryschemaUpdatedArgs = {
-  id: Scalars['ID']['input'];
-  block?: InputMaybe<Block_height>;
-  subgraphError?: _SubgraphErrorPolicy_;
-};
-
-
-export type QueryschemaUpdatedsArgs = {
-  skip?: InputMaybe<Scalars['Int']['input']>;
-  first?: InputMaybe<Scalars['Int']['input']>;
-  orderBy?: InputMaybe<SchemaUpdated_orderBy>;
-  orderDirection?: InputMaybe<OrderDirection>;
-  where?: InputMaybe<SchemaUpdated_filter>;
   block?: InputMaybe<Block_height>;
   subgraphError?: _SubgraphErrorPolicy_;
 };
@@ -1299,9 +1286,19 @@ export type ResourceCreated_orderBy =
 
 export type Schema = {
   id: Scalars['ID']['output'];
+  manifests?: Maybe<Array<ManifestState>>;
   version?: Maybe<Scalars['String']['output']>;
   agentId?: Maybe<Scalars['String']['output']>;
   fields?: Maybe<Array<SchemaField>>;
+};
+
+
+export type SchemamanifestsArgs = {
+  skip?: InputMaybe<Scalars['Int']['input']>;
+  first?: InputMaybe<Scalars['Int']['input']>;
+  orderBy?: InputMaybe<ManifestState_orderBy>;
+  orderDirection?: InputMaybe<OrderDirection>;
+  where?: InputMaybe<ManifestState_filter>;
 };
 
 
@@ -1494,7 +1491,7 @@ export type SchemaRegistered_orderBy =
   | 'agentId';
 
 export type SchemaState = {
-  id: Scalars['ID']['output'];
+  id: Scalars['Bytes']['output'];
   schemaId: Scalars['Bytes']['output'];
   owner: Scalars['Bytes']['output'];
   name: Scalars['String']['output'];
@@ -1511,14 +1508,16 @@ export type SchemaStateversionsArgs = {
 };
 
 export type SchemaState_filter = {
-  id?: InputMaybe<Scalars['ID']['input']>;
-  id_not?: InputMaybe<Scalars['ID']['input']>;
-  id_gt?: InputMaybe<Scalars['ID']['input']>;
-  id_lt?: InputMaybe<Scalars['ID']['input']>;
-  id_gte?: InputMaybe<Scalars['ID']['input']>;
-  id_lte?: InputMaybe<Scalars['ID']['input']>;
-  id_in?: InputMaybe<Array<Scalars['ID']['input']>>;
-  id_not_in?: InputMaybe<Array<Scalars['ID']['input']>>;
+  id?: InputMaybe<Scalars['Bytes']['input']>;
+  id_not?: InputMaybe<Scalars['Bytes']['input']>;
+  id_gt?: InputMaybe<Scalars['Bytes']['input']>;
+  id_lt?: InputMaybe<Scalars['Bytes']['input']>;
+  id_gte?: InputMaybe<Scalars['Bytes']['input']>;
+  id_lte?: InputMaybe<Scalars['Bytes']['input']>;
+  id_in?: InputMaybe<Array<Scalars['Bytes']['input']>>;
+  id_not_in?: InputMaybe<Array<Scalars['Bytes']['input']>>;
+  id_contains?: InputMaybe<Scalars['Bytes']['input']>;
+  id_not_contains?: InputMaybe<Scalars['Bytes']['input']>;
   schemaId?: InputMaybe<Scalars['Bytes']['input']>;
   schemaId_not?: InputMaybe<Scalars['Bytes']['input']>;
   schemaId_gt?: InputMaybe<Scalars['Bytes']['input']>;
@@ -1668,6 +1667,7 @@ export type Schema_filter = {
   id_lte?: InputMaybe<Scalars['ID']['input']>;
   id_in?: InputMaybe<Array<Scalars['ID']['input']>>;
   id_not_in?: InputMaybe<Array<Scalars['ID']['input']>>;
+  manifests_?: InputMaybe<ManifestState_filter>;
   version?: InputMaybe<Scalars['String']['input']>;
   version_not?: InputMaybe<Scalars['String']['input']>;
   version_gt?: InputMaybe<Scalars['String']['input']>;
@@ -1723,6 +1723,7 @@ export type Schema_filter = {
 
 export type Schema_orderBy =
   | 'id'
+  | 'manifests'
   | 'version'
   | 'agentId'
   | 'fields';
@@ -1986,8 +1987,8 @@ export interface BytesScalarConfig extends GraphQLScalarTypeConfig<ResolversType
 export type FileResolvers<ContextType = MeshContext, ParentType extends ResolversParentTypes['File'] = ResolversParentTypes['File']> = ResolversObject<{
   id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
   tag?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
-  manifest?: Resolver<Maybe<ResolversTypes['Manifest']>, ParentType, ContextType>;
-  fields?: Resolver<Maybe<Array<ResolversTypes['FileField']>>, ParentType, ContextType, RequireFields<FilefieldsArgs, 'skip' | 'first'>>;
+  manifest?: Resolver<ResolversTypes['Manifest'], ParentType, ContextType>;
+  fileFields?: Resolver<Maybe<Array<ResolversTypes['FileField']>>, ParentType, ContextType, RequireFields<FilefileFieldsArgs, 'skip' | 'first'>>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
@@ -1997,8 +1998,7 @@ export type FileFieldResolvers<ContextType = MeshContext, ParentType extends Res
   value?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   atType?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   acc?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
-  manifestState?: Resolver<ResolversTypes['ManifestState'], ParentType, ContextType>;
-  parentFile?: Resolver<Maybe<ResolversTypes['File']>, ParentType, ContextType>;
+  file?: Resolver<ResolversTypes['File'], ParentType, ContextType>;
   pricing?: Resolver<Maybe<ResolversTypes['PricingResource']>, ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
@@ -2011,6 +2011,7 @@ export type ManifestResolvers<ContextType = MeshContext, ParentType extends Reso
   id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
   manifestVersion?: Resolver<Maybe<ResolversTypes['BigInt']>, ParentType, ContextType>;
   schemaId?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  manifestState?: Resolver<ResolversTypes['ManifestState'], ParentType, ContextType>;
   files?: Resolver<Maybe<Array<ResolversTypes['File']>>, ParentType, ContextType, RequireFields<ManifestfilesArgs, 'skip' | 'first'>>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
@@ -2031,7 +2032,7 @@ export type ManifestStateResolvers<ContextType = MeshContext, ParentType extends
   id?: Resolver<ResolversTypes['Bytes'], ParentType, ContextType>;
   owner?: Resolver<ResolversTypes['Bytes'], ParentType, ContextType>;
   schemaId?: Resolver<ResolversTypes['Bytes'], ParentType, ContextType>;
-  schema?: Resolver<Maybe<ResolversTypes['SchemaState']>, ParentType, ContextType>;
+  schema?: Resolver<Maybe<ResolversTypes['Schema']>, ParentType, ContextType>;
   schemaName?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   manifestCid?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   manifest?: Resolver<Maybe<ResolversTypes['Manifest']>, ParentType, ContextType>;
@@ -2075,12 +2076,12 @@ export type QueryResolvers<ContextType = MeshContext, ParentType extends Resolve
   manifestUpdateds?: Resolver<Array<ResolversTypes['ManifestUpdated']>, ParentType, ContextType, RequireFields<QuerymanifestUpdatedsArgs, 'skip' | 'first' | 'subgraphError'>>;
   schemaRegistered?: Resolver<Maybe<ResolversTypes['SchemaRegistered']>, ParentType, ContextType, RequireFields<QueryschemaRegisteredArgs, 'id' | 'subgraphError'>>;
   schemaRegistereds?: Resolver<Array<ResolversTypes['SchemaRegistered']>, ParentType, ContextType, RequireFields<QueryschemaRegisteredsArgs, 'skip' | 'first' | 'subgraphError'>>;
+  schemaUpdated?: Resolver<Maybe<ResolversTypes['SchemaUpdated']>, ParentType, ContextType, RequireFields<QueryschemaUpdatedArgs, 'id' | 'subgraphError'>>;
+  schemaUpdateds?: Resolver<Array<ResolversTypes['SchemaUpdated']>, ParentType, ContextType, RequireFields<QueryschemaUpdatedsArgs, 'skip' | 'first' | 'subgraphError'>>;
   resourceCreated?: Resolver<Maybe<ResolversTypes['ResourceCreated']>, ParentType, ContextType, RequireFields<QueryresourceCreatedArgs, 'id' | 'subgraphError'>>;
   resourceCreateds?: Resolver<Array<ResolversTypes['ResourceCreated']>, ParentType, ContextType, RequireFields<QueryresourceCreatedsArgs, 'skip' | 'first' | 'subgraphError'>>;
   priceUpdated?: Resolver<Maybe<ResolversTypes['PriceUpdated']>, ParentType, ContextType, RequireFields<QuerypriceUpdatedArgs, 'id' | 'subgraphError'>>;
   priceUpdateds?: Resolver<Array<ResolversTypes['PriceUpdated']>, ParentType, ContextType, RequireFields<QuerypriceUpdatedsArgs, 'skip' | 'first' | 'subgraphError'>>;
-  schemaUpdated?: Resolver<Maybe<ResolversTypes['SchemaUpdated']>, ParentType, ContextType, RequireFields<QueryschemaUpdatedArgs, 'id' | 'subgraphError'>>;
-  schemaUpdateds?: Resolver<Array<ResolversTypes['SchemaUpdated']>, ParentType, ContextType, RequireFields<QueryschemaUpdatedsArgs, 'skip' | 'first' | 'subgraphError'>>;
   schemaState?: Resolver<Maybe<ResolversTypes['SchemaState']>, ParentType, ContextType, RequireFields<QueryschemaStateArgs, 'id' | 'subgraphError'>>;
   schemaStates?: Resolver<Array<ResolversTypes['SchemaState']>, ParentType, ContextType, RequireFields<QueryschemaStatesArgs, 'skip' | 'first' | 'subgraphError'>>;
   schema?: Resolver<Maybe<ResolversTypes['Schema']>, ParentType, ContextType, RequireFields<QueryschemaArgs, 'id' | 'subgraphError'>>;
@@ -2111,6 +2112,7 @@ export type ResourceCreatedResolvers<ContextType = MeshContext, ParentType exten
 
 export type SchemaResolvers<ContextType = MeshContext, ParentType extends ResolversParentTypes['Schema'] = ResolversParentTypes['Schema']> = ResolversObject<{
   id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
+  manifests?: Resolver<Maybe<Array<ResolversTypes['ManifestState']>>, ParentType, ContextType, RequireFields<SchemamanifestsArgs, 'skip' | 'first'>>;
   version?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   agentId?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   fields?: Resolver<Maybe<Array<ResolversTypes['SchemaField']>>, ParentType, ContextType, RequireFields<SchemafieldsArgs, 'skip' | 'first'>>;
@@ -2135,7 +2137,7 @@ export type SchemaRegisteredResolvers<ContextType = MeshContext, ParentType exte
 }>;
 
 export type SchemaStateResolvers<ContextType = MeshContext, ParentType extends ResolversParentTypes['SchemaState'] = ResolversParentTypes['SchemaState']> = ResolversObject<{
-  id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
+  id?: Resolver<ResolversTypes['Bytes'], ParentType, ContextType>;
   schemaId?: Resolver<ResolversTypes['Bytes'], ParentType, ContextType>;
   owner?: Resolver<ResolversTypes['Bytes'], ParentType, ContextType>;
   name?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
@@ -2267,13 +2269,14 @@ const merger = new(BareMerger as any)({
         store: rootStore.child('bareMerger')
       })
 const documentHashMap = {
-        "f2d19a2f181a45099c227bbbd1a2a8e9bff50a6ba80c72a29418f24066b9650d": GetTracksDocument,
-"f2d19a2f181a45099c227bbbd1a2a8e9bff50a6ba80c72a29418f24066b9650d": SearchTracksDocument,
-"f2d19a2f181a45099c227bbbd1a2a8e9bff50a6ba80c72a29418f24066b9650d": GetTracksByArtistDocument,
-"f2d19a2f181a45099c227bbbd1a2a8e9bff50a6ba80c72a29418f24066b9650d": GetAlbumTracksDocument,
-"f2d19a2f181a45099c227bbbd1a2a8e9bff50a6ba80c72a29418f24066b9650d": GetTracksByGenreDocument,
-"f2d19a2f181a45099c227bbbd1a2a8e9bff50a6ba80c72a29418f24066b9650d": GetTracksByOwnerDocument,
-"f2d19a2f181a45099c227bbbd1a2a8e9bff50a6ba80c72a29418f24066b9650d": GetTrackDocument
+        "796c55b3c53c7b93903fc0e49a91f1d85020b1de87f6b6c2ede9c77a30ca96a7": GetTracksDocument,
+"796c55b3c53c7b93903fc0e49a91f1d85020b1de87f6b6c2ede9c77a30ca96a7": SearchTracksDocument,
+"796c55b3c53c7b93903fc0e49a91f1d85020b1de87f6b6c2ede9c77a30ca96a7": GetTracksByArtistDocument,
+"796c55b3c53c7b93903fc0e49a91f1d85020b1de87f6b6c2ede9c77a30ca96a7": GetAlbumTracksDocument,
+"796c55b3c53c7b93903fc0e49a91f1d85020b1de87f6b6c2ede9c77a30ca96a7": GetTracksByGenreDocument,
+"796c55b3c53c7b93903fc0e49a91f1d85020b1de87f6b6c2ede9c77a30ca96a7": GetTracksByOwnerDocument,
+"796c55b3c53c7b93903fc0e49a91f1d85020b1de87f6b6c2ede9c77a30ca96a7": GetTrackDocument,
+"796c55b3c53c7b93903fc0e49a91f1d85020b1de87f6b6c2ede9c77a30ca96a7": GetTrackByOwnerAndTitleDocument
       }
 additionalEnvelopPlugins.push(usePersistedOperations({
         getPersistedOperation(key) {
@@ -2300,49 +2303,56 @@ additionalEnvelopPlugins.push(usePersistedOperations({
           return printWithCache(GetTracksDocument);
         },
         location: 'GetTracksDocument.graphql',
-        sha256Hash: 'f2d19a2f181a45099c227bbbd1a2a8e9bff50a6ba80c72a29418f24066b9650d'
+        sha256Hash: '796c55b3c53c7b93903fc0e49a91f1d85020b1de87f6b6c2ede9c77a30ca96a7'
       },{
         document: SearchTracksDocument,
         get rawSDL() {
           return printWithCache(SearchTracksDocument);
         },
         location: 'SearchTracksDocument.graphql',
-        sha256Hash: 'f2d19a2f181a45099c227bbbd1a2a8e9bff50a6ba80c72a29418f24066b9650d'
+        sha256Hash: '796c55b3c53c7b93903fc0e49a91f1d85020b1de87f6b6c2ede9c77a30ca96a7'
       },{
         document: GetTracksByArtistDocument,
         get rawSDL() {
           return printWithCache(GetTracksByArtistDocument);
         },
         location: 'GetTracksByArtistDocument.graphql',
-        sha256Hash: 'f2d19a2f181a45099c227bbbd1a2a8e9bff50a6ba80c72a29418f24066b9650d'
+        sha256Hash: '796c55b3c53c7b93903fc0e49a91f1d85020b1de87f6b6c2ede9c77a30ca96a7'
       },{
         document: GetAlbumTracksDocument,
         get rawSDL() {
           return printWithCache(GetAlbumTracksDocument);
         },
         location: 'GetAlbumTracksDocument.graphql',
-        sha256Hash: 'f2d19a2f181a45099c227bbbd1a2a8e9bff50a6ba80c72a29418f24066b9650d'
+        sha256Hash: '796c55b3c53c7b93903fc0e49a91f1d85020b1de87f6b6c2ede9c77a30ca96a7'
       },{
         document: GetTracksByGenreDocument,
         get rawSDL() {
           return printWithCache(GetTracksByGenreDocument);
         },
         location: 'GetTracksByGenreDocument.graphql',
-        sha256Hash: 'f2d19a2f181a45099c227bbbd1a2a8e9bff50a6ba80c72a29418f24066b9650d'
+        sha256Hash: '796c55b3c53c7b93903fc0e49a91f1d85020b1de87f6b6c2ede9c77a30ca96a7'
       },{
         document: GetTracksByOwnerDocument,
         get rawSDL() {
           return printWithCache(GetTracksByOwnerDocument);
         },
         location: 'GetTracksByOwnerDocument.graphql',
-        sha256Hash: 'f2d19a2f181a45099c227bbbd1a2a8e9bff50a6ba80c72a29418f24066b9650d'
+        sha256Hash: '796c55b3c53c7b93903fc0e49a91f1d85020b1de87f6b6c2ede9c77a30ca96a7'
       },{
         document: GetTrackDocument,
         get rawSDL() {
           return printWithCache(GetTrackDocument);
         },
         location: 'GetTrackDocument.graphql',
-        sha256Hash: 'f2d19a2f181a45099c227bbbd1a2a8e9bff50a6ba80c72a29418f24066b9650d'
+        sha256Hash: '796c55b3c53c7b93903fc0e49a91f1d85020b1de87f6b6c2ede9c77a30ca96a7'
+      },{
+        document: GetTrackByOwnerAndTitleDocument,
+        get rawSDL() {
+          return printWithCache(GetTrackByOwnerAndTitleDocument);
+        },
+        location: 'GetTrackByOwnerAndTitleDocument.graphql',
+        sha256Hash: '796c55b3c53c7b93903fc0e49a91f1d85020b1de87f6b6c2ede9c77a30ca96a7'
       }
     ];
     },
@@ -2397,13 +2407,7 @@ export function getBuiltGraphSDK<TGlobalContext = any, TOperationContext = any>(
   const sdkRequester$ = getBuiltGraphClient().then(({ sdkRequesterFactory }) => sdkRequesterFactory(globalContext));
   return getSdk<TOperationContext, TGlobalContext>((...args) => sdkRequester$.then(sdkRequester => sdkRequester(...args)));
 }
-export type TrackFieldsFragment = (
-  Pick<ManifestState, 'id' | 'owner' | 'schemaName' | 'manifestCid' | 'version' | 'lastUpdated'>
-  & { manifest?: Maybe<{ files?: Maybe<Array<{ fields?: Maybe<Array<(
-        Pick<FileField, 'name' | 'value' | 'atType' | 'acc'>
-        & { pricing?: Maybe<Pick<PricingResource, 'price' | 'currency'>> }
-      )>> }>> }> }
-);
+export type TrackFieldsFragment = Pick<ManifestState, 'id' | 'owner' | 'schemaId' | 'schemaName' | 'manifestCid' | 'version' | 'lastUpdated'>;
 
 export type GetTracksQueryVariables = Exact<{
   first: Scalars['Int']['input'];
@@ -2412,11 +2416,14 @@ export type GetTracksQueryVariables = Exact<{
 
 
 export type GetTracksQuery = { manifestStates: Array<(
-    Pick<ManifestState, 'id' | 'owner' | 'schemaName' | 'manifestCid' | 'version' | 'lastUpdated'>
-    & { manifest?: Maybe<{ files?: Maybe<Array<{ fields?: Maybe<Array<(
+    Pick<ManifestState, 'id' | 'owner' | 'schemaId' | 'schemaName' | 'manifestCid' | 'version' | 'lastUpdated'>
+    & { manifest?: Maybe<{ files?: Maybe<Array<(
+        Pick<File, 'tag'>
+        & { fileFields?: Maybe<Array<(
           Pick<FileField, 'name' | 'value' | 'atType' | 'acc'>
           & { pricing?: Maybe<Pick<PricingResource, 'price' | 'currency'>> }
-        )>> }>> }> }
+        )>> }
+      )>> }> }
   )> };
 
 export type SearchTracksQueryVariables = Exact<{
@@ -2424,31 +2431,16 @@ export type SearchTracksQueryVariables = Exact<{
 }>;
 
 
-export type SearchTracksQuery = { byArtist: Array<{ manifestState: (
-      Pick<ManifestState, 'id' | 'owner' | 'schemaName' | 'manifestCid' | 'version' | 'lastUpdated'>
-      & { manifest?: Maybe<{ files?: Maybe<Array<{ fields?: Maybe<Array<(
-            Pick<FileField, 'name' | 'value' | 'atType' | 'acc'>
-            & { pricing?: Maybe<Pick<PricingResource, 'price' | 'currency'>> }
-          )>> }>> }> }
-    ) }>, byTitle: Array<{ manifestState: (
-      Pick<ManifestState, 'id' | 'owner' | 'schemaName' | 'manifestCid' | 'version' | 'lastUpdated'>
-      & { manifest?: Maybe<{ files?: Maybe<Array<{ fields?: Maybe<Array<(
-            Pick<FileField, 'name' | 'value' | 'atType' | 'acc'>
-            & { pricing?: Maybe<Pick<PricingResource, 'price' | 'currency'>> }
-          )>> }>> }> }
-    ) }>, byAlbum: Array<{ manifestState: (
-      Pick<ManifestState, 'id' | 'owner' | 'schemaName' | 'manifestCid' | 'version' | 'lastUpdated'>
-      & { manifest?: Maybe<{ files?: Maybe<Array<{ fields?: Maybe<Array<(
-            Pick<FileField, 'name' | 'value' | 'atType' | 'acc'>
-            & { pricing?: Maybe<Pick<PricingResource, 'price' | 'currency'>> }
-          )>> }>> }> }
-    ) }>, byGenre: Array<{ manifestState: (
-      Pick<ManifestState, 'id' | 'owner' | 'schemaName' | 'manifestCid' | 'version' | 'lastUpdated'>
-      & { manifest?: Maybe<{ files?: Maybe<Array<{ fields?: Maybe<Array<(
-            Pick<FileField, 'name' | 'value' | 'atType' | 'acc'>
-            & { pricing?: Maybe<Pick<PricingResource, 'price' | 'currency'>> }
-          )>> }>> }> }
-    ) }> };
+export type SearchTracksQuery = { manifestStates: Array<(
+    Pick<ManifestState, 'id' | 'owner' | 'schemaId' | 'schemaName' | 'manifestCid' | 'version' | 'lastUpdated'>
+    & { manifest?: Maybe<{ files?: Maybe<Array<(
+        Pick<File, 'tag'>
+        & { fileFields?: Maybe<Array<(
+          Pick<FileField, 'name' | 'value' | 'atType' | 'acc'>
+          & { pricing?: Maybe<Pick<PricingResource, 'price' | 'currency'>> }
+        )>> }
+      )>> }> }
+  )> };
 
 export type GetTracksByArtistQueryVariables = Exact<{
   artist: Scalars['String']['input'];
@@ -2457,13 +2449,13 @@ export type GetTracksByArtistQueryVariables = Exact<{
 }>;
 
 
-export type GetTracksByArtistQuery = { fileFields: Array<{ manifestState: (
-      Pick<ManifestState, 'id' | 'owner' | 'schemaName' | 'manifestCid' | 'version' | 'lastUpdated'>
-      & { manifest?: Maybe<{ files?: Maybe<Array<{ fields?: Maybe<Array<(
-            Pick<FileField, 'name' | 'value' | 'atType' | 'acc'>
-            & { pricing?: Maybe<Pick<PricingResource, 'price' | 'currency'>> }
-          )>> }>> }> }
-    ) }> };
+export type GetTracksByArtistQuery = { manifestStates: Array<(
+    Pick<ManifestState, 'id' | 'owner' | 'schemaId' | 'schemaName' | 'manifestCid' | 'version' | 'lastUpdated'>
+    & { manifest?: Maybe<{ files?: Maybe<Array<(
+        Pick<File, 'tag'>
+        & { fileFields?: Maybe<Array<Pick<FileField, 'name' | 'value'>>> }
+      )>> }> }
+  )> };
 
 export type GetAlbumTracksQueryVariables = Exact<{
   album: Scalars['String']['input'];
@@ -2472,13 +2464,13 @@ export type GetAlbumTracksQueryVariables = Exact<{
 }>;
 
 
-export type GetAlbumTracksQuery = { fileFields: Array<{ manifestState: (
-      Pick<ManifestState, 'id' | 'owner' | 'schemaName' | 'manifestCid' | 'version' | 'lastUpdated'>
-      & { manifest?: Maybe<{ files?: Maybe<Array<{ fields?: Maybe<Array<(
-            Pick<FileField, 'name' | 'value' | 'atType' | 'acc'>
-            & { pricing?: Maybe<Pick<PricingResource, 'price' | 'currency'>> }
-          )>> }>> }> }
-    ) }> };
+export type GetAlbumTracksQuery = { manifestStates: Array<(
+    Pick<ManifestState, 'id' | 'owner' | 'schemaId' | 'schemaName' | 'manifestCid' | 'version' | 'lastUpdated'>
+    & { manifest?: Maybe<{ files?: Maybe<Array<(
+        Pick<File, 'tag'>
+        & { fileFields?: Maybe<Array<Pick<FileField, 'name' | 'value'>>> }
+      )>> }> }
+  )> };
 
 export type GetTracksByGenreQueryVariables = Exact<{
   genre: Scalars['String']['input'];
@@ -2487,13 +2479,13 @@ export type GetTracksByGenreQueryVariables = Exact<{
 }>;
 
 
-export type GetTracksByGenreQuery = { fileFields: Array<{ manifestState: (
-      Pick<ManifestState, 'id' | 'owner' | 'schemaName' | 'manifestCid' | 'version' | 'lastUpdated'>
-      & { manifest?: Maybe<{ files?: Maybe<Array<{ fields?: Maybe<Array<(
-            Pick<FileField, 'name' | 'value' | 'atType' | 'acc'>
-            & { pricing?: Maybe<Pick<PricingResource, 'price' | 'currency'>> }
-          )>> }>> }> }
-    ) }> };
+export type GetTracksByGenreQuery = { manifestStates: Array<(
+    Pick<ManifestState, 'id' | 'owner' | 'schemaId' | 'schemaName' | 'manifestCid' | 'version' | 'lastUpdated'>
+    & { manifest?: Maybe<{ files?: Maybe<Array<(
+        Pick<File, 'tag'>
+        & { fileFields?: Maybe<Array<Pick<FileField, 'name' | 'value'>>> }
+      )>> }> }
+  )> };
 
 export type GetTracksByOwnerQueryVariables = Exact<{
   owner: Scalars['Bytes']['input'];
@@ -2503,49 +2495,55 @@ export type GetTracksByOwnerQueryVariables = Exact<{
 
 
 export type GetTracksByOwnerQuery = { manifestStates: Array<(
-    Pick<ManifestState, 'id' | 'owner' | 'schemaName' | 'manifestCid' | 'version' | 'lastUpdated'>
-    & { manifest?: Maybe<{ files?: Maybe<Array<{ fields?: Maybe<Array<(
+    Pick<ManifestState, 'id' | 'owner' | 'schemaId' | 'schemaName' | 'manifestCid' | 'version' | 'lastUpdated'>
+    & { manifest?: Maybe<{ files?: Maybe<Array<(
+        Pick<File, 'tag'>
+        & { fileFields?: Maybe<Array<(
           Pick<FileField, 'name' | 'value' | 'atType' | 'acc'>
           & { pricing?: Maybe<Pick<PricingResource, 'price' | 'currency'>> }
-        )>> }>> }> }
+        )>> }
+      )>> }> }
   )> };
 
 export type GetTrackQueryVariables = Exact<{
+  id: Scalars['ID']['input'];
+}>;
+
+
+export type GetTrackQuery = { manifestState?: Maybe<(
+    Pick<ManifestState, 'id' | 'owner' | 'schemaId' | 'schemaName' | 'manifestCid' | 'version' | 'lastUpdated'>
+    & { manifest?: Maybe<{ files?: Maybe<Array<(
+        Pick<File, 'tag'>
+        & { fileFields?: Maybe<Array<(
+          Pick<FileField, 'name' | 'value' | 'atType' | 'acc'>
+          & { pricing?: Maybe<Pick<PricingResource, 'price' | 'currency'>> }
+        )>> }
+      )>> }> }
+  )> };
+
+export type GetTrackByOwnerAndTitleQueryVariables = Exact<{
   owner: Scalars['Bytes']['input'];
   title: Scalars['String']['input'];
 }>;
 
 
-export type GetTrackQuery = { fileFields: Array<{ manifestState: (
-      Pick<ManifestState, 'id' | 'owner' | 'schemaName' | 'manifestCid' | 'version' | 'lastUpdated'>
-      & { manifest?: Maybe<{ files?: Maybe<Array<{ fields?: Maybe<Array<(
-            Pick<FileField, 'name' | 'value' | 'atType' | 'acc'>
-            & { pricing?: Maybe<Pick<PricingResource, 'price' | 'currency'>> }
-          )>> }>> }> }
-    ) }> };
+export type GetTrackByOwnerAndTitleQuery = { manifestStates: Array<(
+    Pick<ManifestState, 'id' | 'owner' | 'schemaId' | 'schemaName' | 'manifestCid' | 'version' | 'lastUpdated'>
+    & { manifest?: Maybe<{ files?: Maybe<Array<(
+        Pick<File, 'tag'>
+        & { fileFields?: Maybe<Array<Pick<FileField, 'name' | 'value'>>> }
+      )>> }> }
+  )> };
 
 export const TrackFieldsFragmentDoc = gql`
     fragment TrackFields on ManifestState {
   id
   owner
+  schemaId
   schemaName
   manifestCid
   version
   lastUpdated
-  manifest {
-    files {
-      fields {
-        name
-        value
-        atType
-        acc
-        pricing {
-          price
-          currency
-        }
-      }
-    }
-  }
 }
     ` as unknown as DocumentNode<TrackFieldsFragment, unknown>;
 export const GetTracksDocument = gql`
@@ -2553,75 +2551,108 @@ export const GetTracksDocument = gql`
   manifestStates(
     first: $first
     skip: $skip
-    where: {schema_: {name: "fangorn.music.test.v3"}}
+    where: {schemaId: "0xf18e92dce6496a423a48614fac9fe93c549aa51c1a663f5cbe2233b0ea18081d"}
   ) {
     ...TrackFields
+    manifest {
+      files {
+        tag
+        fileFields {
+          name
+          value
+          atType
+          acc
+          pricing {
+            price
+            currency
+          }
+        }
+      }
+    }
   }
 }
     ${TrackFieldsFragmentDoc}` as unknown as DocumentNode<GetTracksQuery, GetTracksQueryVariables>;
 export const SearchTracksDocument = gql`
     query SearchTracks($search: String!) {
-  byArtist: fileFields(
-    where: {name: "artist", value_contains_nocase: $search}
-    first: 50
+  manifestStates(
+    where: {schemaId: "0xf18e92dce6496a423a48614fac9fe93c549aa51c1a663f5cbe2233b0ea18081d"}
+    first: 100
   ) {
-    manifestState {
-      ...TrackFields
-    }
-  }
-  byTitle: fileFields(
-    where: {name: "title", value_contains_nocase: $search}
-    first: 50
-  ) {
-    manifestState {
-      ...TrackFields
-    }
-  }
-  byAlbum: fileFields(
-    where: {name: "album", value_contains_nocase: $search}
-    first: 50
-  ) {
-    manifestState {
-      ...TrackFields
-    }
-  }
-  byGenre: fileFields(
-    where: {name: "genre", value_contains_nocase: $search}
-    first: 50
-  ) {
-    manifestState {
-      ...TrackFields
+    ...TrackFields
+    manifest {
+      files {
+        tag
+        fileFields {
+          name
+          value
+          atType
+          acc
+          pricing {
+            price
+            currency
+          }
+        }
+      }
     }
   }
 }
     ${TrackFieldsFragmentDoc}` as unknown as DocumentNode<SearchTracksQuery, SearchTracksQueryVariables>;
 export const GetTracksByArtistDocument = gql`
     query GetTracksByArtist($artist: String!, $first: Int!, $skip: Int!) {
-  fileFields(where: {name: "artist", value: $artist}, first: $first, skip: $skip) {
-    manifestState {
-      ...TrackFields
+  manifestStates(
+    where: {schemaId: "0xf18e92dce6496a423a48614fac9fe93c549aa51c1a663f5cbe2233b0ea18081d"}
+    first: $first
+    skip: $skip
+  ) {
+    ...TrackFields
+    manifest {
+      files {
+        tag
+        fileFields(where: {name: "artist", value: $artist}) {
+          name
+          value
+        }
+      }
     }
   }
 }
     ${TrackFieldsFragmentDoc}` as unknown as DocumentNode<GetTracksByArtistQuery, GetTracksByArtistQueryVariables>;
 export const GetAlbumTracksDocument = gql`
     query GetAlbumTracks($album: String!, $first: Int!, $skip: Int!) {
-  fileFields(where: {name: "album", value: $album}, first: $first, skip: $skip) {
-    manifestState {
-      ...TrackFields
+  manifestStates(
+    where: {schemaId: "0xf18e92dce6496a423a48614fac9fe93c549aa51c1a663f5cbe2233b0ea18081d"}
+    first: $first
+    skip: $skip
+  ) {
+    ...TrackFields
+    manifest {
+      files {
+        tag
+        fileFields(where: {name: "album", value: $album}) {
+          name
+          value
+        }
+      }
     }
   }
 }
     ${TrackFieldsFragmentDoc}` as unknown as DocumentNode<GetAlbumTracksQuery, GetAlbumTracksQueryVariables>;
 export const GetTracksByGenreDocument = gql`
     query GetTracksByGenre($genre: String!, $first: Int!, $skip: Int!) {
-  fileFields(
-    where: {name: "genre", value_contains_nocase: $genre}
+  manifestStates(
+    where: {schemaId: "0xf18e92dce6496a423a48614fac9fe93c549aa51c1a663f5cbe2233b0ea18081d"}
     first: $first
     skip: $skip
   ) {
-    manifestState {
-      ...TrackFields
+    ...TrackFields
+    manifest {
+      files {
+        tag
+        fileFields(where: {name: "genre", value_contains_nocase: $genre}) {
+          name
+          value
+        }
+      }
     }
   }
 }
@@ -2629,23 +2660,71 @@ export const GetTracksByGenreDocument = gql`
 export const GetTracksByOwnerDocument = gql`
     query GetTracksByOwner($owner: Bytes!, $first: Int!, $skip: Int!) {
   manifestStates(
-    where: {owner: $owner, schema_: {name: "fangorn.music.test.v3"}}
+    where: {owner: $owner, schemaId: "0xf18e92dce6496a423a48614fac9fe93c549aa51c1a663f5cbe2233b0ea18081d"}
     first: $first
     skip: $skip
   ) {
     ...TrackFields
+    manifest {
+      files {
+        tag
+        fileFields {
+          name
+          value
+          atType
+          acc
+          pricing {
+            price
+            currency
+          }
+        }
+      }
+    }
   }
 }
     ${TrackFieldsFragmentDoc}` as unknown as DocumentNode<GetTracksByOwnerQuery, GetTracksByOwnerQueryVariables>;
 export const GetTrackDocument = gql`
-    query GetTrack($owner: Bytes!, $title: String!) {
-  fileFields(where: {name: "title", value: $title}, first: 1) {
-    manifestState {
-      ...TrackFields
+    query GetTrack($id: ID!) {
+  manifestState(id: $id) {
+    ...TrackFields
+    manifest {
+      files {
+        tag
+        fileFields {
+          name
+          value
+          atType
+          acc
+          pricing {
+            price
+            currency
+          }
+        }
+      }
     }
   }
 }
     ${TrackFieldsFragmentDoc}` as unknown as DocumentNode<GetTrackQuery, GetTrackQueryVariables>;
+export const GetTrackByOwnerAndTitleDocument = gql`
+    query GetTrackByOwnerAndTitle($owner: Bytes!, $title: String!) {
+  manifestStates(
+    where: {owner: $owner, schemaId: "0xf18e92dce6496a423a48614fac9fe93c549aa51c1a663f5cbe2233b0ea18081d"}
+    first: 1
+  ) {
+    ...TrackFields
+    manifest {
+      files {
+        tag
+        fileFields(where: {name: "title", value: $title}) {
+          name
+          value
+        }
+      }
+    }
+  }
+}
+    ${TrackFieldsFragmentDoc}` as unknown as DocumentNode<GetTrackByOwnerAndTitleQuery, GetTrackByOwnerAndTitleQueryVariables>;
+
 
 
 
@@ -2677,6 +2756,9 @@ export function getSdk<C, E>(requester: Requester<C, E>) {
     },
     GetTrack(variables: GetTrackQueryVariables, options?: C): Promise<GetTrackQuery> {
       return requester<GetTrackQuery, GetTrackQueryVariables>(GetTrackDocument, variables, options) as Promise<GetTrackQuery>;
+    },
+    GetTrackByOwnerAndTitle(variables: GetTrackByOwnerAndTitleQueryVariables, options?: C): Promise<GetTrackByOwnerAndTitleQuery> {
+      return requester<GetTrackByOwnerAndTitleQuery, GetTrackByOwnerAndTitleQueryVariables>(GetTrackByOwnerAndTitleDocument, variables, options) as Promise<GetTrackByOwnerAndTitleQuery>;
     }
   };
 }

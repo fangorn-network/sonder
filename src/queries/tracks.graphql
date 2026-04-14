@@ -12,22 +12,13 @@ query GetTracks($first: Int!, $skip: Int!) {
   manifestStates(
     first: $first
     skip: $skip
-    where: { schemaId: "0xf18e92dce6496a423a48614fac9fe93c549aa51c1a663f5cbe2233b0ea18081d" }
+    where: { schemaId: "0xe6ed6e175ef6277d28ef468c7c9b9be6c79d337e6c642d65a877b145fabd0d1a" }
   ) {
     ...TrackFields
     manifest {
       files {
-        tag
-        fileFields {
-          name
-          value
-          atType
-          acc
-          pricing {
-            price
-            currency
-          }
-        }
+        name
+        fileFields { name value atType acc pricing { price currency } }
       }
     }
   }
@@ -35,80 +26,14 @@ query GetTracks($first: Int!, $skip: Int!) {
 
 query SearchTracks($search: String!) {
   manifestStates(
-    where: { schemaId: "0xf18e92dce6496a423a48614fac9fe93c549aa51c1a663f5cbe2233b0ea18081d" }
+    where: { schemaId: "0xe6ed6e175ef6277d28ef468c7c9b9be6c79d337e6c642d65a877b145fabd0d1a" }
     first: 100
   ) {
     ...TrackFields
     manifest {
       files {
-        tag
-        fileFields {
-          name
-          value
-          atType
-          acc
-          pricing {
-            price
-            currency
-          }
-        }
-      }
-    }
-  }
-}
-
-query GetTracksByArtist($artist: String!, $first: Int!, $skip: Int!) {
-  manifestStates(
-    where: { schemaId: "0xf18e92dce6496a423a48614fac9fe93c549aa51c1a663f5cbe2233b0ea18081d" }
-    first: $first
-    skip: $skip
-  ) {
-    ...TrackFields
-    manifest {
-      files {
-        tag
-        fileFields(where: { name: "artist", value: $artist }) {
-          name
-          value
-        }
-      }
-    }
-  }
-}
-
-query GetAlbumTracks($album: String!, $first: Int!, $skip: Int!) {
-  manifestStates(
-    where: { schemaId: "0xf18e92dce6496a423a48614fac9fe93c549aa51c1a663f5cbe2233b0ea18081d" }
-    first: $first
-    skip: $skip
-  ) {
-    ...TrackFields
-    manifest {
-      files {
-        tag
-        fileFields(where: { name: "album", value: $album }) {
-          name
-          value
-        }
-      }
-    }
-  }
-}
-
-query GetTracksByGenre($genre: String!, $first: Int!, $skip: Int!) {
-  manifestStates(
-    where: { schemaId: "0xf18e92dce6496a423a48614fac9fe93c549aa51c1a663f5cbe2233b0ea18081d" }
-    first: $first
-    skip: $skip
-  ) {
-    ...TrackFields
-    manifest {
-      files {
-        tag
-        fileFields(where: { name: "genre", value_contains_nocase: $genre }) {
-          name
-          value
-        }
+        name
+        fileFields { name value atType acc pricing { price currency } }
       }
     }
   }
@@ -118,7 +43,7 @@ query GetTracksByOwner($owner: Bytes!, $first: Int!, $skip: Int!) {
   manifestStates(
     where: {
       owner: $owner
-      schemaId: "0xf18e92dce6496a423a48614fac9fe93c549aa51c1a663f5cbe2233b0ea18081d"
+      schemaId: "0xe6ed6e175ef6277d28ef468c7c9b9be6c79d337e6c642d65a877b145fabd0d1a"
     }
     first: $first
     skip: $skip
@@ -126,17 +51,8 @@ query GetTracksByOwner($owner: Bytes!, $first: Int!, $skip: Int!) {
     ...TrackFields
     manifest {
       files {
-        tag
-        fileFields {
-          name
-          value
-          atType
-          acc
-          pricing {
-            price
-            currency
-          }
-        }
+        name
+        fileFields { name value atType acc pricing { price currency } }
       }
     }
   }
@@ -147,17 +63,8 @@ query GetTrack($id: ID!) {
     ...TrackFields
     manifest {
       files {
-        tag
-        fileFields {
-          name
-          value
-          atType
-          acc
-          pricing {
-            price
-            currency
-          }
-        }
+        name
+        fileFields { name value atType acc pricing { price currency } }
       }
     }
   }
@@ -167,18 +74,15 @@ query GetTrackByOwnerAndTitle($owner: Bytes!, $title: String!) {
   manifestStates(
     where: {
       owner: $owner
-      schemaId: "0xf18e92dce6496a423a48614fac9fe93c549aa51c1a663f5cbe2233b0ea18081d"
+      schemaId: "0xe6ed6e175ef6277d28ef468c7c9b9be6c79d337e6c642d65a877b145fabd0d1a"
     }
-    first: 1
+    first: 10
   ) {
     ...TrackFields
     manifest {
       files {
-        tag
-        fileFields(where: { name: "title", value: $title }) {
-          name
-          value
-        }
+        name
+        fileFields { name value }
       }
     }
   }

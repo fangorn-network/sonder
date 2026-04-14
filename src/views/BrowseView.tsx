@@ -1,10 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Track } from '../types'
 import { useFangornMiddleware } from '../hooks/useX402fFetch'
-import { useWallets } from '@privy-io/react-auth'
-import { FangornConfig } from '@fangorn-network/sdk'
-import { FangornX402Middleware } from '@fangorn-network/fetch'
-import { getAddress, type Hex } from 'viem'
 
 interface BrowseViewProps {
   tracks: Track[]
@@ -39,7 +35,7 @@ export function BrowseView({
       const result = await middleware.fetchResource({
         owner: '0x147c24c5Ea2f1EE1ac42AD16820De23bBba45Ef6',
         schemaName: 'fangorn.music.demo.v0',
-        tag: track.tag,
+        name: track.name,
         baseUrl: '/facilitator',
       });
 

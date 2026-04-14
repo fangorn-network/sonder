@@ -8,6 +8,7 @@ import { useGraph } from './hooks/useGraph'
 import type { Track, ViewName } from './types'
 import './App.css'
 import { UploadView } from './views/UploadView'
+import { PlayerBar } from './components/PlayerBar'
 
 export default function App() {
   const [view, setView] = useState<ViewName>('Browse')
@@ -37,9 +38,12 @@ export default function App() {
             setSearch={setSearch}
             onPlay={setCurrentTrack}
             currentTrack={currentTrack}
-            // onBuy={}
           />
         )}
+
+        <PlayerBar
+          track={currentTrack}
+        />
         {/* {view === 'Library' && (
           <LibraryView onPlay={setCurrentTrack} currentTrack={currentTrack} />
         )} */}

@@ -7,19 +7,19 @@ import type { Track } from '../types'
 const PAGE_SIZE = 10
 
 function normalizeManifestState(state: any): Track[] {
-    const { owner, schemaName, manifest } = state
+    const { id: stateId, owner, schemaName, manifest } = state
     if (!manifest?.files) return []
     return manifest.files.map((file: any, i: number) => {
         const fields: Record<string, any> = {}
         for (const f of file.fileFields ?? []) {
             fields[f.name ?? ''] = f
         }
-        const tag     = file.tag ?? `track-${i}`
+        const name     = file.name ?? `track-${i}`
         const pricing = fields['audio']?.pricing ?? null
 
         return {
-            id:             `${owner}-${tag}`,
-            title:          fields['title']?.value       ?? tag,
+            id:             `${stateId}-${name}-${i}`,  // use stateId + index, not owner
+            title:          fields['title']?.value       ?? name,
             artist:         fields['artist']?.value      ?? owner.slice(0, 8) + '…',
             album:          fields['album']?.value       ?? schemaName,
             trackNumber:    fields['trackNumber']?.value ?? null,
@@ -27,7 +27,7 @@ function normalizeManifestState(state: any): Track[] {
             genre:          fields['genre']?.value       ?? '',
             owner,
             datasourceName: schemaName,
-            tag,
+            name,
             art:            fields['cover_art']?.value   ?? null,
             price:          pricing?.price               ?? '0',
             currency:       pricing?.currency            ?? 'USDC',
@@ -36,28 +36,42 @@ function normalizeManifestState(state: any): Track[] {
     })
 }
 
-function normalizeResults(data: GetTracksQuery): Track[] {
-    return (data.manifestStates ?? []).flatMap(normalizeManifestState)
-}
-
 function normalizeSearchResults(data: SearchTracksQuery, term: string): Track[] {
-    const seen  = new Set<string>()
     const lower = term.toLowerCase()
 
     return (data.manifestStates ?? [])
         .filter(Boolean)
         .flatMap((state: any) => normalizeManifestState(state))
-        .filter(track => {
-            if (seen.has(track.id)) return false
-            seen.add(track.id)
-            return (
-                track.title.toLowerCase().includes(lower)         ||
-                track.artist.toLowerCase().includes(lower)        ||
-                (track.album ?? '').toLowerCase().includes(lower) ||
-                (track.genre ?? '').toLowerCase().includes(lower)
-            )
-        })
+        .filter(track =>
+            track.title.toLowerCase().includes(lower)         ||
+            track.artist.toLowerCase().includes(lower)        ||
+            (track.album ?? '').toLowerCase().includes(lower) ||
+            (track.genre ?? '').toLowerCase().includes(lower)
+        )
 }
+
+function normalizeResults(data: GetTracksQuery): Track[] {
+    return (data.manifestStates ?? []).flatMap(normalizeManifestState)
+}
+
+// function normalizeSearchResults(data: SearchTracksQuery, term: string): Track[] {
+//     const seen  = new Set<string>()
+//     const lower = term.toLowerCase()
+
+//     return (data.manifestStates ?? [])
+//         .filter(Boolean)
+//         .flatMap((state: any) => normalizeManifestState(state))
+//         .filter(track => {
+//             if (seen.has(track.id)) return false
+//             seen.add(track.id)
+//             return (
+//                 track.title.toLowerCase().includes(lower)         ||
+//                 track.artist.toLowerCase().includes(lower)        ||
+//                 (track.album ?? '').toLowerCase().includes(lower) ||
+//                 (track.genre ?? '').toLowerCase().includes(lower)
+//             )
+//         })
+// }
 
 export interface UseGraphResult {
     tracks: Track[]

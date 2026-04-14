@@ -48,17 +48,24 @@ scalar Bytes
 
 type File {
   id: ID!
-  tag: String
+  schemaId: Bytes!
+  schemaName: String!
+  manifestStateId: Bytes!
   manifest: Manifest!
+  name: String
   fileFields(skip: Int = 0, first: Int = 100, orderBy: FileField_orderBy, orderDirection: OrderDirection, where: FileField_filter): [FileField!]
 }
 
 type FileField {
   id: ID!
+  schemaId: Bytes!
+  schemaName: String!
+  manifestStateId: Bytes!
   name: String
   value: String
   atType: String
   acc: String
+  fileId: String!
   file: File!
   pricing: PricingResource
 }
@@ -72,6 +79,46 @@ input FileField_filter {
   id_lte: ID
   id_in: [ID!]
   id_not_in: [ID!]
+  schemaId: Bytes
+  schemaId_not: Bytes
+  schemaId_gt: Bytes
+  schemaId_lt: Bytes
+  schemaId_gte: Bytes
+  schemaId_lte: Bytes
+  schemaId_in: [Bytes!]
+  schemaId_not_in: [Bytes!]
+  schemaId_contains: Bytes
+  schemaId_not_contains: Bytes
+  schemaName: String
+  schemaName_not: String
+  schemaName_gt: String
+  schemaName_lt: String
+  schemaName_gte: String
+  schemaName_lte: String
+  schemaName_in: [String!]
+  schemaName_not_in: [String!]
+  schemaName_contains: String
+  schemaName_contains_nocase: String
+  schemaName_not_contains: String
+  schemaName_not_contains_nocase: String
+  schemaName_starts_with: String
+  schemaName_starts_with_nocase: String
+  schemaName_not_starts_with: String
+  schemaName_not_starts_with_nocase: String
+  schemaName_ends_with: String
+  schemaName_ends_with_nocase: String
+  schemaName_not_ends_with: String
+  schemaName_not_ends_with_nocase: String
+  manifestStateId: Bytes
+  manifestStateId_not: Bytes
+  manifestStateId_gt: Bytes
+  manifestStateId_lt: Bytes
+  manifestStateId_gte: Bytes
+  manifestStateId_lte: Bytes
+  manifestStateId_in: [Bytes!]
+  manifestStateId_not_in: [Bytes!]
+  manifestStateId_contains: Bytes
+  manifestStateId_not_contains: Bytes
   name: String
   name_not: String
   name_gt: String
@@ -152,6 +199,26 @@ input FileField_filter {
   acc_ends_with_nocase: String
   acc_not_ends_with: String
   acc_not_ends_with_nocase: String
+  fileId: String
+  fileId_not: String
+  fileId_gt: String
+  fileId_lt: String
+  fileId_gte: String
+  fileId_lte: String
+  fileId_in: [String!]
+  fileId_not_in: [String!]
+  fileId_contains: String
+  fileId_contains_nocase: String
+  fileId_not_contains: String
+  fileId_not_contains_nocase: String
+  fileId_starts_with: String
+  fileId_starts_with_nocase: String
+  fileId_not_starts_with: String
+  fileId_not_starts_with_nocase: String
+  fileId_ends_with: String
+  fileId_ends_with_nocase: String
+  fileId_not_ends_with: String
+  fileId_not_ends_with_nocase: String
   file: String
   file_not: String
   file_gt: String
@@ -202,13 +269,20 @@ input FileField_filter {
 
 enum FileField_orderBy {
   id
+  schemaId
+  schemaName
+  manifestStateId
   name
   value
   atType
   acc
+  fileId
   file
   file__id
-  file__tag
+  file__schemaId
+  file__schemaName
+  file__manifestStateId
+  file__name
   pricing
   pricing__id
   pricing__owner
@@ -225,26 +299,46 @@ input File_filter {
   id_lte: ID
   id_in: [ID!]
   id_not_in: [ID!]
-  tag: String
-  tag_not: String
-  tag_gt: String
-  tag_lt: String
-  tag_gte: String
-  tag_lte: String
-  tag_in: [String!]
-  tag_not_in: [String!]
-  tag_contains: String
-  tag_contains_nocase: String
-  tag_not_contains: String
-  tag_not_contains_nocase: String
-  tag_starts_with: String
-  tag_starts_with_nocase: String
-  tag_not_starts_with: String
-  tag_not_starts_with_nocase: String
-  tag_ends_with: String
-  tag_ends_with_nocase: String
-  tag_not_ends_with: String
-  tag_not_ends_with_nocase: String
+  schemaId: Bytes
+  schemaId_not: Bytes
+  schemaId_gt: Bytes
+  schemaId_lt: Bytes
+  schemaId_gte: Bytes
+  schemaId_lte: Bytes
+  schemaId_in: [Bytes!]
+  schemaId_not_in: [Bytes!]
+  schemaId_contains: Bytes
+  schemaId_not_contains: Bytes
+  schemaName: String
+  schemaName_not: String
+  schemaName_gt: String
+  schemaName_lt: String
+  schemaName_gte: String
+  schemaName_lte: String
+  schemaName_in: [String!]
+  schemaName_not_in: [String!]
+  schemaName_contains: String
+  schemaName_contains_nocase: String
+  schemaName_not_contains: String
+  schemaName_not_contains_nocase: String
+  schemaName_starts_with: String
+  schemaName_starts_with_nocase: String
+  schemaName_not_starts_with: String
+  schemaName_not_starts_with_nocase: String
+  schemaName_ends_with: String
+  schemaName_ends_with_nocase: String
+  schemaName_not_ends_with: String
+  schemaName_not_ends_with_nocase: String
+  manifestStateId: Bytes
+  manifestStateId_not: Bytes
+  manifestStateId_gt: Bytes
+  manifestStateId_lt: Bytes
+  manifestStateId_gte: Bytes
+  manifestStateId_lte: Bytes
+  manifestStateId_in: [Bytes!]
+  manifestStateId_not_in: [Bytes!]
+  manifestStateId_contains: Bytes
+  manifestStateId_not_contains: Bytes
   manifest: String
   manifest_not: String
   manifest_gt: String
@@ -266,6 +360,26 @@ input File_filter {
   manifest_not_ends_with: String
   manifest_not_ends_with_nocase: String
   manifest_: Manifest_filter
+  name: String
+  name_not: String
+  name_gt: String
+  name_lt: String
+  name_gte: String
+  name_lte: String
+  name_in: [String!]
+  name_not_in: [String!]
+  name_contains: String
+  name_contains_nocase: String
+  name_not_contains: String
+  name_not_contains_nocase: String
+  name_starts_with: String
+  name_starts_with_nocase: String
+  name_not_starts_with: String
+  name_not_starts_with_nocase: String
+  name_ends_with: String
+  name_ends_with_nocase: String
+  name_not_ends_with: String
+  name_not_ends_with_nocase: String
   fileFields_: FileField_filter
   """Filter for the block changed event."""
   _change_block: BlockChangedFilter
@@ -275,11 +389,16 @@ input File_filter {
 
 enum File_orderBy {
   id
-  tag
+  schemaId
+  schemaName
+  manifestStateId
   manifest
   manifest__id
-  manifest__manifestVersion
   manifest__schemaId
+  manifest__schemaName
+  manifest__manifestStateId
+  manifest__manifestVersion
+  name
   fileFields
 }
 
@@ -288,8 +407,10 @@ scalar Int8
 
 type Manifest {
   id: ID!
+  schemaId: Bytes!
+  schemaName: String!
+  manifestStateId: Bytes!
   manifestVersion: BigInt
-  schemaId: String
   manifestState: ManifestState!
   files(skip: Int = 0, first: Int = 100, orderBy: File_orderBy, orderDirection: OrderDirection, where: File_filter): [File!]
 }
@@ -298,8 +419,9 @@ type ManifestPublished {
   id: Bytes!
   owner: Bytes!
   schemaId: Bytes!
+  nameHash: Bytes!
+  name: String!
   manifestCid: String!
-  version: BigInt!
   blockNumber: BigInt!
   blockTimestamp: BigInt!
   transactionHash: Bytes!
@@ -336,6 +458,36 @@ input ManifestPublished_filter {
   schemaId_not_in: [Bytes!]
   schemaId_contains: Bytes
   schemaId_not_contains: Bytes
+  nameHash: Bytes
+  nameHash_not: Bytes
+  nameHash_gt: Bytes
+  nameHash_lt: Bytes
+  nameHash_gte: Bytes
+  nameHash_lte: Bytes
+  nameHash_in: [Bytes!]
+  nameHash_not_in: [Bytes!]
+  nameHash_contains: Bytes
+  nameHash_not_contains: Bytes
+  name: String
+  name_not: String
+  name_gt: String
+  name_lt: String
+  name_gte: String
+  name_lte: String
+  name_in: [String!]
+  name_not_in: [String!]
+  name_contains: String
+  name_contains_nocase: String
+  name_not_contains: String
+  name_not_contains_nocase: String
+  name_starts_with: String
+  name_starts_with_nocase: String
+  name_not_starts_with: String
+  name_not_starts_with_nocase: String
+  name_ends_with: String
+  name_ends_with_nocase: String
+  name_not_ends_with: String
+  name_not_ends_with_nocase: String
   manifestCid: String
   manifestCid_not: String
   manifestCid_gt: String
@@ -356,14 +508,6 @@ input ManifestPublished_filter {
   manifestCid_ends_with_nocase: String
   manifestCid_not_ends_with: String
   manifestCid_not_ends_with_nocase: String
-  version: BigInt
-  version_not: BigInt
-  version_gt: BigInt
-  version_lt: BigInt
-  version_gte: BigInt
-  version_lte: BigInt
-  version_in: [BigInt!]
-  version_not_in: [BigInt!]
   blockNumber: BigInt
   blockNumber_not: BigInt
   blockNumber_gt: BigInt
@@ -400,8 +544,9 @@ enum ManifestPublished_orderBy {
   id
   owner
   schemaId
+  nameHash
+  name
   manifestCid
-  version
   blockNumber
   blockTimestamp
   transactionHash
@@ -409,10 +554,10 @@ enum ManifestPublished_orderBy {
 
 type ManifestState {
   id: Bytes!
-  owner: Bytes!
   schemaId: Bytes!
-  schema: Schema
   schemaName: String!
+  owner: Bytes!
+  schema: Schema
   manifestCid: String!
   manifest: Manifest
   version: BigInt!
@@ -430,16 +575,6 @@ input ManifestState_filter {
   id_not_in: [Bytes!]
   id_contains: Bytes
   id_not_contains: Bytes
-  owner: Bytes
-  owner_not: Bytes
-  owner_gt: Bytes
-  owner_lt: Bytes
-  owner_gte: Bytes
-  owner_lte: Bytes
-  owner_in: [Bytes!]
-  owner_not_in: [Bytes!]
-  owner_contains: Bytes
-  owner_not_contains: Bytes
   schemaId: Bytes
   schemaId_not: Bytes
   schemaId_gt: Bytes
@@ -450,6 +585,36 @@ input ManifestState_filter {
   schemaId_not_in: [Bytes!]
   schemaId_contains: Bytes
   schemaId_not_contains: Bytes
+  schemaName: String
+  schemaName_not: String
+  schemaName_gt: String
+  schemaName_lt: String
+  schemaName_gte: String
+  schemaName_lte: String
+  schemaName_in: [String!]
+  schemaName_not_in: [String!]
+  schemaName_contains: String
+  schemaName_contains_nocase: String
+  schemaName_not_contains: String
+  schemaName_not_contains_nocase: String
+  schemaName_starts_with: String
+  schemaName_starts_with_nocase: String
+  schemaName_not_starts_with: String
+  schemaName_not_starts_with_nocase: String
+  schemaName_ends_with: String
+  schemaName_ends_with_nocase: String
+  schemaName_not_ends_with: String
+  schemaName_not_ends_with_nocase: String
+  owner: Bytes
+  owner_not: Bytes
+  owner_gt: Bytes
+  owner_lt: Bytes
+  owner_gte: Bytes
+  owner_lte: Bytes
+  owner_in: [Bytes!]
+  owner_not_in: [Bytes!]
+  owner_contains: Bytes
+  owner_not_contains: Bytes
   schema: String
   schema_not: String
   schema_gt: String
@@ -471,26 +636,6 @@ input ManifestState_filter {
   schema_not_ends_with: String
   schema_not_ends_with_nocase: String
   schema_: Schema_filter
-  schemaName: String
-  schemaName_not: String
-  schemaName_gt: String
-  schemaName_lt: String
-  schemaName_gte: String
-  schemaName_lte: String
-  schemaName_in: [String!]
-  schemaName_not_in: [String!]
-  schemaName_contains: String
-  schemaName_contains_nocase: String
-  schemaName_not_contains: String
-  schemaName_not_contains_nocase: String
-  schemaName_starts_with: String
-  schemaName_starts_with_nocase: String
-  schemaName_not_starts_with: String
-  schemaName_not_starts_with_nocase: String
-  schemaName_ends_with: String
-  schemaName_ends_with_nocase: String
-  schemaName_not_ends_with: String
-  schemaName_not_ends_with_nocase: String
   manifestCid: String
   manifestCid_not: String
   manifestCid_gt: String
@@ -556,18 +701,20 @@ input ManifestState_filter {
 
 enum ManifestState_orderBy {
   id
-  owner
   schemaId
+  schemaName
+  owner
   schema
   schema__id
   schema__version
   schema__agentId
-  schemaName
   manifestCid
   manifest
   manifest__id
-  manifest__manifestVersion
   manifest__schemaId
+  manifest__schemaName
+  manifest__manifestStateId
+  manifest__manifestVersion
   version
   lastUpdated
 }
@@ -576,6 +723,7 @@ type ManifestUpdated {
   id: Bytes!
   owner: Bytes!
   schemaId: Bytes!
+  nameHash: Bytes!
   manifestCid: String!
   version: BigInt!
   blockNumber: BigInt!
@@ -614,6 +762,16 @@ input ManifestUpdated_filter {
   schemaId_not_in: [Bytes!]
   schemaId_contains: Bytes
   schemaId_not_contains: Bytes
+  nameHash: Bytes
+  nameHash_not: Bytes
+  nameHash_gt: Bytes
+  nameHash_lt: Bytes
+  nameHash_gte: Bytes
+  nameHash_lte: Bytes
+  nameHash_in: [Bytes!]
+  nameHash_not_in: [Bytes!]
+  nameHash_contains: Bytes
+  nameHash_not_contains: Bytes
   manifestCid: String
   manifestCid_not: String
   manifestCid_gt: String
@@ -678,6 +836,7 @@ enum ManifestUpdated_orderBy {
   id
   owner
   schemaId
+  nameHash
   manifestCid
   version
   blockNumber
@@ -694,6 +853,46 @@ input Manifest_filter {
   id_lte: ID
   id_in: [ID!]
   id_not_in: [ID!]
+  schemaId: Bytes
+  schemaId_not: Bytes
+  schemaId_gt: Bytes
+  schemaId_lt: Bytes
+  schemaId_gte: Bytes
+  schemaId_lte: Bytes
+  schemaId_in: [Bytes!]
+  schemaId_not_in: [Bytes!]
+  schemaId_contains: Bytes
+  schemaId_not_contains: Bytes
+  schemaName: String
+  schemaName_not: String
+  schemaName_gt: String
+  schemaName_lt: String
+  schemaName_gte: String
+  schemaName_lte: String
+  schemaName_in: [String!]
+  schemaName_not_in: [String!]
+  schemaName_contains: String
+  schemaName_contains_nocase: String
+  schemaName_not_contains: String
+  schemaName_not_contains_nocase: String
+  schemaName_starts_with: String
+  schemaName_starts_with_nocase: String
+  schemaName_not_starts_with: String
+  schemaName_not_starts_with_nocase: String
+  schemaName_ends_with: String
+  schemaName_ends_with_nocase: String
+  schemaName_not_ends_with: String
+  schemaName_not_ends_with_nocase: String
+  manifestStateId: Bytes
+  manifestStateId_not: Bytes
+  manifestStateId_gt: Bytes
+  manifestStateId_lt: Bytes
+  manifestStateId_gte: Bytes
+  manifestStateId_lte: Bytes
+  manifestStateId_in: [Bytes!]
+  manifestStateId_not_in: [Bytes!]
+  manifestStateId_contains: Bytes
+  manifestStateId_not_contains: Bytes
   manifestVersion: BigInt
   manifestVersion_not: BigInt
   manifestVersion_gt: BigInt
@@ -702,26 +901,6 @@ input Manifest_filter {
   manifestVersion_lte: BigInt
   manifestVersion_in: [BigInt!]
   manifestVersion_not_in: [BigInt!]
-  schemaId: String
-  schemaId_not: String
-  schemaId_gt: String
-  schemaId_lt: String
-  schemaId_gte: String
-  schemaId_lte: String
-  schemaId_in: [String!]
-  schemaId_not_in: [String!]
-  schemaId_contains: String
-  schemaId_contains_nocase: String
-  schemaId_not_contains: String
-  schemaId_not_contains_nocase: String
-  schemaId_starts_with: String
-  schemaId_starts_with_nocase: String
-  schemaId_not_starts_with: String
-  schemaId_not_starts_with_nocase: String
-  schemaId_ends_with: String
-  schemaId_ends_with_nocase: String
-  schemaId_not_ends_with: String
-  schemaId_not_ends_with_nocase: String
   manifestState: String
   manifestState_not: String
   manifestState_gt: String
@@ -752,13 +931,15 @@ input Manifest_filter {
 
 enum Manifest_orderBy {
   id
-  manifestVersion
   schemaId
+  schemaName
+  manifestStateId
+  manifestVersion
   manifestState
   manifestState__id
-  manifestState__owner
   manifestState__schemaId
   manifestState__schemaName
+  manifestState__owner
   manifestState__manifestCid
   manifestState__version
   manifestState__lastUpdated

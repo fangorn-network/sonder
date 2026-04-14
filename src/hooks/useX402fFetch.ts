@@ -49,11 +49,11 @@ export function useFangornMiddleware() {
                     localStorage.setItem(cacheKey, identitySecret)
                 }
 
-                const identity = new Identity(identitySecret)
+                // const identity = new Identity(identitySecret)
 
                 return FangornX402Middleware.create({
                     walletClient: walletClient as any,
-                    identity,
+                    // identity,
                     ...MIDDLEWARE_CONFIG,
                 })
             })

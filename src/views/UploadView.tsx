@@ -312,7 +312,6 @@ function UploadPanel({ fangorn, address }: { fangorn: Fangorn; address: Hex }) {
                     }],
                     schemaName: "fangorn.music.demo.v0",
                     gateway: 'https://ipfs.io',
-                    // gas: 10_000_000n
                 },
                 price,
             )

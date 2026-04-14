@@ -1,7 +1,6 @@
 // import { useState, useEffect, useCallback, useRef } from 'react'
 // import { useFangorn } from './useFangorn'
 // import { computeSchemaId } from '@fangorn-network/sdk'
-// import { identity } from '@fangorn-network/sdk/lib/modules/gadgets/acc/gadgets.js'
 
 // // ─── Types ────────────────────────────────────────────────────────────────────
 

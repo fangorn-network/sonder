@@ -13,7 +13,7 @@ export interface Track {
   acc: any
   currency: string
   datasourceName: string
-  tag: string
+  name: string
   art: string | null
   owned?: boolean   // true if the connected wallet has already paid for this track
 }
@@ -30,7 +30,7 @@ export type UploadPanel = 'upload' | 'manage'
 
 // A track entry as stored in the vault manifest
 export interface ManifestEntry {
-  tag: string
+  name: string
   cid: string
   index: number
   extension: string

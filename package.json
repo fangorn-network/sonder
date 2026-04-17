@@ -12,8 +12,8 @@
     "graphclient:clean": "graphclient clean"
   },
   "dependencies": {
-    "@fangorn-network/fetch": "2026.04.0-9.dev",
-    "@fangorn-network/sdk": "2026.04.10",
+    "@fangorn-network/fetch": "2026.04.16",
+    "@fangorn-network/sdk": "2026.04.15",
     "@graphql-mesh/cache-localforage": "^0.105.33",
     "@graphql-mesh/cross-helpers": "^0.4.12",
     "@graphql-mesh/graphql": "^0.104.34",
@@ -29,6 +29,7 @@
     "@semaphore-protocol/identity": "^4.14.2",
     "@whatwg-node/fetch": "^0.10.13",
     "boring-avatars": "^2.0.4",
+    "d3": "^7.9.0",
     "graphql": "^16.13.2",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",

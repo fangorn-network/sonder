@@ -19660,7 +19660,7 @@ const schemaAST = {
           "kind": "FieldDefinition",
           "name": {
             "kind": "Name",
-            "value": "manifests"
+            "value": "manifestStates"
           },
           "arguments": [
             {
@@ -25033,7 +25033,7 @@ const schemaAST = {
           "kind": "InputValueDefinition",
           "name": {
             "kind": "Name",
-            "value": "manifests_"
+            "value": "manifestStates_"
           },
           "type": {
             "kind": "NamedType",
@@ -25887,7 +25887,7 @@ const schemaAST = {
           "kind": "EnumValueDefinition",
           "name": {
             "kind": "Name",
-            "value": "manifests"
+            "value": "manifestStates"
           },
           "directives": []
         },

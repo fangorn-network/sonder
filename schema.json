@@ -17,8 +17,10 @@
     "duration": {
         "@type": "string"
     },
+    "image": {
+        "@type": "string"
+    },
     "audio": {
-        "@type": "encrypted",
-        "gadget": "settled"
+        "@type": "handle"
     }
 }

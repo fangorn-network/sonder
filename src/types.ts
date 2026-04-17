@@ -14,7 +14,7 @@ export interface Track {
   currency: string
   datasourceName: string
   name: string
-  art: string | null
+  image: string
   owned?: boolean   // true if the connected wallet has already paid for this track
 }
 

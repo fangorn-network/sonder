@@ -6,9 +6,9 @@
 
 | Item     | Value                                                              |
 | -------- | ------------------------------------------------------------------ |
-| Schema   | `fangorn.music.demo.v0`                                            |
-| SchemaId | 0xe6ed6e175ef6277d28ef468c7c9b9be6c79d337e6c642d65a877b145fabd0d1a |
-| CID      | bafkreibbulgpou3nqzdtf2hexa7teut5gx63quhxvre4jfxgxdrcg772ry        |
+| Schema   | `fangorn.music.demo.v1`                                            |
+| SchemaId | 0xf18e92dce6496a423a48614fac9fe93c549aa51c1a663f5cbe2233b0ea18081d |
+| CID      | bafkreiccuwr3jxoux7uzay742tgh3qzjekqp2gpk7fo4egou42zo6majvy        |
 
 ### Graph Codegen
 
@@ -20,6 +20,21 @@ pnpm graphclient:build
 
 ``` sh
 pnpm run build
+```
+
+### Docker
+
+Run the Docker image with Docker compose
+``` sh
+docker compose up --build
+```
+
+## Deploy
+
+``` sh
+# build the docker image
+# upload to repo
+# deploy cloudrun service
 ```
 
 ## Contibuting

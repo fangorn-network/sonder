@@ -1,0 +1,564 @@
+[
+  {
+    "name": "fated-design",
+    "fields": {
+      "title": "Fated Design",
+      "artist": "Erra",
+      "album": "Fated Design",
+      "trackNumber": "1",
+      "genre": "Metal",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/01-fated-design/01 Fated Design.mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "01-james-ferraro-iasia-2-raver",
+    "fields": {
+      "title": "01 - James Ferraro - iAsia 2 RAVER",
+      "artist": "James Ferraro",
+      "album": "iAsia 2 Raver",
+      "trackNumber": "0",
+      "genre": "Unknown",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/01-james-ferraro-i-asia-2-raver/01 - James Ferraro - iAsia 2 RAVER.mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "moon-head",
+    "fields": {
+      "title": "Moon Head",
+      "artist": "Pink Floyd",
+      "album": "MoonHead",
+      "trackNumber": "2",
+      "genre": "Rock",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/01-moon-head/01 Moon Head.mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "iii-treatment",
+    "fields": {
+      "title": "III-treatment",
+      "artist": "経血",
+      "album": "Croon A Lullaby",
+      "trackNumber": "1",
+      "genre": "Hardcore III",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/01.-kei-ketsu-iii-treatment/01.KEI-KETSU - III-treatment.mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev",
+        "resourceId": "0x..."
+      }
+    }
+  },
+  {
+    "name": "Eyescream-2",
+    "fields": {
+      "title": "イカレキノコ",
+      "artist": "経血",
+      "album": "Croon A Lullaby",
+      "trackNumber": "2",
+      "genre": "Hardcore III",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/01.-kei-ketsu-iii-treatment/02.KEI-KETSU - japanese Title.mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "Eyescream-3",
+    "fields": {
+      "title": "漂流者",
+      "artist": "Eyescream",
+      "album": "Croon A Lullaby",
+      "trackNumber": "3",
+      "genre": "Hardcore III",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/01.-kei-ketsu-iii-treatment/03.EYESCREAM - Japanese Title.mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "no-peace",
+    "fields": {
+      "title": "No Peace",
+      "artist": "Eyescream",
+      "album": "Croon A Lullaby",
+      "trackNumber": "4",
+      "genre": "Hardcore III",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/01.-kei-ketsu-iii-treatment/04.EYESCREAM - No Peace.mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "Eyescream-5",
+    "fields": {
+      "title": "ステージ",
+      "artist": "Eyescream",
+      "album": "Croon A Lullaby",
+      "trackNumber": "5",
+      "genre": "Hardcore III",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/01.-kei-ketsu-iii-treatment/05.EYESCREAM - Japanese Title.mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "Eyescream-6",
+    "fields": {
+      "title": "ウジ虫",
+      "artist": "Eyescream",
+      "album": "Croon A Lullaby",
+      "trackNumber": "6",
+      "genre": "Hardcore III",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/01.-kei-ketsu-iii-treatment/06.EYESCREAM - Japanese Title.mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "moral",
+    "fields": {
+      "title": "Moral",
+      "artist": "NoNoNo",
+      "album": "Croon A Lullaby",
+      "trackNumber": "7",
+      "genre": "Hardcore III",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/01.-kei-ketsu-iii-treatment/07.NO NO NO - Moral.mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "cover-up",
+    "fields": {
+      "title": "Cover Up",
+      "artist": "NoNoNo",
+      "album": "Croon A Lullaby",
+      "trackNumber": "8",
+      "genre": "Hardcore III",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/01.-kei-ketsu-iii-treatment/08.NO NO NO - Cover Up.mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "sliver",
+    "fields": {
+      "title": "Sliver",
+      "artist": "NoNoNo",
+      "album": "Croon A Lullaby",
+      "trackNumber": "9",
+      "genre": "Hardcore III",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/01.-kei-ketsu-iii-treatment/09.NO NO NO - Sliver.mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "lingering-scent",
+    "fields": {
+      "title": "Lingering Scent",
+      "artist": "NoNoNo",
+      "album": "Croon A Lullaby",
+      "trackNumber": "10",
+      "genre": "Hardcore III",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/01.-kei-ketsu-iii-treatment/10.NO NO NO - Lingering Scent.mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "107-7-radio-xm-mars",
+    "fields": {
+      "title": "107.7 Radio XM Mars",
+      "artist": "James Ferraro",
+      "album": "iAsia",
+      "trackNumber": "1",
+      "genre": "Experimental",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/03-casino-neptune/01 107.7 Radio XM Mars.mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "happy-hd-bengal",
+    "fields": {
+      "title": "Happy HD Bengal",
+      "artist": "James Ferraro",
+      "album": "iAsia",
+      "trackNumber": "2",
+      "genre": "Experimental",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/03-casino-neptune/02 Happy HD Bengal.mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "casino-neptune",
+    "fields": {
+      "title": "Casino Neptune",
+      "artist": "James Ferraro",
+      "album": "iAsia",
+      "trackNumber": "3",
+      "genre": "Experimental",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/03-casino-neptune/03 Casino Neptune.mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "time-is-too-expensive",
+    "fields": {
+      "title": "Time Is Too Expensive",
+      "artist": "Del the Funky Homosapien",
+      "album": "Both Sides Of The Brain",
+      "trackNumber": "1",
+      "genre": "Unknown",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/04-pet-peeves/01 - Time Is Too Expensive.mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "if-you-must",
+    "fields": {
+      "title": "If You Must",
+      "artist": "Del the Funky Homosapien",
+      "album": "Both Sides Of The Brain",
+      "trackNumber": "2",
+      "genre": "Unknown",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/04-pet-peeves/02 - If You Must.mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "jaw-gymnastics",
+    "fields": {
+      "title": "Jaw Gymnastics",
+      "artist": "Del the Funky Homosapien",
+      "album": "Both Sides Of The Brain",
+      "trackNumber": "3",
+      "genre": "Unknown",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/04-pet-peeves/03 - Jaw Gymnastics.mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "pet-peeves",
+    "fields": {
+      "title": "Pet Peeves",
+      "artist": "Del the Funky Homosapien",
+      "album": "Both Sides Of The Brain",
+      "trackNumber": "4",
+      "genre": "Unknown",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/04-pet-peeves/04 - Pet Peeves.mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "press-rewind",
+    "fields": {
+      "title": "Press Rewind",
+      "artist": "Del the Funky Homosapien",
+      "album": "Both Sides Of The Brain",
+      "trackNumber": "5",
+      "genre": "Unknown",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/04-pet-peeves/05 - Press Rewind.mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "offspring",
+    "fields": {
+      "title": "Offspring",
+      "artist": "Del the Funky Homosapien",
+      "album": "Both Sides Of The Brain",
+      "trackNumber": "6",
+      "genre": "Unknown",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/04-pet-peeves/06 - Offspring.mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "style-police",
+    "fields": {
+      "title": "Style Police",
+      "artist": "Del the Funky Homosapien",
+      "album": "Both Sides Of The Brain",
+      "trackNumber": "7",
+      "genre": "Unknown",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/04-pet-peeves/07 - Style Police.mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "fake-as-fuck",
+    "fields": {
+      "title": "Fake As Fuck",
+      "artist": "Del the Funky Homosapien",
+      "album": "Both Sides Of The Brain",
+      "trackNumber": "8",
+      "genre": "Unknown",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/04-pet-peeves/08 - Fake As Fuck.mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "bm-s",
+    "fields": {
+      "title": "BM's",
+      "artist": "Del the Funky Homosapien",
+      "album": "Both Sides Of The Brain",
+      "trackNumber": "9",
+      "genre": "Unknown",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/04-pet-peeves/09 - BM’s.mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "skull-crossbones",
+    "fields": {
+      "title": "Skull & Crossbones",
+      "artist": "Del the Funky Homosapien",
+      "album": "Both Sides Of The Brain",
+      "trackNumber": "10",
+      "genre": "Unknown",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/04-pet-peeves/10 - Skull & Crossbones.mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "soopa-feen",
+    "fields": {
+      "title": "Soopa Feen",
+      "artist": "Del the Funky Homosapien",
+      "album": "Both Sides Of The Brain",
+      "trackNumber": "11",
+      "genre": "Unknown",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/04-pet-peeves/11 - Soopa Feen.mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "disastrous",
+    "fields": {
+      "title": "Disastrous",
+      "artist": "Del the Funky Homosapien",
+      "album": "Both Sides Of The Brain",
+      "trackNumber": "12",
+      "genre": "Unknown",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/04-pet-peeves/12 - Disastrous.mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "signature-slogans",
+    "fields": {
+      "title": "Signature Slogans",
+      "artist": "Del the Funky Homosapien",
+      "album": "Both Sides Of The Brain",
+      "trackNumber": "13",
+      "genre": "Unknown",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/04-pet-peeves/13 - Signature Slogans.mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "catch-all-this",
+    "fields": {
+      "title": "Catch All This",
+      "artist": "Del the Funky Homosapien",
+      "album": "Both Sides Of The Brain",
+      "trackNumber": "14",
+      "genre": "Unknown",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/04-pet-peeves/14 - Catch All This.mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "phoney-phranchise",
+    "fields": {
+      "title": "Phoney Phranchise",
+      "artist": "Del the Funky Homosapien",
+      "album": "Both Sides Of The Brain",
+      "trackNumber": "15",
+      "genre": "Unknown",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/04-pet-peeves/15 - Phoney Phranchise.mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "proto-culture",
+    "fields": {
+      "title": "Proto Culture",
+      "artist": "Del the Funky Homosapien",
+      "album": "Both Sides Of The Brain",
+      "trackNumber": "16",
+      "genre": "Unknown",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/04-pet-peeves/16 - Proto Culture.mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "stay-on-your-toes",
+    "fields": {
+      "title": "Stay On Your Toes",
+      "artist": "Del the Funky Homosapien",
+      "album": "Both Sides Of The Brain",
+      "trackNumber": "17",
+      "genre": "Unknown",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/04-pet-peeves/17 - Stay On Your Toes.mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  }
+]

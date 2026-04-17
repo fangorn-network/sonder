@@ -9,13 +9,13 @@ interface PlayerBarProps {
 }
 
 export function PlayerBar({ track }: PlayerBarProps) {
-  const audioRef    = useRef<HTMLAudioElement | null>(null)
-  const blobUrlRef  = useRef<string | null>(null)
-  const holdTimer   = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const fillRef     = useRef<HTMLSpanElement | null>(null)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const blobUrlRef = useRef<string | null>(null)
+  const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const fillRef = useRef<HTMLSpanElement | null>(null)
 
-  const [state, setState]     = useState<PlayState>('idle')
-  const [error, setError]     = useState<string | null>(null)
+  const [state, setState] = useState<PlayState>('idle')
+  const [error, setError] = useState<string | null>(null)
   const [holding, setHolding] = useState(false)
 
   const { authenticated, login } = usePrivy()
@@ -46,10 +46,10 @@ export function PlayerBar({ track }: PlayerBarProps) {
     setError(null)
     try {
       const result = await middleware.fetchResource({
-        owner:      track.owner as `0x${string}`,
+        owner: track.owner as `0x${string}`,
         schemaName: track.datasourceName,
-        name:       track.name,
-        baseUrl:    '/facilitator',
+        name: track.name,
+        baseUrl: '/facilitator',
         ...(track.owned ? { skipPayment: true } : {}),
       })
       if (!result.success) {
@@ -115,44 +115,44 @@ export function PlayerBar({ track }: PlayerBarProps) {
   }, [holding])
 
   useEffect(() => {
-    window.addEventListener('mouseup',  handlePressEnd)
+    window.addEventListener('mouseup', handlePressEnd)
     window.addEventListener('touchend', handlePressEnd)
     return () => {
-      window.removeEventListener('mouseup',  handlePressEnd)
+      window.removeEventListener('mouseup', handlePressEnd)
       window.removeEventListener('touchend', handlePressEnd)
     }
   }, [handlePressEnd])
 
   if (!track) return null
 
-  const hue     = (parseInt(track.owner.slice(2, 8), 16) * 67 + 180) % 360
-  const isFree  = !track.price || track.price === '0'
-  const isPaid  = !track.owned && !isFree
-  const isPlay  = state === 'playing'
-  const isLoad  = state === 'loading'
+  const hue = (parseInt(track.owner.slice(2, 8), 16) * 67 + 180) % 360
+  const isFree = !track.price || track.price === '0'
+  const isPaid = !track.owned && !isFree
+  const isPlay = state === 'playing'
+  const isLoad = state === 'loading'
 
   let btnLabel: string
-  if (isLoad)        btnLabel = '…'
-  else if (isPlay)   btnLabel = '▐▐'
-  else if (holding)  btnLabel = 'Hold…'
+  if (isLoad) btnLabel = '…'
+  else if (isPlay) btnLabel = '▐▐'
+  else if (holding) btnLabel = 'Hold…'
   else if (track.owned) btnLabel = '▶ Play'
-  else if (isFree)   btnLabel = '▶ Free'
-  else               btnLabel = `▶ ${track.price} ${track.currency}`
+  else if (isFree) btnLabel = '▶ Free'
+  else btnLabel = `▶ ${parseFloat(track.price)/1_000_000} ${track.currency}`
 
   return (
     <div className="player-bar">
       <audio
         ref={audioRef}
         onEnded={() => setState('idle')}
-        onError={() => { setState('error'); setError('Playback error') }}
+        onError={() => { setState('error') }}
       />
 
       <div className="player-track">
         <div className="player-art" style={{ '--hue': hue } as HueStyle}>
-          {track.art
+          {/* {track.art
             ? <img src={track.art} alt="" className="player-art-img" />
             : <span className="player-art-initials">{track.title.slice(0, 1).toUpperCase()}</span>
-          }
+          } */}
         </div>
         <div className="player-track-info">
           <div className="player-title">{track.title}</div>
@@ -164,8 +164,8 @@ export function PlayerBar({ track }: PlayerBarProps) {
         <button
           className={[
             'btn-play-large',
-            isPlay    ? 'btn-play-large--playing' : '',
-            isLoad    ? 'btn-play-large--loading' : '',
+            isPlay ? 'btn-play-large--playing' : '',
+            isLoad ? 'btn-play-large--loading' : '',
             isPaid && holding ? 'btn-play-large--holding' : '',
           ].filter(Boolean).join(' ')}
           onMouseDown={handlePressStart}
@@ -184,8 +184,8 @@ export function PlayerBar({ track }: PlayerBarProps) {
       </div>
 
       <div className="player-meta">
-        {track.genre    && <span className="player-genre">{track.genre}</span>}
-        {track.album    && <span className="player-album">{track.album}</span>}
+        {track.genre && <span className="player-genre">{track.genre}</span>}
+        {track.album && <span className="player-album">{track.album}</span>}
         {track.duration && <span className="player-duration">{track.duration}</span>}
       </div>
     </div>

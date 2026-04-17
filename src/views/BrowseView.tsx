@@ -1,6 +1,19 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useMemo, useCallback } from 'react'
 import type { Track } from '../types'
 import { useFangornMiddleware } from '../hooks/useX402fFetch'
+
+const toUsdc = (raw: string | undefined): number => {
+  if (!raw || raw === '0') return 0
+  return Number(raw) / 1_000_000
+}
+
+const fmtUsdc = (raw: string | undefined): string => {
+  const n = toUsdc(raw)
+  if (n === 0) return 'free'
+  return n < 0.01
+    ? `$${n.toFixed(6)}`
+    : `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`
+}
 
 interface BrowseViewProps {
   tracks: Track[]
@@ -12,8 +25,26 @@ interface BrowseViewProps {
   search: string
   setSearch: (s: string) => void
   onPlay: (track: Track) => void
-  // onBuy: (track: Track) => void
   currentTrack: Track | null
+}
+
+type PriceFilter = 'all' | 'free' | 'paid'
+
+const GENRE_PALETTE = [
+  '#a78bfa', // violet
+  '#60a5fa', // blue
+  '#f472b6', // pink
+  '#22c55e', // green
+  '#f97316', // orange
+  '#7c5de8', // violet-deep
+  '#f87171', // red
+  '#34d399', // emerald
+]
+
+function hueFromOwner(owner: string): number {
+  let h = 0
+  for (const c of owner.slice(2, 8)) h = (h * 31 + parseInt(c, 16)) % 360
+  return h
 }
 
 export function BrowseView({
@@ -23,44 +54,41 @@ export function BrowseView({
   const sentinelRef = useRef<HTMLDivElement>(null)
   const [buying, setBuying] = useState<string | null>(null)
   const [buyError, setBuyError] = useState<string | null>(null)
+  const [genreFilter, setGenreFilter] = useState('all')
+  const [priceFilter, setPriceFilter] = useState<PriceFilter>('all')
+  const [maxPrice, setMaxPrice] = useState('')
+  const [ownerFilter, setOwnerFilter] = useState('')
 
   const middleware = useFangornMiddleware()
 
-  async function handleBuy(track: Track) {
-    console.log('start buy')
-    if (!middleware) return
-    setBuyError(null)
-    setBuying(track.id)
-    try {
-      const result = await middleware.fetchResource({
-        owner: '0x147c24c5Ea2f1EE1ac42AD16820De23bBba45Ef6',
-        schemaName: 'fangorn.music.demo.v0',
-        name: track.name,
-        baseUrl: '/facilitator',
-      });
+  const genres = useMemo(() => {
+    const set = new Set<string>()
+    tracks.forEach(t => { if (t.genre) set.add(t.genre) })
+    return Array.from(set).sort()
+  }, [tracks])
 
-      console.log('result status ' + JSON.stringify(result))
+  const genreColor = useMemo(() => {
+    const map: Record<string, string> = {}
+    genres.forEach((g, i) => { map[g] = GENRE_PALETTE[i % GENRE_PALETTE.length] })
+    return map
+  }, [genres])
 
-      const bytes = result.data!
-      const magic = bytes.slice(0, 4)
-      const isMP3 = magic[0] === 0x49 && magic[1] === 0x44 && magic[2] === 0x33
-        || magic[0] === 0xFF && (magic[1] & 0xE0) === 0xE0
-      const isWAV = magic[0] === 0x52 && magic[1] === 0x49 && magic[2] === 0x46 && magic[3] === 0x46
-      if (!isMP3 && !isWAV) throw new Error('Downloaded file does not appear to be valid audio')
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    const maxUsdc = maxPrice !== '' ? parseFloat(maxPrice) : null
+    return tracks.filter(t => {
+      if (q && ![t.title, t.artist, t.album, t.genre].some(s => s?.toLowerCase().includes(q))) return false
+      if (genreFilter !== 'all' && t.genre !== genreFilter) return false
+      const isFree = !t.price || t.price === '0'
+      if (priceFilter === 'free' && !isFree) return false
+      if (priceFilter === 'paid' && isFree) return false
+      if (maxUsdc !== null && !isFree && toUsdc(t.price) > maxUsdc) return false
+      if (ownerFilter.trim() && !t.owner.toLowerCase().includes(ownerFilter.trim().toLowerCase())) return false
+      return true
+    })
+  }, [tracks, search, genreFilter, priceFilter, maxPrice, ownerFilter])
 
-      const blob = new Blob([bytes.buffer.slice(0) as ArrayBuffer], { type: 'audio/mpeg' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `${track.title}.mp3`
-      a.click()
-      URL.revokeObjectURL(url)
-    } catch (e: any) {
-      setBuyError(e?.message ?? 'Purchase failed')
-    } finally {
-      setBuying(null)
-    }
-  }
+  const hasActiveFilter = genreFilter !== 'all' || priceFilter !== 'all' || maxPrice !== '' || ownerFilter !== ''
 
   useEffect(() => {
     const el = sentinelRef.current
@@ -73,140 +101,240 @@ export function BrowseView({
     return () => observer.disconnect()
   }, [loadMore])
 
+  async function handleBuy(e: React.MouseEvent, track: Track) {
+    e.stopPropagation()
+
+    if (!middleware) return
+    setBuyError(null)
+    setBuying(track.id)
+    
+    try {
+      const result = await middleware.fetchResource({
+        owner: track.owner as `0x${string}`,
+        schemaName: track.datasourceName,
+        name: track.name,
+        baseUrl: import.meta.env.VITE_RESOURCE_SERVER_URL as string,
+      })
+
+      if (!result.data) throw new Error('No data returned')
+
+      const bytes = result.data instanceof Uint8Array
+        ? result.data
+        : new Uint8Array(result.data as ArrayBuffer)
+
+      const magic = bytes.slice(0, 4)
+      const isMP3 = (magic[0] === 0x49 && magic[1] === 0x44 && magic[2] === 0x33)
+        || (magic[0] === 0xFF && (magic[1] & 0xE0) === 0xE0)
+      const isWAV = magic[0] === 0x52 && magic[1] === 0x49 && magic[2] === 0x46 && magic[3] === 0x46
+      if (!isMP3 && !isWAV) throw new Error('Downloaded file does not appear to be valid audio')
+
+      const blob = new Blob([bytes.buffer.slice(0) as ArrayBuffer], { type: 'audio/mpeg' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+
+      a.href = url; a.download = `${track.title}.mp3`; a.click()
+
+      URL.revokeObjectURL(url)
+      
+    } catch (e: any) {
+      setBuyError(e?.message ?? 'Purchase failed')
+    } finally {
+      setBuying(null)
+    }
+  }
+
+  const col = (track: Track) => genreColor[track.genre ?? ''] ?? '#888780'
+
   return (
     <div className="browse-view">
 
+      {/* toolbar */}
       <div className="browse-toolbar">
         <div className="search-box">
           <span className="search-icon">⌕</span>
           <input
             className="search-input"
             type="text"
-            placeholder="Search artists or titles…"
+            placeholder="Search title, artist, album…"
             value={search}
             onChange={e => setSearch(e.target.value)}
             spellCheck={false}
           />
-          {search && (
-            <button className="search-clear" onClick={() => setSearch('')}>✕</button>
-          )}
+          {search && <button className="search-clear" onClick={() => setSearch('')}>✕</button>}
         </div>
-        <span className="browse-count">{tracks.length} tracks</span>
+        <span className="browse-count">{filtered.length} of {tracks.length}</span>
+      </div>
+
+      {/* filters */}
+      <div className="browse-filters">
+        <div className="bf-group">
+          <span className="bf-label">Genre</span>
+          <div className="bf-pills">
+            <button
+              className={`bf-pill ${genreFilter === 'all' ? 'bf-pill--active' : ''}`}
+              onClick={() => setGenreFilter('all')}
+            >All</button>
+            {genres.map(g => (
+              <button
+                key={g}
+                className={`bf-pill ${genreFilter === g ? 'bf-pill--active' : ''}`}
+                onClick={() => setGenreFilter(g)}
+                style={genreFilter === g ? {
+                  background: genreColor[g] + '22',
+                  borderColor: genreColor[g] + '88',
+                  color: genreColor[g],
+                } : {}}
+              >{g}</button>
+            ))}
+          </div>
+        </div>
+
+        <div className="bf-group">
+          <span className="bf-label">Price</span>
+          <div className="bf-row">
+            {(['all', 'free', 'paid'] as PriceFilter[]).map(p => (
+              <button
+                key={p}
+                className={`bf-pill ${priceFilter === p ? 'bf-pill--active' : ''}`}
+                onClick={() => setPriceFilter(p)}
+              >{p}</button>
+            ))}
+            {priceFilter !== 'free' && (
+              <div className="bf-max-wrap">
+                <span className="bf-max-symbol">$</span>
+                <input
+                  className="bf-max-input"
+                  type="number" min="0" step="0.01" placeholder="max"
+                  value={maxPrice}
+                  onChange={e => setMaxPrice(e.target.value)}
+                />
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="bf-group">
+          <span className="bf-label">Artist address</span>
+          <div className="bf-addr-wrap">
+            <input
+              className="bf-addr-input"
+              type="text" placeholder="0x…"
+              value={ownerFilter}
+              onChange={e => setOwnerFilter(e.target.value)}
+              spellCheck={false}
+            />
+            {ownerFilter && <button className="search-clear" onClick={() => setOwnerFilter('')}>✕</button>}
+          </div>
+        </div>
+
+        {hasActiveFilter && (
+          <button className="bf-clear-all" onClick={() => {
+            setGenreFilter('all'); setPriceFilter('all'); setMaxPrice(''); setOwnerFilter('')
+          }}>Clear filters</button>
+        )}
       </div>
 
       {error && <div className="upload-error">{error}</div>}
       {buyError && <div className="upload-error">{buyError}</div>}
 
-      {!loading && !error && tracks.length === 0 && (
+      {!loading && filtered.length === 0 && (
         <div className="empty-state">
           <div className="empty-icon">♪</div>
-          <p>{search ? `No results for "${search}"` : 'No tracks published yet.'}</p>
+          <p>{search || hasActiveFilter ? 'No tracks match your filters.' : 'No tracks published yet.'}</p>
         </div>
       )}
 
-      {(loading || tracks.length > 0) && (
-        <table className="track-table">
-          <thead>
-            <tr>
-              <th className="tt-col-num">#</th>
-              <th className="tt-col-title">Title</th>
-              <th className="tt-col-album">Album</th>
-              <th className="tt-col-genre">Genre</th>
-              <th className="tt-col-dur">Duration</th>
-              <th className="tt-col-price">Price</th>
-              <th className="tt-col-buy"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading
-              ? Array.from({ length: 6 }).map((_, i) => (
-                <tr key={i} className="tt-row tt-row--skeleton">
-                  <td><div className="tt-skel tt-skel--sm" /></td>
-                  <td>
-                    <div className="tt-row-title-wrap">
-                      <div className="tt-skel tt-skel--art" />
-                      <div>
-                        <div className="tt-skel tt-skel--md" />
-                        <div className="tt-skel tt-skel--sm" style={{ marginTop: 5 }} />
-                      </div>
-                    </div>
-                  </td>
-                  <td><div className="tt-skel tt-skel--md" /></td>
-                  <td><div className="tt-skel tt-skel--sm" /></td>
-                  <td><div className="tt-skel tt-skel--sm" /></td>
-                  <td><div className="tt-skel tt-skel--sm" /></td>
-                  <td />
-                </tr>
-              ))
-              : tracks.map((track, i) => {
-                const isPlaying = currentTrack?.id === track.id
-                const isFree = !track.price || track.price === '0'
-                const isBuying = buying === track.id
-                return (
-                  <tr
-                    key={track.id}
-                    className={`tt-row ${isPlaying ? 'tt-row--playing' : ''}`}
-                    onClick={() => onPlay(track)}
+      {/* grid */}
+      {(loading || filtered.length > 0) && (
+        <div className="track-grid">
+          {loading
+            ? Array.from({ length: 12 }).map((_, i) => (
+              <div key={i} className="tg-card tg-card--skeleton">
+                <div className="tg-art tg-skel" />
+                <div className="tg-body">
+                  <div className="tg-skel tg-skel--title" />
+                  <div className="tg-skel tg-skel--sub" />
+                  <div className="tg-meta">
+                    <div className="tg-skel tg-skel--tag" />
+                    <div className="tg-skel tg-skel--price" />
+                  </div>
+                </div>
+              </div>
+            ))
+            : filtered.map(track => {
+              const isPlaying = currentTrack?.id === track.id
+              const isFree = !track.price || track.price === '0'
+              const isBuying = buying === track.id
+              const color = col(track)
+
+              return (
+                <div
+                  key={track.id}
+                  className={`tg-card ${isPlaying ? 'tg-card--playing' : ''}`}
+                  style={{ borderTop: `2px solid ${color}` }}
+                  onClick={() => onPlay(track)}
+                >
+                  {/* art */}
+                  <div
+                    className="tg-art"
+                    style={{ background: `${color}40` }}
                   >
-                    <td className="tt-cell-num">
-                      {isPlaying
-                        ? <span className="tt-eq"><span /><span /><span /></span>
-                        : <span className="tt-num">{i + 1}</span>
-                      }
-                    </td>
-
-                    <td className="tt-cell-title">
-                      <div className="tt-row-title-wrap">
-                        <div className="tt-art" style={{ '--hue': (parseInt(track.owner.slice(2, 8), 16) * 67 + 180) % 360 } as React.CSSProperties}>
-                          {track.art
-                            ? <img src={track.art} alt="" className="tt-art-img" />
-                            : <span className="tt-art-initials">{track.title.slice(0, 1).toUpperCase()}</span>
-                          }
-                        </div>
-                        <div>
-                          <div className="tt-title">{track.title}</div>
-                          <div className="tt-artist">{track.artist}</div>
-                        </div>
-                      </div>
-                    </td>
-
-                    <td className="tt-cell-album">
-                      <span className="tt-album">{track.album ?? '—'}</span>
-                    </td>
-
-                    <td className="tt-cell-genre">
-                      {track.genre && <span className="tt-genre">{track.genre}</span>}
-                    </td>
-
-                    <td className="tt-cell-dur">
-                      <span className="tt-dur">{track.duration ?? '—'}</span>
-                    </td>
-
-                    <td className="tt-cell-price">
-                      {isFree
-                        ? <span className="tt-price tt-price--free">free</span>
-                        : <span className="tt-price">{track.price} {track.currency}</span>
-                      }
-                    </td>
-
-                    <td className="tt-cell-buy" onClick={e => e.stopPropagation()}>
-                      {!isFree && (
-                        <button
-                          className="tt-buy-btn"
-                          disabled={isBuying}
-                          onClick={() => handleBuy(track)}
-                          title={`Buy ${track.title}`}
+                    {/* {track.art */}
+                    {false
+                      ? 
+                      // <img src={track.art} alt="" className="tg-art-img" />
+                      <div></div>
+                      : (
+                        <span
+                          className="tg-art-initial"
+                          style={{ color }}
                         >
-                          {isBuying ? <span className="upload-spinner" /> : 'Buy'}
-                        </button>
+                          {track.title.slice(0, 1).toUpperCase()}
+                        </span>
+                      )
+                    }
+                    {isPlaying && (
+                      <div className="tg-eq" style={{ '--eq-color': color } as React.CSSProperties}>
+                        <span /><span /><span />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* info */}
+                  <div className="tg-body">
+                    <div className="tg-title">{track.title}</div>
+                    <div className="tg-artist">{track.artist}</div>
+                    <div className="tg-meta">
+                      {track.genre && (
+                        <span
+                          className="tg-genre"
+                          style={{ color, background: `${color}15`, borderColor: `${color}30` }}
+                        >
+                          {track.genre}
+                        </span>
                       )}
-                    </td>
-                  </tr>
-                )
-              })
-            }
-          </tbody>
-        </table>
+                      <span className={`tg-price ${isFree ? 'tg-price--free' : ''}`}>
+                        {fmtUsdc(track.price)}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* buy button */}
+                  {!isFree && (
+                    <button
+                      className="tg-buy"
+                      disabled={isBuying}
+                      onClick={e => handleBuy(e, track)}
+                      title={`Buy ${track.title}`}
+                    >
+                      {isBuying ? <span className="upload-spinner" /> : 'Buy'}
+                    </button>
+                  )}
+                </div>
+              )
+            })
+          }
+        </div>
       )}
 
       <div ref={sentinelRef} style={{ height: 1 }} />
@@ -218,10 +346,9 @@ export function BrowseView({
         </div>
       )}
 
-      {!hasMore && !search && tracks.length > 0 && (
+      {!hasMore && !search && !hasActiveFilter && tracks.length > 0 && (
         <div className="end-of-list">that's everything ✦</div>
       )}
-
     </div>
   )
 }

@@ -55,7 +55,6 @@ export function useFangorn(): UseFangornResult {
             gateway: import.meta.env.VITE_PINATA_GATEWAY ?? ''
           }
         },
-        encryption: { lit: true },
         config: FangornConfig.ArbitrumSepolia,
         domain: window.location.host,
       })

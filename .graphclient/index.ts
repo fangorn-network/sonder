@@ -1467,14 +1467,14 @@ export type ResourceCreated_orderBy =
 
 export type Schema = {
   id: Scalars['ID']['output'];
-  manifests?: Maybe<Array<ManifestState>>;
+  manifestStates?: Maybe<Array<ManifestState>>;
   version?: Maybe<Scalars['String']['output']>;
   agentId?: Maybe<Scalars['String']['output']>;
   fields?: Maybe<Array<SchemaField>>;
 };
 
 
-export type SchemamanifestsArgs = {
+export type SchemamanifestStatesArgs = {
   skip?: InputMaybe<Scalars['Int']['input']>;
   first?: InputMaybe<Scalars['Int']['input']>;
   orderBy?: InputMaybe<ManifestState_orderBy>;
@@ -1848,7 +1848,7 @@ export type Schema_filter = {
   id_lte?: InputMaybe<Scalars['ID']['input']>;
   id_in?: InputMaybe<Array<Scalars['ID']['input']>>;
   id_not_in?: InputMaybe<Array<Scalars['ID']['input']>>;
-  manifests_?: InputMaybe<ManifestState_filter>;
+  manifestStates_?: InputMaybe<ManifestState_filter>;
   version?: InputMaybe<Scalars['String']['input']>;
   version_not?: InputMaybe<Scalars['String']['input']>;
   version_gt?: InputMaybe<Scalars['String']['input']>;
@@ -1904,7 +1904,7 @@ export type Schema_filter = {
 
 export type Schema_orderBy =
   | 'id'
-  | 'manifests'
+  | 'manifestStates'
   | 'version'
   | 'agentId'
   | 'fields';
@@ -2304,7 +2304,7 @@ export type ResourceCreatedResolvers<ContextType = MeshContext, ParentType exten
 
 export type SchemaResolvers<ContextType = MeshContext, ParentType extends ResolversParentTypes['Schema'] = ResolversParentTypes['Schema']> = ResolversObject<{
   id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
-  manifests?: Resolver<Maybe<Array<ResolversTypes['ManifestState']>>, ParentType, ContextType, RequireFields<SchemamanifestsArgs, 'skip' | 'first'>>;
+  manifestStates?: Resolver<Maybe<Array<ResolversTypes['ManifestState']>>, ParentType, ContextType, RequireFields<SchemamanifestStatesArgs, 'skip' | 'first'>>;
   version?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   agentId?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   fields?: Resolver<Maybe<Array<ResolversTypes['SchemaField']>>, ParentType, ContextType, RequireFields<SchemafieldsArgs, 'skip' | 'first'>>;
@@ -2461,11 +2461,11 @@ const merger = new(BareMerger as any)({
         store: rootStore.child('bareMerger')
       })
 const documentHashMap = {
-        "8101e8c11636e1162c5a795254285e6c7b5de5a7740116c0ab2d685dee6ac9cb": GetTracksDocument,
-"8101e8c11636e1162c5a795254285e6c7b5de5a7740116c0ab2d685dee6ac9cb": SearchTracksDocument,
-"8101e8c11636e1162c5a795254285e6c7b5de5a7740116c0ab2d685dee6ac9cb": GetTracksByOwnerDocument,
-"8101e8c11636e1162c5a795254285e6c7b5de5a7740116c0ab2d685dee6ac9cb": GetTrackDocument,
-"8101e8c11636e1162c5a795254285e6c7b5de5a7740116c0ab2d685dee6ac9cb": GetTrackByOwnerAndTitleDocument
+        "3a68c90a94a1435858697833f1601ab0bf27b808f46db8ab8f95bac4ffe796fc": GetTracksDocument,
+"3a68c90a94a1435858697833f1601ab0bf27b808f46db8ab8f95bac4ffe796fc": SearchTracksDocument,
+"3a68c90a94a1435858697833f1601ab0bf27b808f46db8ab8f95bac4ffe796fc": GetTracksByOwnerDocument,
+"3a68c90a94a1435858697833f1601ab0bf27b808f46db8ab8f95bac4ffe796fc": GetTrackDocument,
+"3a68c90a94a1435858697833f1601ab0bf27b808f46db8ab8f95bac4ffe796fc": GetTrackByOwnerAndTitleDocument
       }
 additionalEnvelopPlugins.push(usePersistedOperations({
         getPersistedOperation(key) {
@@ -2492,35 +2492,35 @@ additionalEnvelopPlugins.push(usePersistedOperations({
           return printWithCache(GetTracksDocument);
         },
         location: 'GetTracksDocument.graphql',
-        sha256Hash: '8101e8c11636e1162c5a795254285e6c7b5de5a7740116c0ab2d685dee6ac9cb'
+        sha256Hash: '3a68c90a94a1435858697833f1601ab0bf27b808f46db8ab8f95bac4ffe796fc'
       },{
         document: SearchTracksDocument,
         get rawSDL() {
           return printWithCache(SearchTracksDocument);
         },
         location: 'SearchTracksDocument.graphql',
-        sha256Hash: '8101e8c11636e1162c5a795254285e6c7b5de5a7740116c0ab2d685dee6ac9cb'
+        sha256Hash: '3a68c90a94a1435858697833f1601ab0bf27b808f46db8ab8f95bac4ffe796fc'
       },{
         document: GetTracksByOwnerDocument,
         get rawSDL() {
           return printWithCache(GetTracksByOwnerDocument);
         },
         location: 'GetTracksByOwnerDocument.graphql',
-        sha256Hash: '8101e8c11636e1162c5a795254285e6c7b5de5a7740116c0ab2d685dee6ac9cb'
+        sha256Hash: '3a68c90a94a1435858697833f1601ab0bf27b808f46db8ab8f95bac4ffe796fc'
       },{
         document: GetTrackDocument,
         get rawSDL() {
           return printWithCache(GetTrackDocument);
         },
         location: 'GetTrackDocument.graphql',
-        sha256Hash: '8101e8c11636e1162c5a795254285e6c7b5de5a7740116c0ab2d685dee6ac9cb'
+        sha256Hash: '3a68c90a94a1435858697833f1601ab0bf27b808f46db8ab8f95bac4ffe796fc'
       },{
         document: GetTrackByOwnerAndTitleDocument,
         get rawSDL() {
           return printWithCache(GetTrackByOwnerAndTitleDocument);
         },
         location: 'GetTrackByOwnerAndTitleDocument.graphql',
-        sha256Hash: '8101e8c11636e1162c5a795254285e6c7b5de5a7740116c0ab2d685dee6ac9cb'
+        sha256Hash: '3a68c90a94a1435858697833f1601ab0bf27b808f46db8ab8f95bac4ffe796fc'
       }
     ];
     },
@@ -2674,7 +2674,9 @@ export const GetTracksDocument = gql`
   manifestStates(
     first: $first
     skip: $skip
-    where: {schemaId: "0xe6ed6e175ef6277d28ef468c7c9b9be6c79d337e6c642d65a877b145fabd0d1a"}
+    orderBy: lastUpdated
+    orderDirection: desc
+    where: {schemaId: "0xf18e92dce6496a423a48614fac9fe93c549aa51c1a663f5cbe2233b0ea18081d"}
   ) {
     ...TrackFields
     manifest {
@@ -2698,7 +2700,7 @@ export const GetTracksDocument = gql`
 export const SearchTracksDocument = gql`
     query SearchTracks($search: String!) {
   manifestStates(
-    where: {schemaId: "0xe6ed6e175ef6277d28ef468c7c9b9be6c79d337e6c642d65a877b145fabd0d1a"}
+    where: {schemaId: "0xf18e92dce6496a423a48614fac9fe93c549aa51c1a663f5cbe2233b0ea18081d"}
     first: 100
   ) {
     ...TrackFields
@@ -2723,7 +2725,7 @@ export const SearchTracksDocument = gql`
 export const GetTracksByOwnerDocument = gql`
     query GetTracksByOwner($owner: Bytes!, $first: Int!, $skip: Int!) {
   manifestStates(
-    where: {owner: $owner, schemaId: "0xe6ed6e175ef6277d28ef468c7c9b9be6c79d337e6c642d65a877b145fabd0d1a"}
+    where: {owner: $owner, schemaId: "0xf18e92dce6496a423a48614fac9fe93c549aa51c1a663f5cbe2233b0ea18081d"}
     first: $first
     skip: $skip
   ) {
@@ -2771,7 +2773,7 @@ export const GetTrackDocument = gql`
 export const GetTrackByOwnerAndTitleDocument = gql`
     query GetTrackByOwnerAndTitle($owner: Bytes!, $title: String!) {
   manifestStates(
-    where: {owner: $owner, schemaId: "0xe6ed6e175ef6277d28ef468c7c9b9be6c79d337e6c642d65a877b145fabd0d1a"}
+    where: {owner: $owner, schemaId: "0xf18e92dce6496a423a48614fac9fe93c549aa51c1a663f5cbe2233b0ea18081d"}
     first: 10
   ) {
     ...TrackFields

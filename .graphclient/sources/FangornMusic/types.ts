@@ -1444,14 +1444,14 @@ export type ResourceCreated_orderBy =
 
 export type Schema = {
   id: Scalars['ID']['output'];
-  manifests?: Maybe<Array<ManifestState>>;
+  manifestStates?: Maybe<Array<ManifestState>>;
   version?: Maybe<Scalars['String']['output']>;
   agentId?: Maybe<Scalars['String']['output']>;
   fields?: Maybe<Array<SchemaField>>;
 };
 
 
-export type SchemamanifestsArgs = {
+export type SchemamanifestStatesArgs = {
   skip?: InputMaybe<Scalars['Int']['input']>;
   first?: InputMaybe<Scalars['Int']['input']>;
   orderBy?: InputMaybe<ManifestState_orderBy>;
@@ -1825,7 +1825,7 @@ export type Schema_filter = {
   id_lte?: InputMaybe<Scalars['ID']['input']>;
   id_in?: InputMaybe<Array<Scalars['ID']['input']>>;
   id_not_in?: InputMaybe<Array<Scalars['ID']['input']>>;
-  manifests_?: InputMaybe<ManifestState_filter>;
+  manifestStates_?: InputMaybe<ManifestState_filter>;
   version?: InputMaybe<Scalars['String']['input']>;
   version_not?: InputMaybe<Scalars['String']['input']>;
   version_gt?: InputMaybe<Scalars['String']['input']>;
@@ -1881,7 +1881,7 @@ export type Schema_filter = {
 
 export type Schema_orderBy =
   | 'id'
-  | 'manifests'
+  | 'manifestStates'
   | 'version'
   | 'agentId'
   | 'fields';

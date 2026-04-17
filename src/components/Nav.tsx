@@ -13,7 +13,7 @@ export function Nav({ view, setView }: NavProps) {
       {VIEWS.map(v => (
         <button
           key={v}
-          className={`nav-item ${view === v ? 'active' : ''}`}
+          className={`nav-btn ${view === v ? 'active' : ''}`}
           onClick={() => setView(v)}
         >
           {v}

@@ -19,6 +19,7 @@ root.render(
       config={{
         // Create embedded wallets for users who don't have a wallet
         embeddedWallets: {
+          showWalletUIs: false,
           ethereum: {
             createOnLogin: 'users-without-wallets'
           }

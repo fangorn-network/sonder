@@ -1,6 +1,6 @@
 import type { ViewName } from '../types'
 
-const VIEWS: ViewName[] = ['Browse', 'Library', 'Upload']
+const VIEWS: ViewName[] = ['Discover', 'Library', 'Upload']
 
 interface NavProps {
   view: ViewName

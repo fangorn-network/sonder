@@ -20,6 +20,16 @@ export function ConnectWallet() {
   })
   const [balance, setBalance] = useState<string | null>(null)
 
+  const [copied, setCopied] = useState(false)
+
+  function handleCopyAddress() {
+    if (!address) return
+    navigator.clipboard.writeText(address)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1500)
+  }
+
+
   const address = user?.wallet?.address as `0x${string}` | undefined
   const label = user?.email?.address
     ?? (user as any)?.google?.email
@@ -41,7 +51,9 @@ export function ConnectWallet() {
     return (
       <div className="wallet-chip connected">
         <span className="wallet-dot" />
-        <span className="wallet-label">{label}</span>
+        <button className="wallet-label" onClick={handleCopyAddress} title={address}>
+          {copied ? 'copied!' : label}
+        </button>
         {balance !== null && (
           <span
             className="wallet-balance"

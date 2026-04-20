@@ -9,11 +9,19 @@ import { UploadView } from './views/UploadView'
 import { PlayerBar } from './components/PlayerBar'
 import { createPortal } from 'react-dom'
 import { LibraryView } from './views/LibraryView'
+import { useLibrary } from './hooks/useLibrary'
 
 export default function App() {
-  const [view, setView] = useState<ViewName>('Browse')
+  const [view, setView] = useState<ViewName>('Discover')
   const [currentTrack, setCurrentTrack] = useState<Track | null>(null)
   const { tracks, loading, loadingMore, error, hasMore, loadMore, search, setSearch } = useGraph()
+
+  const { ids: libraryIds } = useLibrary()
+
+  const handlePlay = useCallback((track: Track) => {
+    console.log('the track ' + track.id)
+    setCurrentTrack({ ...track, owned: libraryIds.includes(track.id) })
+  }, [libraryIds])
 
   // add inside the component, near the top with other state
   const [showScrollTop, setShowScrollTop] = useState(false)
@@ -42,7 +50,7 @@ export default function App() {
       <Nav view={view} setView={setView} />
 
       <main className="main">
-        {view === 'Browse' && (
+        {view === 'Discover' && (
           <BrowseView
             tracks={tracks}
             loading={loading}
@@ -52,20 +60,31 @@ export default function App() {
             loadMore={loadMore}
             search={search}
             setSearch={setSearch}
-            onPlay={setCurrentTrack}
+            onPlay={handlePlay}
             currentTrack={currentTrack}
           />
         )}
-        { view === 'Library' && <LibraryView /> }
+        {view === 'Library' && (
+          <LibraryView
+            tracks={tracks}
+            loading={loading}
+            onPlay={handlePlay}
+            currentTrack={currentTrack}
+          />
+        )}
         {view === 'Upload' && <UploadView />}
-        <PlayerBar track={currentTrack} />
+        <PlayerBar
+          track={currentTrack}
+          tracks={tracks}
+          onTrackChange={handlePlay}
+        />
       </main>
       {showScrollTop && createPortal(
-  <button className="scroll-top-btn" onClick={scrollToTop} title="Back to top">
-    ↑
-  </button>,
-  document.body
-)}
+        <button className="scroll-top-btn" onClick={scrollToTop} title="Back to top">
+          ↑
+        </button>,
+        document.body
+      )}
     </div>
   )
 }

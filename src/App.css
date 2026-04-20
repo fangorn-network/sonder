@@ -207,6 +207,10 @@ textarea {
   white-space: nowrap;
 }
 
+.wallet-label {
+  margin: 10px;
+}
+
 .wallet-balance {
   padding: 2px var(--sp-2);
   font-size: 12px;
@@ -689,6 +693,144 @@ textarea {
   width: 100%;
 }
 
+/* ── Library list view ──────────────────────────────────────────────── */
+.lib-list {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  overflow: hidden;
+  margin-top: var(--sp-3);
+}
+
+.lib-row {
+  display: grid;
+  grid-template-columns: 36px 3px 1fr auto auto 28px;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: 9px var(--sp-3) 9px var(--sp-2);
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: background var(--t1);
+}
+.lib-row:last-child { border-bottom: none; }
+.lib-row:hover { background: var(--surface-2); }
+
+.lib-row--playing { background: var(--surface-2); }
+.lib-row--playing .lib-row-title { color: var(--accent); }
+
+.lib-row--removing {
+  opacity: 0;
+  transform: translateX(-8px);
+  transition: opacity 0.3s var(--ease), transform 0.3s var(--ease);
+}
+
+/* index / eq */
+.lib-row-num {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  flex-shrink: 0;
+}
+.lib-row-idx {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--fg4);
+}
+.lib-row-eq {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 13px;
+}
+.lib-row-eq span {
+  display: block;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--eq-color, var(--accent));
+  animation: tgEq 0.6s ease-in-out infinite alternate;
+}
+.lib-row-eq span:nth-child(1) { height: 5px;  animation-delay: 0s; }
+.lib-row-eq span:nth-child(2) { height: 13px; animation-delay: 0.15s; }
+.lib-row-eq span:nth-child(3) { height: 8px;  animation-delay: 0.3s; }
+
+/* swatch */
+.lib-row-swatch {
+  width: 3px;
+  height: 28px;
+  border-radius: 2px;
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
+/* info */
+.lib-row-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.lib-row-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: -0.01em;
+  transition: color var(--t1);
+}
+.lib-row-artist {
+  font-size: 11px;
+  font-weight: 300;
+  color: var(--fg2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* genre */
+.lib-row-genre {
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border: 1px solid;
+  border-radius: var(--r-pill);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* owned */
+.lib-row-owned {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--success);
+  flex-shrink: 0;
+}
+
+/* remove */
+.lib-row-remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--r-sm);
+  font-size: 9px;
+  color: var(--fg4);
+  opacity: 0;
+  transition: color var(--t1), opacity var(--t1), background var(--t1);
+}
+.lib-row:hover .lib-row-remove { opacity: 1; }
+.lib-row-remove:hover {
+  color: var(--err);
+  background: var(--err-dim);
+}
 @media (max-width: 600px) {
   .track-grid {
     grid-template-columns: repeat(2, 1fr);
@@ -2054,3 +2196,140 @@ textarea {
 .link-btn:hover {
   opacity: 0.8;
 }
+
+.tg-card--owned {
+  opacity: 0.85;
+}
+
+.tg-owned-badge {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  font-size: 11px;
+  color: var(--success);
+  font-family: var(--font-mono);
+}
+
+.tg-price--owned {
+  color: var(--success);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.tg-buy-confirm {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--success);
+  pointer-events: none;
+}
+
+.tg-saved-toast {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--success-dim);
+  border-top: 1px solid rgba(34, 197, 94, 0.25);
+  color: var(--success);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-align: center;
+  padding: 6px;
+  animation: toastSlide 0.2s var(--ease) both;
+  pointer-events: none;
+}
+
+@keyframes toastSlide {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Filter bar ─────────────────────────────── */
+.lib-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.lib-search-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+.lib-search-icon {
+  position: absolute;
+  left: 8px;
+  font-size: 15px;
+  color: var(--fg3);
+  pointer-events: none;
+}
+.lib-search {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 4px 28px 4px 26px;
+  font-size: 12px;
+  color: var(--fg1);
+  outline: none;
+  width: 160px;
+  transition: border-color 0.15s;
+}
+.lib-search:focus { border-color: var(--fg3); }
+.lib-search-clear {
+  position: absolute;
+  right: 8px;
+  background: none;
+  border: none;
+  color: var(--fg3);
+  cursor: pointer;
+  font-size: 10px;
+  padding: 0;
+}
+
+.lib-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--fg3);
+  font-size: 11px;
+  font-family: var(--font-mono, monospace);
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.lib-pill:hover { border-color: var(--fg3); color: var(--fg1); }
+
+.lib-pill--active {
+  color: var(--fg1);
+}
+.lib-pill--playing { border-color: #60a5fa44; color: #60a5fa; }
+.lib-pill--playing.lib-pill--active { background: #60a5fa20; border-color: #60a5fa; }
+
+.lib-pill--artist-active {
+  background: var(--bg3, #2a2a2a);
+  border-color: var(--fg2);
+  color: var(--fg1);
+}
+.lib-pill--clear {
+  border-color: transparent;
+  color: var(--fg3);
+  text-decoration: underline;
+  padding-left: 4px;
+  padding-right: 4px;
+}
+.lib-pill--clear:hover { color: var(--fg1); }

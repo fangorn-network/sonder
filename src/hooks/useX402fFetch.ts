@@ -1,7 +1,6 @@
 import { FangornX402Middleware } from '@fangorn-network/fetch'
 import { FangornConfig } from '@fangorn-network/sdk'
 import { useWallets } from '@privy-io/react-auth'
-import { Identity } from '@semaphore-protocol/identity'
 import { useEffect, useState } from 'react'
 import { createWalletClient, custom, keccak256, toBytes, type Hex } from 'viem'
 

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useMemo, useCallback } from 'react'
 import type { Track } from '../types'
 import { useFangornMiddleware } from '../hooks/useX402fFetch'
+import { useLibrary } from '../hooks/useLibrary'
 
 const toUsdc = (raw: string | undefined): number => {
   if (!raw || raw === '0') return 0
@@ -31,14 +32,14 @@ interface BrowseViewProps {
 type PriceFilter = 'all' | 'free' | 'paid'
 
 const GENRE_PALETTE = [
-  '#a78bfa', // violet
-  '#60a5fa', // blue
-  '#f472b6', // pink
-  '#22c55e', // green
-  '#f97316', // orange
-  '#7c5de8', // violet-deep
-  '#f87171', // red
-  '#34d399', // emerald
+  '#a78bfa',
+  '#60a5fa',
+  '#f472b6',
+  '#22c55e',
+  '#f97316',
+  '#7c5de8',
+  '#f87171',
+  '#34d399',
 ]
 
 export function BrowseView({
@@ -48,13 +49,14 @@ export function BrowseView({
   const sentinelRef = useRef<HTMLDivElement>(null)
   const [buying, setBuying] = useState<string | null>(null)
   const [buyError, setBuyError] = useState<string | null>(null)
+  const [justBought, setJustBought] = useState<string | null>(null)
   const [genreFilter, setGenreFilter] = useState('all')
   const [priceFilter, setPriceFilter] = useState<PriceFilter>('all')
   const [maxPrice, setMaxPrice] = useState('')
   const [ownerFilter, setOwnerFilter] = useState('')
 
   const middleware = useFangornMiddleware()
-  // const agent = useFangornAgent();
+  const { addToLibrary, isInLibrary } = useLibrary()
 
   const genres = useMemo(() => {
     const set = new Set<string>()
@@ -98,17 +100,18 @@ export function BrowseView({
 
   async function handleBuy(e: React.MouseEvent, track: Track) {
     e.stopPropagation()
-
     if (!middleware) return
+
     setBuyError(null)
     setBuying(track.id)
-    
+
     try {
+      console.log('hadjkhfasdkhjflasdjkhf')
       const result = await middleware.fetchResource({
         owner: track.owner as `0x${string}`,
         schemaName: track.datasourceName,
         name: track.name,
-        baseUrl: import.meta.env.VITE_RESOURCE_SERVER_URL as string,
+        baseUrl: '/facilitator'
       })
 
       if (!result.data) throw new Error('No data returned')
@@ -117,20 +120,27 @@ export function BrowseView({
         ? result.data
         : new Uint8Array(result.data as ArrayBuffer)
 
+      // todo: check result status
+      // write to library
+      console.log('writing to library')
+      // payment response = nullifier
+      addToLibrary(track.id, result.paymentResponse as string)
+      setJustBought(track.id)
+      setTimeout(() => setJustBought(null), 2000)
+
       const magic = bytes.slice(0, 4)
       const isMP3 = (magic[0] === 0x49 && magic[1] === 0x44 && magic[2] === 0x33)
         || (magic[0] === 0xFF && (magic[1] & 0xE0) === 0xE0)
       const isWAV = magic[0] === 0x52 && magic[1] === 0x49 && magic[2] === 0x46 && magic[3] === 0x46
       if (!isMP3 && !isWAV) throw new Error('Downloaded file does not appear to be valid audio')
 
-      const blob = new Blob([bytes.buffer.slice(0) as ArrayBuffer], { type: 'audio/mpeg' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
+      // // TODO: do we need to download here?
+      // const blob = new Blob([bytes.buffer.slice(0) as ArrayBuffer], { type: 'audio/mpeg' })
+      // const url = URL.createObjectURL(blob)
+      // const a = document.createElement('a')
+      // a.href = url; a.download = `${track.title}.mp3`; a.click()
+      // URL.revokeObjectURL(url)
 
-      a.href = url; a.download = `${track.title}.mp3`; a.click()
-
-      URL.revokeObjectURL(url)
-      
     } catch (e: any) {
       setBuyError(e?.message ?? 'Purchase failed')
     } finally {
@@ -260,38 +270,31 @@ export function BrowseView({
               const isPlaying = currentTrack?.id === track.id
               const isFree = !track.price || track.price === '0'
               const isBuying = buying === track.id
+              const owned = isInLibrary(track.id)
+              const justGot = justBought === track.id
               const color = col(track)
 
               return (
                 <div
                   key={track.id}
-                  className={`tg-card ${isPlaying ? 'tg-card--playing' : ''}`}
+                  className={`tg-card ${isPlaying ? 'tg-card--playing' : ''} ${owned ? 'tg-card--owned' : ''}`}
                   style={{ borderTop: `2px solid ${color}` }}
                   onClick={() => onPlay(track)}
                 >
                   {/* art */}
-                  <div
-                    className="tg-art"
-                    style={{ background: `${color}40` }}
-                  >
-                    {/* {track.art */}
-                    {false
-                      ? 
-                      // <img src={track.art} alt="" className="tg-art-img" />
-                      <div></div>
-                      : (
-                        <span
-                          className="tg-art-initial"
-                          style={{ color }}
-                        >
-                          {track.title.slice(0, 1).toUpperCase()}
-                        </span>
-                      )
-                    }
+                  <div className="tg-art" style={{ background: `${color}40` }}>
+                    {false ? <div /> : (
+                      <span className="tg-art-initial" style={{ color }}>
+                        {track.title.slice(0, 1).toUpperCase()}
+                      </span>
+                    )}
                     {isPlaying && (
                       <div className="tg-eq" style={{ '--eq-color': color } as React.CSSProperties}>
                         <span /><span /><span />
                       </div>
+                    )}
+                    {owned && !isPlaying && (
+                      <div className="tg-owned-badge">✓</div>
                     )}
                   </div>
 
@@ -308,14 +311,14 @@ export function BrowseView({
                           {track.genre}
                         </span>
                       )}
-                      <span className={`tg-price ${isFree ? 'tg-price--free' : ''}`}>
-                        {fmtUsdc(track.price)}
+                      <span className={`tg-price ${isFree ? 'tg-price--free' : ''} ${owned ? 'tg-price--owned' : ''}`}>
+                        {owned ? 'owned' : fmtUsdc(track.price)}
                       </span>
                     </div>
                   </div>
 
-                  {/* buy button */}
-                  {!isFree && (
+                  {/* buy / owned state */}
+                  {!isFree && !owned && (
                     <button
                       className="tg-buy"
                       disabled={isBuying}
@@ -324,6 +327,9 @@ export function BrowseView({
                     >
                       {isBuying ? <span className="upload-spinner" /> : 'Buy'}
                     </button>
+                  )}
+                  {justGot && (
+                    <div className="tg-buy-confirm">saved ✦</div>
                   )}
                 </div>
               )

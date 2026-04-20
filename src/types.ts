@@ -24,7 +24,7 @@ export type PlayState = 'idle' | 'loading' | 'playing' | 'error'
 
 export type UploadStatus = 'idle' | 'uploading' | 'done' | 'error'
 
-export type ViewName = 'Browse' | 'Library' | 'Upload'
+export type ViewName = 'Discover' | 'Library' | 'Upload'
 
 export type UploadPanel = 'upload' | 'manage'
 

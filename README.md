@@ -32,9 +32,18 @@ docker compose up --build
 ## Deploy
 
 ``` sh
-# build the docker image
+# build and tag the docker image
+docker build -f ./Dockerfile \
+  -t us-central1-docker.pkg.dev/lucky-lead-489114-d7/fangorn-network/music:latest .
 # upload to repo
+docker push us-central1-docker.pkg.dev/lucky-lead-489114-d7/fangorn-network/music:latest
 # deploy cloudrun service
+gcloud run deploy music \
+  --image us-central1-docker.pkg.dev/lucky-lead-489114-d7/fangorn-network/music:latest \
+  --platform managed \
+  --region us-central1 \
+  --port 8080 \
+  --allow-unauthenticated
 ```
 
 ## Contibuting

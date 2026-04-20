@@ -34,7 +34,6 @@ export default function App() {
     <div className="app">
       <header className="header">
         <div className="header-brand">
-          <span className="brand-mark" />
           <span className="brand-name">Fangorn<span className="brand-dot">.</span>Music</span>
         </div>
         <ConnectWallet />

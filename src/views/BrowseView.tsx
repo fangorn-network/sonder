@@ -41,12 +41,6 @@ const GENRE_PALETTE = [
   '#34d399', // emerald
 ]
 
-function hueFromOwner(owner: string): number {
-  let h = 0
-  for (const c of owner.slice(2, 8)) h = (h * 31 + parseInt(c, 16)) % 360
-  return h
-}
-
 export function BrowseView({
   tracks, loading, loadingMore, error, hasMore, loadMore,
   search, setSearch, onPlay, currentTrack
@@ -60,6 +54,7 @@ export function BrowseView({
   const [ownerFilter, setOwnerFilter] = useState('')
 
   const middleware = useFangornMiddleware()
+  // const agent = useFangornAgent();
 
   const genres = useMemo(() => {
     const set = new Set<string>()

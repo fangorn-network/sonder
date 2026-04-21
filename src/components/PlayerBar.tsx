@@ -2,8 +2,8 @@ import { useRef, useState, useEffect, useCallback } from 'react'
 import { usePrivy } from '@privy-io/react-auth'
 import type { Track, PlayState, HueStyle } from '../types'
 import { useFangornMiddleware } from '../hooks/useX402fFetch'
-import { useLibrary } from '../hooks/useLibrary'
 import './PlayerBar.css';
+import { useFirebase } from '../hooks/useFirebase'
 
 interface PlayerBarProps {
   track: Track | null
@@ -23,9 +23,9 @@ export function PlayerBar({ track, tracks, onTrackChange }: PlayerBarProps) {
   const [currentTime, setCurrentTime] = useState(0)
   const [dragging, setDragging] = useState(false)
 
-  const { authenticated, login } = usePrivy()
+  const { authenticated, user, login } = usePrivy()
+    const { ids: libraryIds, getNullifier } = useFirebase(user?.id ?? null)
   const middleware = useFangornMiddleware()
-  const { ids: libraryIds, getNullifier } = useLibrary()
 
   // ── library queue (owned tracks in catalog order) ──────────────────────
   const queue = tracks.filter(t => libraryIds.includes(t.id))

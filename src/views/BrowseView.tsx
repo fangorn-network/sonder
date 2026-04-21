@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState, useMemo, useCallback } from 'react'
 import type { Track } from '../types'
 import { useFangornMiddleware } from '../hooks/useX402fFetch'
-import { useLibrary } from '../hooks/useLibrary'
+import { usePrivy } from '@privy-io/react-auth'
+import { useFirebase } from '../hooks/useFirebase'
+// import { useLibrary } from '../hooks/useLibrary'
 
 const toUsdc = (raw: string | undefined): number => {
   if (!raw || raw === '0') return 0
@@ -56,7 +58,8 @@ export function BrowseView({
   const [ownerFilter, setOwnerFilter] = useState('')
 
   const middleware = useFangornMiddleware()
-  const { addToLibrary, isInLibrary } = useLibrary()
+  const { user } = usePrivy()
+  const { addToLibrary, isInLibrary } = useFirebase(user?.id ?? null)
 
   const genres = useMemo(() => {
     const set = new Set<string>()

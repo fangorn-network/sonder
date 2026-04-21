@@ -1,562 +1,884 @@
 [
   {
-    "name": "fated-design",
+    "name": "atom-heart-mother",
     "fields": {
-      "title": "Fated Design",
-      "artist": "Erra",
-      "album": "Fated Design",
-      "trackNumber": "1",
-      "genre": "Metal",
-      "duration": "0",
-      "image": "",
-      "audio": {
-        "@type": "handle",
-        "uri": "r2://my-first-dir/01-fated-design/01 Fated Design.mp3",
-        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
-      }
-    }
-  },
-  {
-    "name": "01-james-ferraro-iasia-2-raver",
-    "fields": {
-      "title": "01 - James Ferraro - iAsia 2 RAVER",
-      "artist": "James Ferraro",
-      "album": "iAsia 2 Raver",
-      "trackNumber": "0",
-      "genre": "Unknown",
-      "duration": "0",
-      "image": "",
-      "audio": {
-        "@type": "handle",
-        "uri": "r2://my-first-dir/01-james-ferraro-i-asia-2-raver/01 - James Ferraro - iAsia 2 RAVER.mp3",
-        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
-      }
-    }
-  },
-  {
-    "name": "moon-head",
-    "fields": {
-      "title": "Moon Head",
+      "title": "Atom Heart Mother            ",
       "artist": "Pink Floyd",
-      "album": "MoonHead",
-      "trackNumber": "2",
-      "genre": "Rock",
-      "duration": "0",
-      "image": "",
-      "audio": {
-        "@type": "handle",
-        "uri": "r2://my-first-dir/01-moon-head/01 Moon Head.mp3",
-        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
-      }
-    }
-  },
-  {
-    "name": "iii-treatment",
-    "fields": {
-      "title": "III-treatment",
-      "artist": "経血",
-      "album": "Croon A Lullaby",
-      "trackNumber": "1",
-      "genre": "Hardcore III",
-      "duration": "0",
-      "image": "",
-      "audio": {
-        "@type": "handle",
-        "uri": "r2://my-first-dir/01.-kei-ketsu-iii-treatment/01.KEI-KETSU - III-treatment.mp3",
-        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev",
-        "resourceId": "0x..."
-      }
-    }
-  },
-  {
-    "name": "Eyescream-2",
-    "fields": {
-      "title": "イカレキノコ",
-      "artist": "経血",
-      "album": "Croon A Lullaby",
-      "trackNumber": "2",
-      "genre": "Hardcore III",
-      "duration": "0",
-      "image": "",
-      "audio": {
-        "@type": "handle",
-        "uri": "r2://my-first-dir/01.-kei-ketsu-iii-treatment/02.KEI-KETSU - japanese Title.mp3",
-        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
-      }
-    }
-  },
-  {
-    "name": "Eyescream-3",
-    "fields": {
-      "title": "漂流者",
-      "artist": "Eyescream",
-      "album": "Croon A Lullaby",
-      "trackNumber": "3",
-      "genre": "Hardcore III",
-      "duration": "0",
-      "image": "",
-      "audio": {
-        "@type": "handle",
-        "uri": "r2://my-first-dir/01.-kei-ketsu-iii-treatment/03.EYESCREAM - Japanese Title.mp3",
-        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
-      }
-    }
-  },
-  {
-    "name": "no-peace",
-    "fields": {
-      "title": "No Peace",
-      "artist": "Eyescream",
-      "album": "Croon A Lullaby",
-      "trackNumber": "4",
-      "genre": "Hardcore III",
-      "duration": "0",
-      "image": "",
-      "audio": {
-        "@type": "handle",
-        "uri": "r2://my-first-dir/01.-kei-ketsu-iii-treatment/04.EYESCREAM - No Peace.mp3",
-        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
-      }
-    }
-  },
-  {
-    "name": "Eyescream-5",
-    "fields": {
-      "title": "ステージ",
-      "artist": "Eyescream",
-      "album": "Croon A Lullaby",
-      "trackNumber": "5",
-      "genre": "Hardcore III",
-      "duration": "0",
-      "image": "",
-      "audio": {
-        "@type": "handle",
-        "uri": "r2://my-first-dir/01.-kei-ketsu-iii-treatment/05.EYESCREAM - Japanese Title.mp3",
-        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
-      }
-    }
-  },
-  {
-    "name": "Eyescream-6",
-    "fields": {
-      "title": "ウジ虫",
-      "artist": "Eyescream",
-      "album": "Croon A Lullaby",
-      "trackNumber": "6",
-      "genre": "Hardcore III",
-      "duration": "0",
-      "image": "",
-      "audio": {
-        "@type": "handle",
-        "uri": "r2://my-first-dir/01.-kei-ketsu-iii-treatment/06.EYESCREAM - Japanese Title.mp3",
-        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
-      }
-    }
-  },
-  {
-    "name": "moral",
-    "fields": {
-      "title": "Moral",
-      "artist": "NoNoNo",
-      "album": "Croon A Lullaby",
-      "trackNumber": "7",
-      "genre": "Hardcore III",
-      "duration": "0",
-      "image": "",
-      "audio": {
-        "@type": "handle",
-        "uri": "r2://my-first-dir/01.-kei-ketsu-iii-treatment/07.NO NO NO - Moral.mp3",
-        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
-      }
-    }
-  },
-  {
-    "name": "cover-up",
-    "fields": {
-      "title": "Cover Up",
-      "artist": "NoNoNo",
-      "album": "Croon A Lullaby",
-      "trackNumber": "8",
-      "genre": "Hardcore III",
-      "duration": "0",
-      "image": "",
-      "audio": {
-        "@type": "handle",
-        "uri": "r2://my-first-dir/01.-kei-ketsu-iii-treatment/08.NO NO NO - Cover Up.mp3",
-        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
-      }
-    }
-  },
-  {
-    "name": "sliver",
-    "fields": {
-      "title": "Sliver",
-      "artist": "NoNoNo",
-      "album": "Croon A Lullaby",
-      "trackNumber": "9",
-      "genre": "Hardcore III",
-      "duration": "0",
-      "image": "",
-      "audio": {
-        "@type": "handle",
-        "uri": "r2://my-first-dir/01.-kei-ketsu-iii-treatment/09.NO NO NO - Sliver.mp3",
-        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
-      }
-    }
-  },
-  {
-    "name": "lingering-scent",
-    "fields": {
-      "title": "Lingering Scent",
-      "artist": "NoNoNo",
-      "album": "Croon A Lullaby",
-      "trackNumber": "10",
-      "genre": "Hardcore III",
-      "duration": "0",
-      "image": "",
-      "audio": {
-        "@type": "handle",
-        "uri": "r2://my-first-dir/01.-kei-ketsu-iii-treatment/10.NO NO NO - Lingering Scent.mp3",
-        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
-      }
-    }
-  },
-  {
-    "name": "107-7-radio-xm-mars",
-    "fields": {
-      "title": "107.7 Radio XM Mars",
-      "artist": "James Ferraro",
-      "album": "iAsia",
-      "trackNumber": "1",
-      "genre": "Experimental",
-      "duration": "0",
-      "image": "",
-      "audio": {
-        "@type": "handle",
-        "uri": "r2://my-first-dir/03-casino-neptune/01 107.7 Radio XM Mars.mp3",
-        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
-      }
-    }
-  },
-  {
-    "name": "happy-hd-bengal",
-    "fields": {
-      "title": "Happy HD Bengal",
-      "artist": "James Ferraro",
-      "album": "iAsia",
-      "trackNumber": "2",
-      "genre": "Experimental",
-      "duration": "0",
-      "image": "",
-      "audio": {
-        "@type": "handle",
-        "uri": "r2://my-first-dir/03-casino-neptune/02 Happy HD Bengal.mp3",
-        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
-      }
-    }
-  },
-  {
-    "name": "casino-neptune",
-    "fields": {
-      "title": "Casino Neptune",
-      "artist": "James Ferraro",
-      "album": "iAsia",
-      "trackNumber": "3",
-      "genre": "Experimental",
-      "duration": "0",
-      "image": "",
-      "audio": {
-        "@type": "handle",
-        "uri": "r2://my-first-dir/03-casino-neptune/03 Casino Neptune.mp3",
-        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
-      }
-    }
-  },
-  {
-    "name": "time-is-too-expensive",
-    "fields": {
-      "title": "Time Is Too Expensive",
-      "artist": "Del the Funky Homosapien",
-      "album": "Both Sides Of The Brain",
+      "album": "1970-04-30: Ohm Suite Ohm - Fillmore West, San Francisco",
       "trackNumber": "1",
       "genre": "Unknown",
       "duration": "0",
       "image": "",
       "audio": {
         "@type": "handle",
-        "uri": "r2://my-first-dir/04-pet-peeves/01 - Time Is Too Expensive.mp3",
+        "uri": "r2://my-first-dir/01.-atom-heart-mother/[1970-04-29] Ohm Suite Ohm - Fillmore West, San Francisco/01. Atom Heart Mother.mp3",
         "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
       }
     }
   },
   {
-    "name": "if-you-must",
+    "name": "cymbaline",
     "fields": {
-      "title": "If You Must",
-      "artist": "Del the Funky Homosapien",
-      "album": "Both Sides Of The Brain",
+      "title": "Cymbaline                    ",
+      "artist": "Pink Floyd",
+      "album": "1970-04-30: Ohm Suite Ohm - Fillmore West, San Francisco",
       "trackNumber": "2",
       "genre": "Unknown",
       "duration": "0",
       "image": "",
       "audio": {
         "@type": "handle",
-        "uri": "r2://my-first-dir/04-pet-peeves/02 - If You Must.mp3",
+        "uri": "r2://my-first-dir/01.-atom-heart-mother/[1970-04-29] Ohm Suite Ohm - Fillmore West, San Francisco/02. Cymbaline.mp3",
         "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
       }
     }
   },
   {
-    "name": "jaw-gymnastics",
+    "name": "grantchester-meadows",
     "fields": {
-      "title": "Jaw Gymnastics",
-      "artist": "Del the Funky Homosapien",
-      "album": "Both Sides Of The Brain",
+      "title": "Grantchester Meadows         ",
+      "artist": "Pink Floyd",
+      "album": "1970-04-30: Ohm Suite Ohm - Fillmore West, San Francisco",
       "trackNumber": "3",
       "genre": "Unknown",
       "duration": "0",
       "image": "",
       "audio": {
         "@type": "handle",
-        "uri": "r2://my-first-dir/04-pet-peeves/03 - Jaw Gymnastics.mp3",
+        "uri": "r2://my-first-dir/01.-atom-heart-mother/[1970-04-29] Ohm Suite Ohm - Fillmore West, San Francisco/03. Grantchester Meadows.mp3",
         "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
       }
     }
   },
   {
-    "name": "pet-peeves",
+    "name": "green-is-the-colour",
     "fields": {
-      "title": "Pet Peeves",
-      "artist": "Del the Funky Homosapien",
-      "album": "Both Sides Of The Brain",
+      "title": "Green Is The Colour",
+      "artist": "Pink Floyd",
+      "album": "1970-04-30: Ohm Suite Ohm - Fillmore West, San Francisco",
       "trackNumber": "4",
       "genre": "Unknown",
       "duration": "0",
       "image": "",
       "audio": {
         "@type": "handle",
-        "uri": "r2://my-first-dir/04-pet-peeves/04 - Pet Peeves.mp3",
+        "uri": "r2://my-first-dir/01.-atom-heart-mother/[1970-04-29] Ohm Suite Ohm - Fillmore West, San Francisco/04. Green Is The Colour.mp3",
         "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
       }
     }
   },
   {
-    "name": "press-rewind",
+    "name": "careful-with-that-axe-eugene",
     "fields": {
-      "title": "Press Rewind",
-      "artist": "Del the Funky Homosapien",
-      "album": "Both Sides Of The Brain",
+      "title": "Careful With That Axe, Eugene",
+      "artist": "Pink Floyd",
+      "album": "1970-04-30: Ohm Suite Ohm - Fillmore West, San Francisco",
       "trackNumber": "5",
       "genre": "Unknown",
       "duration": "0",
       "image": "",
       "audio": {
         "@type": "handle",
-        "uri": "r2://my-first-dir/04-pet-peeves/05 - Press Rewind.mp3",
+        "uri": "r2://my-first-dir/01.-atom-heart-mother/[1970-04-29] Ohm Suite Ohm - Fillmore West, San Francisco/05. Careful With That Axe, Eugene.mp3",
         "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
       }
     }
   },
   {
-    "name": "offspring",
+    "name": "set-the-controls-for-the-heart-of-the-sun",
     "fields": {
-      "title": "Offspring",
-      "artist": "Del the Funky Homosapien",
-      "album": "Both Sides Of The Brain",
+      "title": "Set The Controls For The Heart Of The Sun",
+      "artist": "Pink Floyd",
+      "album": "1970-04-30: Ohm Suite Ohm - Fillmore West, San Francisco",
       "trackNumber": "6",
       "genre": "Unknown",
       "duration": "0",
       "image": "",
       "audio": {
         "@type": "handle",
-        "uri": "r2://my-first-dir/04-pet-peeves/06 - Offspring.mp3",
+        "uri": "r2://my-first-dir/01.-atom-heart-mother/[1970-04-29] Ohm Suite Ohm - Fillmore West, San Francisco/06. Set The Controls For The Heart Of The Sun.mp3",
         "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
       }
     }
   },
   {
-    "name": "style-police",
+    "name": "synecdoche",
     "fields": {
-      "title": "Style Police",
-      "artist": "Del the Funky Homosapien",
-      "album": "Both Sides Of The Brain",
+      "title": "Synecdoche",
+      "artist": "Yves Tumor",
+      "album": "Experiencing The Deposit Of Faith",
+      "trackNumber": "1",
+      "genre": "Electronic",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/01.01-synecdoche/Yves Tumor - Experiencing the Deposit of Faith (2017) [Unknown] [WEB FLAC24-48kHz]/01.01 - Synecdoche.mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "ayxita-wake-up",
+    "fields": {
+      "title": "Ayxita, Wake Up",
+      "artist": "Yves Tumor",
+      "album": "Experiencing The Deposit Of Faith",
+      "trackNumber": "2",
+      "genre": "Electronic",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/01.01-synecdoche/Yves Tumor - Experiencing the Deposit of Faith (2017) [Unknown] [WEB FLAC24-48kHz]/01.02 - Ayxita, Wake Up.mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "e-eternal",
+    "fields": {
+      "title": "E. Eternal",
+      "artist": "Yves Tumor",
+      "album": "Experiencing The Deposit Of Faith",
+      "trackNumber": "3",
+      "genre": "Electronic",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/01.01-synecdoche/Yves Tumor - Experiencing the Deposit of Faith (2017) [Unknown] [WEB FLAC24-48kHz]/01.03 - E. Eternal.mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "my-nose-my-lips-your-head-shape",
+    "fields": {
+      "title": "My Nose My Lips Your Head Shape",
+      "artist": "Yves Tumor",
+      "album": "Experiencing The Deposit Of Faith",
+      "trackNumber": "4",
+      "genre": "Electronic",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/01.01-synecdoche/Yves Tumor - Experiencing the Deposit of Faith (2017) [Unknown] [WEB FLAC24-48kHz]/01.04 - My Nose My Lips Your Head Shape.mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "anya-s-loop",
+    "fields": {
+      "title": "Anya's Loop",
+      "artist": "Yves Tumor",
+      "album": "Experiencing The Deposit Of Faith",
+      "trackNumber": "5",
+      "genre": "Electronic",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/01.01-synecdoche/Yves Tumor - Experiencing the Deposit of Faith (2017) [Unknown] [WEB FLAC24-48kHz]/01.05 - Anya's Loop.mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "dry-guillotine",
+    "fields": {
+      "title": "Dry Guillotine",
+      "artist": "Yves Tumor",
+      "album": "Experiencing The Deposit Of Faith",
+      "trackNumber": "6",
+      "genre": "Electronic",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/01.01-synecdoche/Yves Tumor - Experiencing the Deposit of Faith (2017) [Unknown] [WEB FLAC24-48kHz]/01.06 - Dry Guillotine.mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "africaashes",
+    "fields": {
+      "title": "AfricaAshes",
+      "artist": "Yves Tumor",
+      "album": "Experiencing The Deposit Of Faith",
+      "trackNumber": "7",
+      "genre": "Electronic",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/01.01-synecdoche/Yves Tumor - Experiencing the Deposit of Faith (2017) [Unknown] [WEB FLAC24-48kHz]/01.07 - AfricaAshes.mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "child-of-rage",
+    "fields": {
+      "title": "Child Of Rage",
+      "artist": "Yves Tumor",
+      "album": "Experiencing The Deposit Of Faith",
+      "trackNumber": "8",
+      "genre": "Electronic",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/01.01-synecdoche/Yves Tumor - Experiencing the Deposit of Faith (2017) [Unknown] [WEB FLAC24-48kHz]/01.08 - Child Of Rage.mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "prosperity-awareness",
+    "fields": {
+      "title": "Prosperity Awareness",
+      "artist": "Yves Tumor",
+      "album": "Experiencing The Deposit Of Faith",
+      "trackNumber": "9",
+      "genre": "Electronic",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/01.01-synecdoche/Yves Tumor - Experiencing the Deposit of Faith (2017) [Unknown] [WEB FLAC24-48kHz]/01.09 - Prosperity Awareness.mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "paigon-hunting",
+    "fields": {
+      "title": "Paigon Hunting",
+      "artist": "Yves Tumor",
+      "album": "Experiencing The Deposit Of Faith",
+      "trackNumber": "10",
+      "genre": "Electronic",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/01.01-synecdoche/Yves Tumor - Experiencing the Deposit of Faith (2017) [Unknown] [WEB FLAC24-48kHz]/01.10 - Paigon Hunting.mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "conflict-of-interest",
+    "fields": {
+      "title": "Conflict Of Interest",
+      "artist": "Yves Tumor",
+      "album": "Experiencing The Deposit Of Faith",
+      "trackNumber": "11",
+      "genre": "Electronic",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/01.01-synecdoche/Yves Tumor - Experiencing the Deposit of Faith (2017) [Unknown] [WEB FLAC24-48kHz]/01.11 - Conflict Of Interest.mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "love-is-the-law",
+    "fields": {
+      "title": "Love Is The Law",
+      "artist": "Yves Tumor",
+      "album": "Experiencing The Deposit Of Faith",
+      "trackNumber": "12",
+      "genre": "Electronic",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/01.01-synecdoche/Yves Tumor - Experiencing the Deposit of Faith (2017) [Unknown] [WEB FLAC24-48kHz]/01.12 - Love Is The Law.mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "flow-coma-afx-remix",
+    "fields": {
+      "title": "Flow Coma (AFX Remix)",
+      "artist": "808 State",
+      "album": "2 Remixes by AFX",
+      "trackNumber": "1",
+      "genre": "Electronic",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/02-box-energy-afx-remix/2 Remixes by AFX/01 - Flow Coma (AFX Remix).mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "box-energy-afx-remix",
+    "fields": {
+      "title": "Box Energy (AFX Remix)",
+      "artist": "DJ Pierre",
+      "album": "2 Remixes by AFX",
+      "trackNumber": "2",
+      "genre": "Electronic",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/02-box-energy-afx-remix/2 Remixes by AFX/02 - Box Energy (AFX Remix).mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "bonus-high-frequency-sounds",
+    "fields": {
+      "title": "Bonus High Frequency Sounds",
+      "artist": "AFX",
+      "album": "2 Remixes by AFX",
+      "trackNumber": "3",
+      "genre": "Electronic",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/02-box-energy-afx-remix/2 Remixes by AFX/03 - Bonus High Frequency Sounds.mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "shamoo",
+    "fields": {
+      "title": "Shamoo",
+      "artist": "Devon Hendryx \"The Rockwood Escape Plan\"",
+      "album": "♥",
+      "trackNumber": "1",
+      "genre": "GENERATION Y",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/02-charli-baltimore/♥/01 Shamoo.mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "charli-baltimore",
+    "fields": {
+      "title": "Charli Baltimore ✪",
+      "artist": "Devon Hendryx \"The Rockwood Escape Plan\"",
+      "album": "♥",
+      "trackNumber": "2",
+      "genre": "GENERATION Y",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/02-charli-baltimore/♥/02 Charli Baltimore ✪.mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "manny",
+    "fields": {
+      "title": "Manny 嫌い",
+      "artist": "Devon Hendryx \"The Rockwood Escape Plan\"",
+      "album": "♥",
+      "trackNumber": "3",
+      "genre": "GENERATION Y",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/02-charli-baltimore/♥/03 Manny 嫌い.mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "pizzicato-five",
+    "fields": {
+      "title": "Pizzicato Five 愛",
+      "artist": "Devon Hendryx \"The Rockwood Escape Plan\"",
+      "album": "♥",
+      "trackNumber": "4",
+      "genre": "GENERATION Y",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/02-charli-baltimore/♥/04 Pizzicato Five 愛.mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "max-payne",
+    "fields": {
+      "title": "Max Payne (間奏)",
+      "artist": "Devon Hendryx \"The Rockwood Escape Plan\"",
+      "album": "♥",
+      "trackNumber": "5",
+      "genre": "GENERATION Y",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/02-charli-baltimore/♥/05 Max Payne (間奏).mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "fucking-your-girl",
+    "fields": {
+      "title": "Fucking Your Girl",
+      "artist": "Devon Hendryx \"The Rockwood Escape Plan\"",
+      "album": "♥",
+      "trackNumber": "6",
+      "genre": "GENERATION Y",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/02-charli-baltimore/♥/06 Fucking Your Girl.mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "satan",
+    "fields": {
+      "title": "Satan ✞",
+      "artist": "Devon Hendryx \"The Rockwood Escape Plan\"",
+      "album": "♥",
+      "trackNumber": "7",
+      "genre": "GENERATION Y",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/02-charli-baltimore/♥/07 Satan ✞.mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "creep-you-out",
+    "fields": {
+      "title": "Creep You Out",
+      "artist": "The Brobecks",
+      "album": "The Brobecks 2003 Demos w/Scott Jones",
+      "trackNumber": "1",
+      "genre": "Abstract",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/03-lucinda/The Brobecks 2003 Demos w:Scott Jones/01 Creep You Out.mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "subsequential-nightmare",
+    "fields": {
+      "title": "Subsequential Nightmare",
+      "artist": "The Brobecks",
+      "album": "The Brobecks 2003 Demos w/Scott Jones",
+      "trackNumber": "2",
+      "genre": "Unknown genre",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/03-lucinda/The Brobecks 2003 Demos w:Scott Jones/02 Subsequential Nightmare.mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "lucinda",
+    "fields": {
+      "title": "Lucinda",
+      "artist": "The Brobecks",
+      "album": "The Brobecks 2003 Demos w/Scott Jones",
+      "trackNumber": "3",
+      "genre": "Unknown genre",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/03-lucinda/The Brobecks 2003 Demos w:Scott Jones/03 Lucinda.mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "the-cowboy-song",
+    "fields": {
+      "title": "The Cowboy Song",
+      "artist": "The Brobecks",
+      "album": "The Brobecks 2003 Demos w/Scott Jones",
+      "trackNumber": "4",
+      "genre": "Unknown genre",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/03-lucinda/The Brobecks 2003 Demos w:Scott Jones/04 The Cowboy Song.mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "unknown",
+    "fields": {
+      "title": "Unknown",
+      "artist": "The Brobecks",
+      "album": "The Brobecks 2003 Demos w/Scott Jones",
+      "trackNumber": "5",
+      "genre": "Unknown genre",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/03-lucinda/The Brobecks 2003 Demos w:Scott Jones/05 Unknown.mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "kaylee",
+    "fields": {
+      "title": "Kaylee",
+      "artist": "The Brobecks",
+      "album": "The Brobecks 2003 Demos w/Scott Jones",
+      "trackNumber": "6",
+      "genre": "Unknown genre",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/03-lucinda/The Brobecks 2003 Demos w:Scott Jones/06 Kaylee.mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "don-t-fade",
+    "fields": {
+      "title": "Don't Fade",
+      "artist": "The Brobecks",
+      "album": "The Brobecks 2003 Demos w/Scott Jones",
+      "trackNumber": "7",
+      "genre": "Unknown genre",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/03-lucinda/The Brobecks 2003 Demos w:Scott Jones/07 Don't Fade.mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "i-d-be-a-punk",
+    "fields": {
+      "title": "I'd Be A Punk",
+      "artist": "The Brobecks",
+      "album": "The Brobecks 2003 Demos w/Scott Jones",
+      "trackNumber": "8",
+      "genre": "Unknown genre",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/03-lucinda/The Brobecks 2003 Demos w:Scott Jones/08 I'd Be A Punk.mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "poison-bell-biv-devoe-cover",
+    "fields": {
+      "title": "Poison (Bell Biv DeVoe Cover)",
+      "artist": "The Brobecks",
+      "album": "The Brobecks 2003 Demos w/Scott Jones",
+      "trackNumber": "9",
+      "genre": "Unknown genre",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/03-lucinda/The Brobecks 2003 Demos w:Scott Jones/9. Poison (Cover).mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "zones-without-people",
+    "fields": {
+      "title": "Zones Without People",
+      "artist": "Oneohtrix Point Never",
+      "album": "Memory Vague",
+      "trackNumber": "1",
+      "genre": "Unknown",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/03-oneohtrix-point-never-ships-without-meaning/Oneohtrix Point Never - Memory Vague (2009) [Root Strata] [DVD FLAC-48kHz]/01 - Oneohtrix Point Never - Zones Without People.mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "angel",
+    "fields": {
+      "title": "Angel",
+      "artist": "Oneohtrix Point Never",
+      "album": "Memory Vague",
+      "trackNumber": "2",
+      "genre": "Unknown",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/03-oneohtrix-point-never-ships-without-meaning/Oneohtrix Point Never - Memory Vague (2009) [Root Strata] [DVD FLAC-48kHz]/02 - Oneohtrix Point Never - Angel.mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "ships-without-meaning",
+    "fields": {
+      "title": "Ships Without Meaning",
+      "artist": "Oneohtrix Point Never",
+      "album": "Memory Vague",
+      "trackNumber": "3",
+      "genre": "Unknown",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/03-oneohtrix-point-never-ships-without-meaning/Oneohtrix Point Never - Memory Vague (2009) [Root Strata] [DVD FLAC-48kHz]/03 - Oneohtrix Point Never - Ships Without Meaning.mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "memory-vague",
+    "fields": {
+      "title": "Memory Vague",
+      "artist": "Oneohtrix Point Never",
+      "album": "Memory Vague",
+      "trackNumber": "4",
+      "genre": "Unknown",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/03-oneohtrix-point-never-ships-without-meaning/Oneohtrix Point Never - Memory Vague (2009) [Root Strata] [DVD FLAC-48kHz]/04 - Oneohtrix Point Never - Memory Vague.mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "nest-5900",
+    "fields": {
+      "title": "Nest 5900",
+      "artist": "Oneohtrix Point Never",
+      "album": "Memory Vague",
+      "trackNumber": "5",
+      "genre": "Unknown",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/03-oneohtrix-point-never-ships-without-meaning/Oneohtrix Point Never - Memory Vague (2009) [Root Strata] [DVD FLAC-48kHz]/05 - Oneohtrix Point Never - Nest 5900.mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "chandelier-s-dream",
+    "fields": {
+      "title": "Chandelier's Dream",
+      "artist": "Oneohtrix Point Never",
+      "album": "Memory Vague",
+      "trackNumber": "6",
+      "genre": "Unknown",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://my-first-dir/03-oneohtrix-point-never-ships-without-meaning/Oneohtrix Point Never - Memory Vague (2009) [Root Strata] [DVD FLAC-48kHz]/06 - Oneohtrix Point Never - Chandelier_s Dream.mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  },
+  {
+    "name": "unmaking-the-world",
+    "fields": {
+      "title": "Unmaking the World",
+      "artist": "Oneohtrix Point Never",
+      "album": "Memory Vague",
       "trackNumber": "7",
       "genre": "Unknown",
       "duration": "0",
       "image": "",
       "audio": {
         "@type": "handle",
-        "uri": "r2://my-first-dir/04-pet-peeves/07 - Style Police.mp3",
+        "uri": "r2://my-first-dir/03-oneohtrix-point-never-ships-without-meaning/Oneohtrix Point Never - Memory Vague (2009) [Root Strata] [DVD FLAC-48kHz]/07 - Oneohtrix Point Never - Unmaking the World.mp3",
         "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
       }
     }
   },
   {
-    "name": "fake-as-fuck",
+    "name": "heart-of-a-champion",
     "fields": {
-      "title": "Fake As Fuck",
-      "artist": "Del the Funky Homosapien",
-      "album": "Both Sides Of The Brain",
+      "title": "Heart of a Champion",
+      "artist": "Oneohtrix Point Never",
+      "album": "Memory Vague",
       "trackNumber": "8",
       "genre": "Unknown",
       "duration": "0",
       "image": "",
       "audio": {
         "@type": "handle",
-        "uri": "r2://my-first-dir/04-pet-peeves/08 - Fake As Fuck.mp3",
+        "uri": "r2://my-first-dir/03-oneohtrix-point-never-ships-without-meaning/Oneohtrix Point Never - Memory Vague (2009) [Root Strata] [DVD FLAC-48kHz]/08 - Oneohtrix Point Never - Heart of a Champion.mp3",
         "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
       }
     }
   },
   {
-    "name": "bm-s",
+    "name": "radiation",
     "fields": {
-      "title": "BM's",
-      "artist": "Del the Funky Homosapien",
-      "album": "Both Sides Of The Brain",
+      "title": "Radiation",
+      "artist": "Oneohtrix Point Never",
+      "album": "Memory Vague",
       "trackNumber": "9",
       "genre": "Unknown",
       "duration": "0",
       "image": "",
       "audio": {
         "@type": "handle",
-        "uri": "r2://my-first-dir/04-pet-peeves/09 - BM’s.mp3",
+        "uri": "r2://my-first-dir/03-oneohtrix-point-never-ships-without-meaning/Oneohtrix Point Never - Memory Vague (2009) [Root Strata] [DVD FLAC-48kHz]/09 - Oneohtrix Point Never - Radiation.mp3",
         "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
       }
     }
   },
   {
-    "name": "skull-crossbones",
+    "name": "computer-vision",
     "fields": {
-      "title": "Skull & Crossbones",
-      "artist": "Del the Funky Homosapien",
-      "album": "Both Sides Of The Brain",
+      "title": "Computer Vision",
+      "artist": "Oneohtrix Point Never",
+      "album": "Memory Vague",
       "trackNumber": "10",
       "genre": "Unknown",
       "duration": "0",
       "image": "",
       "audio": {
         "@type": "handle",
-        "uri": "r2://my-first-dir/04-pet-peeves/10 - Skull & Crossbones.mp3",
+        "uri": "r2://my-first-dir/03-oneohtrix-point-never-ships-without-meaning/Oneohtrix Point Never - Memory Vague (2009) [Root Strata] [DVD FLAC-48kHz]/10 - Oneohtrix Point Never - Computer Vision.mp3",
         "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
       }
     }
   },
   {
-    "name": "soopa-feen",
+    "name": "nobody-here",
     "fields": {
-      "title": "Soopa Feen",
-      "artist": "Del the Funky Homosapien",
-      "album": "Both Sides Of The Brain",
+      "title": "Nobody Here",
+      "artist": "Oneohtrix Point Never",
+      "album": "Memory Vague",
       "trackNumber": "11",
       "genre": "Unknown",
       "duration": "0",
       "image": "",
       "audio": {
         "@type": "handle",
-        "uri": "r2://my-first-dir/04-pet-peeves/11 - Soopa Feen.mp3",
+        "uri": "r2://my-first-dir/03-oneohtrix-point-never-ships-without-meaning/Oneohtrix Point Never - Memory Vague (2009) [Root Strata] [DVD FLAC-48kHz]/11 - Oneohtrix Point Never - Nobody Here.mp3",
         "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
       }
     }
   },
   {
-    "name": "disastrous",
+    "name": "across-the-spectrum",
     "fields": {
-      "title": "Disastrous",
-      "artist": "Del the Funky Homosapien",
-      "album": "Both Sides Of The Brain",
-      "trackNumber": "12",
-      "genre": "Unknown",
+      "title": "Across the Spectrum",
+      "artist": "Chon",
+      "album": "Chon",
+      "trackNumber": "1",
+      "genre": "Rock",
       "duration": "0",
       "image": "",
       "audio": {
         "@type": "handle",
-        "uri": "r2://my-first-dir/04-pet-peeves/12 - Disastrous.mp3",
+        "uri": "r2://my-first-dir/04-temporarily-destabilized/Chon - Chon (2008 Demo) [MP3]/01 - Across the Spectrum.mp3",
         "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
       }
     }
   },
   {
-    "name": "signature-slogans",
+    "name": "elliptical-illuminations",
     "fields": {
-      "title": "Signature Slogans",
-      "artist": "Del the Funky Homosapien",
-      "album": "Both Sides Of The Brain",
-      "trackNumber": "13",
-      "genre": "Unknown",
+      "title": "Elliptical Illuminations",
+      "artist": "Chon",
+      "album": "Chon",
+      "trackNumber": "2",
+      "genre": "Rock",
       "duration": "0",
       "image": "",
       "audio": {
         "@type": "handle",
-        "uri": "r2://my-first-dir/04-pet-peeves/13 - Signature Slogans.mp3",
+        "uri": "r2://my-first-dir/04-temporarily-destabilized/Chon - Chon (2008 Demo) [MP3]/02 - Elliptical Illuminations.mp3",
         "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
       }
     }
   },
   {
-    "name": "catch-all-this",
+    "name": "mountains-of-creation",
     "fields": {
-      "title": "Catch All This",
-      "artist": "Del the Funky Homosapien",
-      "album": "Both Sides Of The Brain",
-      "trackNumber": "14",
-      "genre": "Unknown",
+      "title": "Mountains of Creation",
+      "artist": "Chon",
+      "album": "Chon",
+      "trackNumber": "3",
+      "genre": "Rock",
       "duration": "0",
       "image": "",
       "audio": {
         "@type": "handle",
-        "uri": "r2://my-first-dir/04-pet-peeves/14 - Catch All This.mp3",
+        "uri": "r2://my-first-dir/04-temporarily-destabilized/Chon - Chon (2008 Demo) [MP3]/03 - Mountains of Creation.mp3",
         "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
       }
     }
   },
   {
-    "name": "phoney-phranchise",
+    "name": "temporarily-destabilized",
     "fields": {
-      "title": "Phoney Phranchise",
-      "artist": "Del the Funky Homosapien",
-      "album": "Both Sides Of The Brain",
-      "trackNumber": "15",
-      "genre": "Unknown",
+      "title": "Temporarily Destabilized",
+      "artist": "Chon",
+      "album": "Chon",
+      "trackNumber": "4",
+      "genre": "Rock",
       "duration": "0",
       "image": "",
       "audio": {
         "@type": "handle",
-        "uri": "r2://my-first-dir/04-pet-peeves/15 - Phoney Phranchise.mp3",
-        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
-      }
-    }
-  },
-  {
-    "name": "proto-culture",
-    "fields": {
-      "title": "Proto Culture",
-      "artist": "Del the Funky Homosapien",
-      "album": "Both Sides Of The Brain",
-      "trackNumber": "16",
-      "genre": "Unknown",
-      "duration": "0",
-      "image": "",
-      "audio": {
-        "@type": "handle",
-        "uri": "r2://my-first-dir/04-pet-peeves/16 - Proto Culture.mp3",
-        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
-      }
-    }
-  },
-  {
-    "name": "stay-on-your-toes",
-    "fields": {
-      "title": "Stay On Your Toes",
-      "artist": "Del the Funky Homosapien",
-      "album": "Both Sides Of The Brain",
-      "trackNumber": "17",
-      "genre": "Unknown",
-      "duration": "0",
-      "image": "",
-      "audio": {
-        "@type": "handle",
-        "uri": "r2://my-first-dir/04-pet-peeves/17 - Stay On Your Toes.mp3",
+        "uri": "r2://my-first-dir/04-temporarily-destabilized/Chon - Chon (2008 Demo) [MP3]/04 - Temporarily Destabilized.mp3",
         "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
       }
     }

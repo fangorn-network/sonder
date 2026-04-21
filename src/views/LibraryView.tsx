@@ -1,6 +1,8 @@
 import { useState, useMemo } from 'react'
 import type { Track } from '../types'
-import { useLibrary } from '../hooks/useLibrary'
+import { usePrivy } from '@privy-io/react-auth'
+import { useFirebase } from '../hooks/useFirebase'
+// import { useLibrary } from '../hooks/useLibrary'
 
 const GENRE_PALETTE = [
   '#a78bfa', '#60a5fa', '#f472b6', '#22c55e',
@@ -20,7 +22,8 @@ export function LibraryView({ tracks, loading, onPlay, currentTrack }: LibraryVi
   const [activeGenres, setActiveGenres] = useState<Set<string>>(new Set())
   const [activeArtists, setActiveArtists] = useState<Set<string>>(new Set())
   const [showingOnly, setShowingOnly] = useState(false)
-  const { ids, removeFromLibrary } = useLibrary()
+  const { user } = usePrivy()
+  const { ids, removeFromLibrary } = useFirebase(user?.id ?? null)
 
   const owned = useMemo(() =>
     tracks.filter(t => ids.includes(t.id)),
@@ -214,8 +217,8 @@ export function LibraryView({ tracks, loading, onPlay, currentTrack }: LibraryVi
                 <div className="lib-row-num">
                   {isPlaying
                     ? <div className="lib-row-eq" style={{ '--eq-color': color } as React.CSSProperties}>
-                        <span /><span /><span />
-                      </div>
+                      <span /><span /><span />
+                    </div>
                     : <span className="lib-row-idx">{i + 1}</span>
                   }
                 </div>

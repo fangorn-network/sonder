@@ -30,6 +30,7 @@
     "@whatwg-node/fetch": "^0.10.13",
     "boring-avatars": "^2.0.4",
     "d3": "^7.9.0",
+    "firebase": "^12.12.1",
     "graphql": "^16.13.2",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",

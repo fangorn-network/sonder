@@ -9,14 +9,16 @@ import { UploadView } from './views/UploadView'
 import { PlayerBar } from './components/PlayerBar'
 import { createPortal } from 'react-dom'
 import { LibraryView } from './views/LibraryView'
-import { useLibrary } from './hooks/useLibrary'
+import { usePrivy } from '@privy-io/react-auth'
+import { useFirebase } from './hooks/useFirebase'
 
 export default function App() {
   const [view, setView] = useState<ViewName>('Discover')
   const [currentTrack, setCurrentTrack] = useState<Track | null>(null)
   const { tracks, loading, loadingMore, error, hasMore, loadMore, search, setSearch } = useGraph()
 
-  const { ids: libraryIds } = useLibrary()
+  const { user } = usePrivy();
+  const { ids: libraryIds } = useFirebase(user?.id ?? null)
 
   const handlePlay = useCallback((track: Track) => {
     console.log('the track ' + track.id)

@@ -3,7 +3,7 @@ import { readdirSync, statSync, writeFileSync } from "fs";
 import { join, basename } from "path";
 import { execSync } from "child_process";
 
-const IA_DATA_DIR = "./ia-data";
+const IA_DATA_DIR = "./data";
 const BUCKET_NAME = "my-first-bucket";
 const R2_PREFIX = "my-first-dir";
 const WORKER_URL = "https://fangorn-access-worker.quickbeam.workers.dev";
@@ -28,18 +28,41 @@ function slugify(str) {
 }
 
 async function buildPublishRecords(dir) {
+  console.log('*********************** ' + dir);
   const records = [];
-
   const items = readdirSync(dir);
+  console.log(`found ${items.length} entries`);
+
   for (const item of items) {
     const itemPath = join(dir, item);
     if (!statSync(itemPath).isDirectory()) continue;
 
-    const files = readdirSync(itemPath).filter((f) => f.endsWith(".mp3"));
-    for (const file of files) {
-      const filePath = join(itemPath, file);
+    // Collect mp3s from itemPath AND one level of subdirectories
+    const mp3Files = [];
+
+    for (const entry of readdirSync(itemPath)) {
+      const entryPath = join(itemPath, entry);
+      if (statSync(entryPath).isDirectory()) {
+        // Go one level deeper
+        for (const f of readdirSync(entryPath)) {
+          if (f.endsWith('.mp3')) {
+            mp3Files.push({ file: f, subdir: entry, filePath: join(entryPath, f) });
+          }
+        }
+      } else if (entry.endsWith('.mp3')) {
+        mp3Files.push({ file: entry, subdir: null, filePath: entryPath });
+      }
+    }
+
+    console.log(`found ${mp3Files.length} files in ${item}`);
+
+    for (const { file, subdir, filePath } of mp3Files) {
       const fileName = basename(file);
-      const r2Uri = `r2://${R2_PREFIX}/${item}/${fileName}`;
+      // Include subdir in R2 path so keys stay unique
+      const r2Key = subdir
+        ? `${item}/${subdir}/${fileName}`
+        : `${item}/${fileName}`;
+      const r2Uri = `r2://${R2_PREFIX}/${r2Key}`;
 
       let meta = {};
       try {
@@ -49,34 +72,31 @@ async function buildPublishRecords(dir) {
         console.warn(`  [warn] could not parse metadata for ${filePath}: ${e.message}`);
       }
 
-      const name = slugify(meta.title || fileName.replace(".mp3", ""));
-
+      const name = slugify(meta.title || fileName.replace('.mp3', ''));
       records.push({
         name,
         fields: {
-          title: meta.title ?? fileName.replace(".mp3", ""),
-          artist: meta.artist ?? "Unknown Artist",
-          album: meta.album ?? "Unknown Album",
-          trackNumber: meta.track?.no?.toString() ?? "0",
-          genre: meta.genre?.[0] ?? "Unknown",
-          duration: meta.duration ? Math.round(meta.duration).toString() : "0",
-          image: "",
+          title: meta.title ?? fileName.replace('.mp3', ''),
+          artist: meta.artist ?? 'Unknown Artist',
+          album: meta.album ?? 'Unknown Album',
+          trackNumber: meta.track?.no?.toString() ?? '0',
+          genre: meta.genre?.[0] ?? 'Unknown',
+          duration: meta.duration ? Math.round(meta.duration).toString() : '0',
+          image: '',
           audio: {
-            "@type": "handle",
+            '@type': 'handle',
             uri: r2Uri,
             workerUrl: WORKER_URL,
           },
         },
       });
-
       console.log(`  [ok] ${name} → ${r2Uri}`);
     }
   }
-
   return records;
 }
 
 uploadToR2();
-const records = await buildPublishRecords(IA_DATA_DIR);
+const records = await buildPublishRecords('./data');
 writeFileSync("./data.json", JSON.stringify(records, null, 2));
 console.log(`\nWrote ${records.length} records to data.json`);

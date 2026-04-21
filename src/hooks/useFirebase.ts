@@ -27,6 +27,7 @@ export function useFirebase(userId: string | null) {
       return
     }
 
+    console.log('with user id ' + userId)
     const q = query(collection(db, 'users', userId, 'library'))
 
     const unsubscribe = onSnapshot(q, (snapshot) => {

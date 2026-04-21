@@ -1,41 +1,39 @@
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { usePrivy, useWallets } from '@privy-io/react-auth'
 import { createWalletClient, custom, type Hex } from 'viem'
 import { Fangorn, FangornConfig } from '@fangorn-network/sdk'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-
-const R2_BUCKET  = 'my-first-bucket'
-const R2_DIR     = 'my-first-dir'
-const WORKER_URL = 'https://fangorn-access-worker.quickbeam.workers.dev'
-const SCHEMA_NAME = 'fangorn.music.demo.v1'
+// const R2_DIR = 'my-first-dir'
+// const WORKER_URL = 'https://fangorn-access-worker.quickbeam.workers.dev'
+// const SCHEMA_NAME = 'fangorn.music.demo.v1'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type UploadStatus = 'idle' | 'uploading' | 'done' | 'error'
+// type UploadStatus = 'idle' | 'uploading' | 'done' | 'error'
 
-interface TrackForm {
-    title:       string
-    artist:      string
-    album:       string
-    trackNumber: string
-    genre:       string
-    duration:    string
-    image:       string
-    price:       string
-    filename:    string
-}
+// interface TrackForm {
+//     title: string
+//     artist: string
+//     album: string
+//     trackNumber: string
+//     genre: string
+//     duration: string
+//     image: string
+//     price: string
+//     filename: string
+// }
 
-const EMPTY_FORM: TrackForm = {
-    title: '', artist: '', album: '', trackNumber: '',
-    genre: '', duration: '', image: '', price: '1', filename: '',
-}
+// const EMPTY_FORM: TrackForm = {
+//     title: '', artist: '', album: '', trackNumber: '',
+//     genre: '', duration: '', image: '', price: '1', filename: '',
+// }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function slug(s: string) {
-    return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
-}
+// function slug(s: string) {
+//     return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+// }
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
@@ -44,8 +42,8 @@ function usePublisherFangorn() {
     const { wallets } = useWallets()
     const [fangorn, setFangorn] = useState<Fangorn | null>(null)
     const [address, setAddress] = useState<Hex | null>(null)
-    const [ready, setReady]     = useState(false)
-    const [error, setError]     = useState<string | null>(null)
+    const [ready, setReady] = useState(false)
+    const [error, setError] = useState<string | null>(null)
     const wallet = wallets[0]
 
     useEffect(() => {
@@ -68,7 +66,7 @@ function usePublisherFangorn() {
                 walletClient: wc,
                 storage: {
                     pinata: {
-                        jwt:     import.meta.env.VITE_PINATA_JWT     ?? '',
+                        jwt: import.meta.env.VITE_PINATA_JWT ?? '',
                         gateway: import.meta.env.VITE_PINATA_GATEWAY ?? '',
                     }
                 },
@@ -90,101 +88,103 @@ function usePublisherFangorn() {
 
 // ─── UploadPanel ──────────────────────────────────────────────────────────────
 
-function UploadPanel({ fangorn, address }: { fangorn: Fangorn; address: Hex }) {
-    const [form, setForm]           = useState<TrackForm>(EMPTY_FORM)
-    const [status, setStatus]       = useState<UploadStatus>('idle')
-    const [statusMsg, setStatusMsg] = useState('')
-    const [manifestCid, setManifestCid] = useState<string | null>(null)
-    const [copied, setCopied]       = useState(false)
+// function UploadPanel(
+//     // { fangorn, address }: { fangorn: Fangorn; address: Hex }
+// ) {
+    // const [form, setForm] = useState<TrackForm>(EMPTY_FORM)
+    // const [status, setStatus] = useState<UploadStatus>('idle')
+    // // const [statusMsg, setStatusMsg] = useState('')
+    // const [manifestCid, setManifestCid] = useState<string | null>(null)
+    // const [copied, setCopied] = useState(false)
 
-    const setField = (key: keyof TrackForm) =>
-        (e: React.ChangeEvent<HTMLInputElement>) =>
-            setForm(f => ({ ...f, [key]: e.target.value }))
+    // // const setField = (key: keyof TrackForm) =>
+    // //     (e: React.ChangeEvent<HTMLInputElement>) =>
+    // //         setForm(f => ({ ...f, [key]: e.target.value }))
 
-    const canSubmit = !!form.filename.trim() && !!form.title && !!form.artist
-        && status !== 'uploading'
+    // const canSubmit = !!form.filename.trim() && !!form.title && !!form.artist
+    //     && status !== 'uploading'
 
-    const handleUpload = async () => {
-        if (!canSubmit) return
-        try {
-            setStatus('uploading')
-            setStatusMsg('Publishing to Fangorn…')
+    // const handleUpload = async () => {
+    //     if (!canSubmit) return
+    //     try {
+    //         setStatus('uploading')
+    //         setStatusMsg('Publishing to Fangorn…')
 
-            const name  = `${slug(form.artist)}-${slug(form.title)}-${Date.now()}`
-            const price = BigInt(Math.round(parseFloat(form.price) || 1))
+    //         const name  = `${slug(form.artist)}-${slug(form.title)}-${Date.now()}`
+    //         const price = BigInt(Math.round(parseFloat(form.price) || 1))
 
-            console.log("using price " + price)
-            console.log("using name " + name)
-            const uri   = `r2://${R2_DIR}/${form.filename.trim()}`
+    //         console.log("using price " + price)
+    //         console.log("using name " + name)
+    //         const uri   = `r2://${R2_DIR}/${form.filename.trim()}`
 
-            const { manifestUri: cid } = await fangorn.publisher.upload(
-                {
-                    records: [{
-                        name,
-                        fields: {
-                            title:       form.title,
-                            artist:      form.artist,
-                            album:       form.album       || '',
-                            trackNumber: form.trackNumber || '',
-                            genre:       form.genre       || '',
-                            duration:    form.duration    || '',
-                            image:       form.image       || '',
-                            audio: {
-                                '@type':   'handle',
-                                uri,
-                                workerUrl: WORKER_URL,
-                            },
-                        },
-                    }],
-                    schemaName: SCHEMA_NAME,
-                },
-                price,
-            )
+    //         const { manifestUri: cid } = await fangorn.publisher.upload(
+    //             {
+    //                 records: [{
+    //                     name,
+    //                     fields: {
+    //                         title:       form.title,
+    //                         artist:      form.artist,
+    //                         album:       form.album       || '',
+    //                         trackNumber: form.trackNumber || '',
+    //                         genre:       form.genre       || '',
+    //                         duration:    form.duration    || '',
+    //                         image:       form.image       || '',
+    //                         audio: {
+    //                             '@type':   'handle',
+    //                             uri,
+    //                             workerUrl: WORKER_URL,
+    //                         },
+    //                     },
+    //                 }],
+    //                 schemaName: SCHEMA_NAME,
+    //             },
+    //             price,
+    //         )
 
-            setManifestCid(cid)
-            setStatus('done')
-            setStatusMsg('')
-        } catch (e: any) {
-            setStatus('error')
-            setStatusMsg(e?.message ?? 'Upload failed')
-        }
-    }
+    //         setManifestCid(cid)
+    //         setStatus('done')
+    //         setStatusMsg('')
+    //     } catch (e: any) {
+    //         setStatus('error')
+    //         setStatusMsg(e?.message ?? 'Upload failed')
+    //     }
+    // }
 
-    const reset = () => {
-        setForm(EMPTY_FORM)
-        setStatus('idle')
-        setStatusMsg('')
-        setManifestCid(null)
-        setCopied(false)
-    }
+    // const reset = () => {
+    //     setForm(EMPTY_FORM)
+    //     setStatus('idle')
+    //     setStatusMsg('')
+    //     setManifestCid(null)
+    //     setCopied(false)
+    // }
 
-    if (status === 'done' && manifestCid) {
-        return (
-            <div className="studio-done">
-                <div className="studio-done-glyph">✦</div>
-                <h3 className="studio-done-title">Published</h3>
-                <p className="studio-done-sub">{form.title} · {form.artist}</p>
-                <div className="studio-cid-row">
-                    <span className="studio-cid-label">manifest</span>
-                    <code className="studio-cid-value">{manifestCid.slice(0, 24)}…</code>
-                    <button className="studio-cid-copy" onClick={() => {
-                        navigator.clipboard.writeText(manifestCid)
-                        setCopied(true)
-                        setTimeout(() => setCopied(false), 2000)
-                    }}>{copied ? '✓' : 'copy'}</button>
-                </div>
-                <button className="btn-primary studio-done-action" onClick={reset}>
-                    Publish another
-                </button>
-            </div>
-        )
-    }
+    // if (status === 'done' && manifestCid) {
+    //     return (
+    //         <div className="studio-done">
+    //             <div className="studio-done-glyph">✦</div>
+    //             <h3 className="studio-done-title">Published</h3>
+    //             <p className="studio-done-sub">{form.title} · {form.artist}</p>
+    //             <div className="studio-cid-row">
+    //                 <span className="studio-cid-label">manifest</span>
+    //                 <code className="studio-cid-value">{manifestCid.slice(0, 24)}…</code>
+    //                 <button className="studio-cid-copy" onClick={() => {
+    //                     navigator.clipboard.writeText(manifestCid)
+    //                     setCopied(true)
+    //                     setTimeout(() => setCopied(false), 2000)
+    //                 }}>{copied ? '✓' : 'copy'}</button>
+    //             </div>
+    //             <button className="btn-primary studio-done-action" onClick={reset}>
+    //                 Publish another
+    //             </button>
+    //         </div>
+    //     )
+    // }
 
-    return (
-        <div className="studio-form">
+    // return (
+    //     <div className="studio-form">
 
-            <h1>Coming Soon.</h1>
-            <p>If you are an artist or publisher who wants to make their music available on Fangorn, get in touch with the team at hello@fangorn.network.</p>
+    //         <h1>Coming Soon.</h1>
+    //         <p>If you are an artist or publisher who wants to make their music available on Fangorn, get in touch with the team at hello@fangorn.network.</p>
 
             {/* <div className="studio-badge-row">
                 <div className="studio-badge">
@@ -280,9 +280,9 @@ function UploadPanel({ fangorn, address }: { fangorn: Fangorn; address: Hex }) {
                     Audio is encrypted on publish. Listeners pay <strong>{form.price || '1'}</strong> USDC unit{form.price === '1' ? '' : 's'} to unlock.
                 </p>
             </div> */}
-        </div>
+        {/* </div>
     )
-}
+} */}
 
 // ─── UploadView ───────────────────────────────────────────────────────────────
 
@@ -331,7 +331,7 @@ export function UploadView() {
                 <div className="studio-header">
                     <h2 className="studio-title">Artist Studio</h2>
                 </div>
-                <UploadPanel fangorn={fangorn} address={address} />
+                {/* <UploadPanel fangorn={fangorn} address={address} /> */}
             </div>
         </div>
     )

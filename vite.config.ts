@@ -15,7 +15,7 @@ export default defineConfig({
         followRedirects: true,
         rewrite: path => path.replace(/^\/facilitator/, ''),
         configure: (proxy) => {
-          proxy.on('proxyReq', (proxyReq, req) => {
+          proxy.on('proxyReq', (_proxyReq, req) => {
             console.log('proxying:', req.method, req.url)
           })
         }

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useMemo, useCallback } from 'react'
+import { useEffect, useRef, useState, useMemo } from 'react'
 import type { Track } from '../types'
 import { useFangornMiddleware } from '../hooks/useX402fFetch'
 import { usePrivy } from '@privy-io/react-auth'
@@ -109,7 +109,7 @@ export function BrowseView({
     setBuying(track.id)
 
     try {
-      console.log('hadjkhfasdkhjflasdjkhf')
+      console.log('x402f fetch')
       const result = await middleware.fetchResource({
         owner: track.owner as `0x${string}`,
         schemaName: track.datasourceName,

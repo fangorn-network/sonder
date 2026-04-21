@@ -32,11 +32,25 @@ docker compose up --build
 ## Deploy
 
 ``` sh
+# export env vars
+export $(cat .env | xargs)
+
 # build and tag the docker image
 docker build -f ./Dockerfile \
+  --build-arg VITE_PINATA_JWT=$VITE_PINATA_JWT \
+  --build-arg VITE_PINATA_GATEWAY=$VITE_PINATA_GATEWAY \
+  --build-arg VITE_FIREBASE_API_KEY=$VITE_FIREBASE_API_KEY \
+  --build-arg VITE_FIREBASE_AUTH_DOMAIN=$VITE_FIREBASE_AUTH_DOMAIN \
+  --build-arg VITE_FIREBASE_PROJECT_ID=$VITE_FIREBASE_PROJECT_ID \
+  --build-arg VITE_FIREBASE_STORAGE_BUCKET=$VITE_FIREBASE_STORAGE_BUCKET \
+  --build-arg VITE_FIREBASE_MESSAGING_SENDER_ID=$VITE_FIREBASE_MESSAGING_SENDER_ID \
+  --build-arg VITE_FIREBASE_APP_ID=$VITE_FIREBASE_APP_ID \
+  --build-arg VITE_MEASUREMENT_ID=$VITE_MEASUREMENT_ID \
   -t us-central1-docker.pkg.dev/lucky-lead-489114-d7/fangorn-network/music:latest .
+
 # upload to repo
 docker push us-central1-docker.pkg.dev/lucky-lead-489114-d7/fangorn-network/music:latest
+
 # deploy cloudrun service
 gcloud run deploy music \
   --image us-central1-docker.pkg.dev/lucky-lead-489114-d7/fangorn-network/music:latest \

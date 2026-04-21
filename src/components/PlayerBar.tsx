@@ -40,6 +40,7 @@ export function PlayerBar({ track, tracks, onTrackChange }: PlayerBarProps) {
     setProgress(0)
     setCurrentTime(0)
     setDuration(0)
+    setDragging(false)
     if (audioRef.current) { audioRef.current.pause(); audioRef.current.src = '' }
     if (blobUrlRef.current) { URL.revokeObjectURL(blobUrlRef.current); blobUrlRef.current = null }
   }, [track?.id])

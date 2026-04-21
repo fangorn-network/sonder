@@ -25,8 +25,10 @@ export function LibraryView({ tracks, loading, onPlay, currentTrack }: LibraryVi
   const { user } = usePrivy()
   const { ids, removeFromLibrary } = useFirebase(user?.id ?? null)
 
-  const owned = useMemo(() =>
-    tracks.filter(t => ids.includes(t.id)),
+  const owned = useMemo(() => {
+    // console.log(tracks)
+    return tracks.filter(t => ids.includes(t.id))
+  },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [tracks, ids.join(',')]
   )

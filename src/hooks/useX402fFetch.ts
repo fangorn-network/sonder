@@ -1,7 +1,7 @@
 import { FangornX402Middleware } from '@fangorn-network/fetch'
 import { FangornConfig } from '@fangorn-network/sdk'
 import { useWallets } from '@privy-io/react-auth'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createWalletClient, custom, keccak256, toBytes, type Hex } from 'viem'
 
 
@@ -13,13 +13,33 @@ const MIDDLEWARE_CONFIG = {
     domain: window.location.host,
 }
 
+let pending = false
+let initialized = false
+
 export function useFangornMiddleware() {
     const { wallets } = useWallets()
     const [middleware, setMiddleware] = useState<FangornX402Middleware | null>(null)
+		const currentAddress = useRef<string | null>(null)
+		const wallet = wallets[0]
+		const address = wallet?.address
 
     useEffect(() => {
-        const wallet = wallets[0]
-        if (!wallet) { setMiddleware(null); return }
+        if (!address) {
+					console.log('address was null')
+            currentAddress.current = null
+						pending = false
+						initialized = false
+        }
+    }, [address])
+    useEffect(() => {
+
+        if (!wallet || !address) { return }
+				if (currentAddress.current === address) return
+				if (initialized || pending) return
+				
+				pending = true
+				
+				currentAddress.current = address
 
         wallet.getEthereumProvider()
             .then(async provider => {
@@ -49,6 +69,8 @@ export function useFangornMiddleware() {
                 }
 
                 // const identity = new Identity(identitySecret)
+								pending = false
+								initialized = true
 
                 return FangornX402Middleware.create({
                     walletClient: walletClient as any,
@@ -58,7 +80,7 @@ export function useFangornMiddleware() {
             })
             .then(setMiddleware)
             .catch(console.error)
-    }, [wallets[0]?.address])
+    }, [address])
 
     return middleware
 }

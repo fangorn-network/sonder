@@ -11,6 +11,9 @@ const firebaseConfig = {
   measurementId: import.meta.env.VITE_MEASUREMENT_ID
 }
 
+
+console.log('we have the firebase config ' + JSON.stringify(firebaseConfig))
+
 const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig)
 
 export const db = getFirestore(app)

@@ -46,6 +46,7 @@ docker build -f ./Dockerfile \
   --build-arg VITE_FIREBASE_MESSAGING_SENDER_ID=$VITE_FIREBASE_MESSAGING_SENDER_ID \
   --build-arg VITE_FIREBASE_APP_ID=$VITE_FIREBASE_APP_ID \
   --build-arg VITE_MEASUREMENT_ID=$VITE_MEASUREMENT_ID \
+  --build-arg VITE_PUBLIC_AGENT_URL=$VITE_PUBLIC_AGENT_URL \
   -t us-central1-docker.pkg.dev/lucky-lead-489114-d7/fangorn-network/music:latest .
 
 # upload to repo

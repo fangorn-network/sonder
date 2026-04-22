@@ -21,7 +21,6 @@ export default function App() {
   const { ids: libraryIds } = useFirebase(user?.id ?? null)
 
   const handlePlay = useCallback((track: Track) => {
-    console.log('the track ' + track.id)
     setCurrentTrack({ ...track, owned: libraryIds.includes(track.id) })
   }, [libraryIds])
 

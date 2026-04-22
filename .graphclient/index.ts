@@ -2461,11 +2461,11 @@ const merger = new(BareMerger as any)({
         store: rootStore.child('bareMerger')
       })
 const documentHashMap = {
-        "3a68c90a94a1435858697833f1601ab0bf27b808f46db8ab8f95bac4ffe796fc": GetTracksDocument,
-"3a68c90a94a1435858697833f1601ab0bf27b808f46db8ab8f95bac4ffe796fc": SearchTracksDocument,
-"3a68c90a94a1435858697833f1601ab0bf27b808f46db8ab8f95bac4ffe796fc": GetTracksByOwnerDocument,
-"3a68c90a94a1435858697833f1601ab0bf27b808f46db8ab8f95bac4ffe796fc": GetTrackDocument,
-"3a68c90a94a1435858697833f1601ab0bf27b808f46db8ab8f95bac4ffe796fc": GetTrackByOwnerAndTitleDocument
+        "993adf13c1e937751f4fc42ab706ed7236970d978126c7200ce6b8528ab8ddd2": GetTracksDocument,
+"993adf13c1e937751f4fc42ab706ed7236970d978126c7200ce6b8528ab8ddd2": SearchTracksDocument,
+"993adf13c1e937751f4fc42ab706ed7236970d978126c7200ce6b8528ab8ddd2": GetTracksByOwnerDocument,
+"993adf13c1e937751f4fc42ab706ed7236970d978126c7200ce6b8528ab8ddd2": GetTrackDocument,
+"993adf13c1e937751f4fc42ab706ed7236970d978126c7200ce6b8528ab8ddd2": GetTrackByOwnerAndTitleDocument
       }
 additionalEnvelopPlugins.push(usePersistedOperations({
         getPersistedOperation(key) {
@@ -2492,35 +2492,35 @@ additionalEnvelopPlugins.push(usePersistedOperations({
           return printWithCache(GetTracksDocument);
         },
         location: 'GetTracksDocument.graphql',
-        sha256Hash: '3a68c90a94a1435858697833f1601ab0bf27b808f46db8ab8f95bac4ffe796fc'
+        sha256Hash: '993adf13c1e937751f4fc42ab706ed7236970d978126c7200ce6b8528ab8ddd2'
       },{
         document: SearchTracksDocument,
         get rawSDL() {
           return printWithCache(SearchTracksDocument);
         },
         location: 'SearchTracksDocument.graphql',
-        sha256Hash: '3a68c90a94a1435858697833f1601ab0bf27b808f46db8ab8f95bac4ffe796fc'
+        sha256Hash: '993adf13c1e937751f4fc42ab706ed7236970d978126c7200ce6b8528ab8ddd2'
       },{
         document: GetTracksByOwnerDocument,
         get rawSDL() {
           return printWithCache(GetTracksByOwnerDocument);
         },
         location: 'GetTracksByOwnerDocument.graphql',
-        sha256Hash: '3a68c90a94a1435858697833f1601ab0bf27b808f46db8ab8f95bac4ffe796fc'
+        sha256Hash: '993adf13c1e937751f4fc42ab706ed7236970d978126c7200ce6b8528ab8ddd2'
       },{
         document: GetTrackDocument,
         get rawSDL() {
           return printWithCache(GetTrackDocument);
         },
         location: 'GetTrackDocument.graphql',
-        sha256Hash: '3a68c90a94a1435858697833f1601ab0bf27b808f46db8ab8f95bac4ffe796fc'
+        sha256Hash: '993adf13c1e937751f4fc42ab706ed7236970d978126c7200ce6b8528ab8ddd2'
       },{
         document: GetTrackByOwnerAndTitleDocument,
         get rawSDL() {
           return printWithCache(GetTrackByOwnerAndTitleDocument);
         },
         location: 'GetTrackByOwnerAndTitleDocument.graphql',
-        sha256Hash: '3a68c90a94a1435858697833f1601ab0bf27b808f46db8ab8f95bac4ffe796fc'
+        sha256Hash: '993adf13c1e937751f4fc42ab706ed7236970d978126c7200ce6b8528ab8ddd2'
       }
     ];
     },
@@ -2676,7 +2676,7 @@ export const GetTracksDocument = gql`
     skip: $skip
     orderBy: lastUpdated
     orderDirection: desc
-    where: {schemaId: "0xf18e92dce6496a423a48614fac9fe93c549aa51c1a663f5cbe2233b0ea18081d"}
+    where: {schemaId: "0x7a69b1c49f16834707fe1d8bcc69ec485ea1b3c7bc68dd3ab81b05ec539952cd"}
   ) {
     ...TrackFields
     manifest {
@@ -2700,7 +2700,7 @@ export const GetTracksDocument = gql`
 export const SearchTracksDocument = gql`
     query SearchTracks($search: String!) {
   manifestStates(
-    where: {schemaId: "0xf18e92dce6496a423a48614fac9fe93c549aa51c1a663f5cbe2233b0ea18081d"}
+    where: {schemaId: "0x7a69b1c49f16834707fe1d8bcc69ec485ea1b3c7bc68dd3ab81b05ec539952cd"}
     first: 100
   ) {
     ...TrackFields
@@ -2725,7 +2725,7 @@ export const SearchTracksDocument = gql`
 export const GetTracksByOwnerDocument = gql`
     query GetTracksByOwner($owner: Bytes!, $first: Int!, $skip: Int!) {
   manifestStates(
-    where: {owner: $owner, schemaId: "0xf18e92dce6496a423a48614fac9fe93c549aa51c1a663f5cbe2233b0ea18081d"}
+    where: {owner: $owner, schemaId: "0x7a69b1c49f16834707fe1d8bcc69ec485ea1b3c7bc68dd3ab81b05ec539952cd"}
     first: $first
     skip: $skip
   ) {
@@ -2773,7 +2773,7 @@ export const GetTrackDocument = gql`
 export const GetTrackByOwnerAndTitleDocument = gql`
     query GetTrackByOwnerAndTitle($owner: Bytes!, $title: String!) {
   manifestStates(
-    where: {owner: $owner, schemaId: "0xf18e92dce6496a423a48614fac9fe93c549aa51c1a663f5cbe2233b0ea18081d"}
+    where: {owner: $owner, schemaId: "0x7a69b1c49f16834707fe1d8bcc69ec485ea1b3c7bc68dd3ab81b05ec539952cd"}
     first: 10
   ) {
     ...TrackFields

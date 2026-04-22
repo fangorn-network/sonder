@@ -6,9 +6,9 @@
 
 | Item     | Value                                                              |
 | -------- | ------------------------------------------------------------------ |
-| Schema   | `fangorn.music.demo.v1`                                            |
-| SchemaId | 0xf18e92dce6496a423a48614fac9fe93c549aa51c1a663f5cbe2233b0ea18081d |
-| CID      | bafkreiccuwr3jxoux7uzay742tgh3qzjekqp2gpk7fo4egou42zo6majvy        |
+| Schema   | `fangorn.music.test.v0`                                            |
+| SchemaId | 0x7a69b1c49f16834707fe1d8bcc69ec485ea1b3c7bc68dd3ab81b05ec539952cd |
+| CID      | bafkreigwlsaxxbzoadhdfevy24hwtfjwrmcou23plg2lqz3rsb5uc3m3m4        |
 
 ### Graph Codegen
 
@@ -46,6 +46,7 @@ docker build -f ./Dockerfile \
   --build-arg VITE_FIREBASE_MESSAGING_SENDER_ID=$VITE_FIREBASE_MESSAGING_SENDER_ID \
   --build-arg VITE_FIREBASE_APP_ID=$VITE_FIREBASE_APP_ID \
   --build-arg VITE_MEASUREMENT_ID=$VITE_MEASUREMENT_ID \
+  --build-arg VITE_PUBLIC_AGENT_URL=$VITE_PUBLIC_AGENT_URL \
   -t us-central1-docker.pkg.dev/lucky-lead-489114-d7/fangorn-network/music:latest .
 
 # upload to repo

@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from 'react'
-// import { db } from '@/lib/firebase' // adjust to your config path
 import {
   collection,
   doc,

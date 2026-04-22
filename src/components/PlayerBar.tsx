@@ -93,7 +93,6 @@ export function PlayerBar({ track, tracks, onTrackChange }: PlayerBarProps) {
   const doFetch = useCallback(async () => {
     if (!middleware || !track) return
 
-    console.log('ok ' + (!middleware === false) + !track)
     setState('loading')
     setError(null)
 
@@ -109,7 +108,6 @@ export function PlayerBar({ track, tracks, onTrackChange }: PlayerBarProps) {
         ...(nullifier ? { nullifierHash: nullifier } : {}),
       })
       if (!result.success) {
-        console.log('wtf')
         setState('error')
         setError((result as any).error ?? 'Fetch failed')
         return

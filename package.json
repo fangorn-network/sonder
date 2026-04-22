@@ -12,8 +12,8 @@
     "graphclient:clean": "graphclient clean"
   },
   "dependencies": {
-    "@fangorn-network/fetch": "2026.04.20",
-    "@fangorn-network/sdk": "2026.04.15",
+    "@fangorn-network/fetch": "2026.04.22-1",
+    "@fangorn-network/sdk": "2026.04.22-1",
     "@graphql-mesh/cache-localforage": "^0.105.33",
     "@graphql-mesh/cross-helpers": "^0.4.12",
     "@graphql-mesh/graphql": "^0.104.34",

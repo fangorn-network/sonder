@@ -11,24 +11,25 @@ import { createPortal } from 'react-dom'
 import { LibraryView } from './views/LibraryView'
 import { usePrivy } from '@privy-io/react-auth'
 import { useFirebase } from './hooks/useFirebase'
+import Landing from './views/LandingView'
 
 export default function App() {
+  const { ready, authenticated, user } = usePrivy()
+
+  // All hooks must run on every render regardless of auth state, so they
+  // stay above any early returns. useGraph + useFirebase are cheap when
+  // unauthenticated (empty library, public subgraph reads).
   const [view, setView] = useState<ViewName>('Discover')
   const [currentTrack, setCurrentTrack] = useState<Track | null>(null)
   const { tracks, loading, loadingMore, error, hasMore, loadMore, search, setSearch } = useGraph()
-
-  const { user } = usePrivy();
   const { ids: libraryIds } = useFirebase(user?.id ?? null)
 
   const handlePlay = useCallback((track: Track) => {
-    console.log('the track ' + track.id)
     setCurrentTrack({ ...track, owned: libraryIds.includes(track.id) })
   }, [libraryIds])
 
-  // add inside the component, near the top with other state
   const [showScrollTop, setShowScrollTop] = useState(false)
 
-  // add this effect
   useEffect(() => {
     const onScroll = () => setShowScrollTop(window.scrollY > 400)
     window.addEventListener('scroll', onScroll, { passive: true })
@@ -39,7 +40,21 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }, [])
 
+  // ─── Privy rehydration gate ─────────────────────────────────────────
+  // While Privy reads its refresh-token cookie (~100-300ms on page load),
+  // render a minimal splash. Without this, the app paints the logged-out
+  // Landing page for a moment before flipping to the authed shell, which
+  // feels like "I got logged out again."
+  if (!ready) {
+    return <BootSplash />
+  }
 
+  // ─── Unauthenticated: show the landing page ─────────────────────────
+  if (!authenticated) {
+    return <Landing />
+  }
+
+  // ─── Authenticated app shell (your original markup, unchanged) ──────
   return (
     <div className="app">
       <header className="header">
@@ -48,9 +63,7 @@ export default function App() {
         </div>
         <ConnectWallet />
       </header>
-
       <Nav view={view} setView={setView} />
-
       <main className="main">
         {view === 'Discover' && (
           <BrowseView
@@ -87,6 +100,53 @@ export default function App() {
         </button>,
         document.body
       )}
+    </div>
+  )
+}
+
+// ────────────────────────────────────────────────────────────────────────
+// Minimal splash shown during Privy rehydration. Matches the Landing page
+// background so there's no color flash on page load.
+// ────────────────────────────────────────────────────────────────────────
+
+function BootSplash() {
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: '#0a0f0a',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      <div
+        style={{
+          color: '#a3c9a8',
+          animation: 'fangornBootPulse 1.4s ease-in-out infinite',
+        }}
+      >
+        <svg viewBox="0 0 40 40" width="32" height="32" aria-hidden="true">
+          <path
+            d="M20 4 Q 32 14, 28 26 Q 24 34, 20 36 Q 16 34, 12 26 Q 8 14, 20 4 Z"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1"
+          />
+          <path d="M20 6 L 20 34" stroke="currentColor" strokeWidth="0.5" opacity="0.6" />
+          <path d="M20 14 L 15 18 M20 18 L 14 22 M20 22 L 15 26"
+            stroke="currentColor" strokeWidth="0.5" opacity="0.5" />
+          <path d="M20 14 L 25 18 M20 18 L 26 22 M20 22 L 25 26"
+            stroke="currentColor" strokeWidth="0.5" opacity="0.5" />
+        </svg>
+      </div>
+      <style>{`
+        @keyframes fangornBootPulse {
+          0%, 100% { opacity: 0.3; transform: scale(1); }
+          50% { opacity: 1; transform: scale(1.08); }
+        }
+      `}</style>
     </div>
   )
 }

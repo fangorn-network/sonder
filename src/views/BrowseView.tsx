@@ -321,7 +321,7 @@ export function BrowseView({
                   </div>
 
                   {/* buy / owned state */}
-                  {!isFree && !owned && (
+                  {!owned && (
                     <button
                       className="tg-buy"
                       disabled={isBuying}

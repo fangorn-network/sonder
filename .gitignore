@@ -26,3 +26,5 @@ node_modules
 
 music-data/data
 deploy.sh
+
+.env

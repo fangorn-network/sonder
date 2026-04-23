@@ -9,11 +9,11 @@ importers:
   .:
     dependencies:
       '@fangorn-network/fetch':
-        specifier: 2026.04.22-1
-        version: 2026.4.22-1(@types/snarkjs@0.7.9)(bufferutil@4.1.0)(encoding@0.1.13)(graphql@16.13.2)(react-dom@19.2.5(react@19.2.5))(react-native@0.85.1(@babel/core@7.29.0)(@types/react@19.2.14)(bufferutil@4.1.0)(react@19.2.5)(utf-8-validate@5.0.10))(react@19.2.5)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.6)
+        specifier: 2026.04.23
+        version: 2026.4.23(@types/snarkjs@0.7.9)(bufferutil@4.1.0)(encoding@0.1.13)(graphql@16.13.2)(react-dom@19.2.5(react@19.2.5))(react-native@0.85.1(@babel/core@7.29.0)(@types/react@19.2.14)(bufferutil@4.1.0)(react@19.2.5)(utf-8-validate@5.0.10))(react@19.2.5)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.6)
       '@fangorn-network/sdk':
-        specifier: 2026.04.22-1
-        version: 2026.4.22-1(@types/snarkjs@0.7.9)(bufferutil@4.1.0)(encoding@0.1.13)(graphql@16.13.2)(react-dom@19.2.5(react@19.2.5))(react-native@0.85.1(@babel/core@7.29.0)(@types/react@19.2.14)(bufferutil@4.1.0)(react@19.2.5)(utf-8-validate@5.0.10))(react@19.2.5)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.6)
+        specifier: 2026.04.23
+        version: 2026.4.23(@types/snarkjs@0.7.9)(bufferutil@4.1.0)(encoding@0.1.13)(graphql@16.13.2)(react-dom@19.2.5(react@19.2.5))(react-native@0.85.1(@babel/core@7.29.0)(@types/react@19.2.14)(bufferutil@4.1.0)(react@19.2.5)(utf-8-validate@5.0.10))(react@19.2.5)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.6)
       '@graphql-mesh/cache-localforage':
         specifier: ^0.105.33
         version: 0.105.35(graphql@16.13.2)
@@ -763,11 +763,11 @@ packages:
     resolution: {integrity: sha512-zQ0IqbdX8FZ9aw11vP+dZkKDkS+kgIvQPHnSAXzP9pLu+Rfu3D3XEeLbicvoXJTYnhZiPmsZUxgdzXwNKxRPbA==}
     engines: {node: '>=14'}
 
-  '@fangorn-network/fetch@2026.4.22-1':
-    resolution: {integrity: sha512-6fz5PF/0uEQ4NgYO2ubp6tNHWs38iy6J984LgfZtE94gmIYzJl2GGLNr7bx4VTYoRNdiG7eMBtrAXrLtMxmYkg==}
+  '@fangorn-network/fetch@2026.4.23':
+    resolution: {integrity: sha512-bLyd1Wa5o/RG07/zGUE+5xDvYDZb2klGj9DM3a/uXtp6GeUuGu0HoIMYBtaS9+TsAx2d3I4NxMDkPiyd5tjriQ==}
 
-  '@fangorn-network/sdk@2026.4.22-1':
-    resolution: {integrity: sha512-tXuuAw5bmB4tq4tAB3BHWFCPK1W0fhJE0gknceob+vQa88RG9ErfvRMsKpore8uP68eEtuwTveOZ5NZHY6y7IQ==}
+  '@fangorn-network/sdk@2026.4.23':
+    resolution: {integrity: sha512-wbtQt42sCnOfJnjaqE/X/nlnwkXf2dZX3R6twfWSUVBjujl7f8kZQAT+Bcbw+pFbZDtXtRnJzEQeDVHbueB6tg==}
     engines: {node: '>=20.19.0'}
     hasBin: true
 
@@ -9028,9 +9028,9 @@ snapshots:
       ethereum-cryptography: 2.2.1
       micro-ftch: 0.3.1
 
-  '@fangorn-network/fetch@2026.4.22-1(@types/snarkjs@0.7.9)(bufferutil@4.1.0)(encoding@0.1.13)(graphql@16.13.2)(react-dom@19.2.5(react@19.2.5))(react-native@0.85.1(@babel/core@7.29.0)(@types/react@19.2.14)(bufferutil@4.1.0)(react@19.2.5)(utf-8-validate@5.0.10))(react@19.2.5)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.6)':
+  '@fangorn-network/fetch@2026.4.23(@types/snarkjs@0.7.9)(bufferutil@4.1.0)(encoding@0.1.13)(graphql@16.13.2)(react-dom@19.2.5(react@19.2.5))(react-native@0.85.1(@babel/core@7.29.0)(@types/react@19.2.14)(bufferutil@4.1.0)(react@19.2.5)(utf-8-validate@5.0.10))(react@19.2.5)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.6)':
     dependencies:
-      '@fangorn-network/sdk': 2026.4.22-1(@types/snarkjs@0.7.9)(bufferutil@4.1.0)(encoding@0.1.13)(graphql@16.13.2)(react-dom@19.2.5(react@19.2.5))(react-native@0.85.1(@babel/core@7.29.0)(@types/react@19.2.14)(bufferutil@4.1.0)(react@19.2.5)(utf-8-validate@5.0.10))(react@19.2.5)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.6)
+      '@fangorn-network/sdk': 2026.4.23(@types/snarkjs@0.7.9)(bufferutil@4.1.0)(encoding@0.1.13)(graphql@16.13.2)(react-dom@19.2.5(react@19.2.5))(react-native@0.85.1(@babel/core@7.29.0)(@types/react@19.2.14)(bufferutil@4.1.0)(react@19.2.5)(utf-8-validate@5.0.10))(react@19.2.5)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.6)
       '@semaphore-protocol/identity': 4.14.2
       '@x402/core': 2.10.0
       '@x402/evm': 2.10.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)
@@ -9053,7 +9053,7 @@ snapshots:
       - utf-8-validate
       - zod
 
-  '@fangorn-network/sdk@2026.4.22-1(@types/snarkjs@0.7.9)(bufferutil@4.1.0)(encoding@0.1.13)(graphql@16.13.2)(react-dom@19.2.5(react@19.2.5))(react-native@0.85.1(@babel/core@7.29.0)(@types/react@19.2.14)(bufferutil@4.1.0)(react@19.2.5)(utf-8-validate@5.0.10))(react@19.2.5)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.6)':
+  '@fangorn-network/sdk@2026.4.23(@types/snarkjs@0.7.9)(bufferutil@4.1.0)(encoding@0.1.13)(graphql@16.13.2)(react-dom@19.2.5(react@19.2.5))(react-native@0.85.1(@babel/core@7.29.0)(@types/react@19.2.14)(bufferutil@4.1.0)(react@19.2.5)(utf-8-validate@5.0.10))(react@19.2.5)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.6)':
     dependencies:
       '@a2a-js/sdk': 0.3.13
       '@clack/prompts': 1.2.0

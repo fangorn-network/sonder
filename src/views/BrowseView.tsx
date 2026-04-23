@@ -117,7 +117,10 @@ export function BrowseView({
         baseUrl: '/facilitator'
       })
 
-      if (!result.data) throw new Error('No data returned')
+      if (!result.data) {
+        console.log(JSON.stringify(result))
+        throw new Error('No data returned')
+      }
 
       const bytes = result.data instanceof Uint8Array
         ? result.data
@@ -125,7 +128,7 @@ export function BrowseView({
 
       // todo: check result status
       // write to library
-      console.log('writing to library')
+      console.log('writing to library: ' + track.id + ' with nullifier ' + result.paymentResponse)
       // payment response = nullifier
       addToLibrary(track.id, result.paymentResponse as string)
       setJustBought(track.id)

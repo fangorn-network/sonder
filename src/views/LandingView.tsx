@@ -117,7 +117,7 @@ function RootCanvas() {
           strokeLinecap="round"
           opacity={b.o}
           style={{
-            animation: `rootGrow 2.4s ease-out ${i * 0.008}s both`,
+            // animation: `rootGrow 2.4s ease-out ${i * 0.008}s both`,
           }}
         />
       ))}
@@ -195,7 +195,7 @@ export default function Landing() {
       <nav style={styles.nav}>
         <div style={styles.navInner}>
           <a href="/" style={styles.logo}>
-            <LeafGlyph size={22} />
+            {/* <LeafGlyph size={22} /> */}
             <span>fangorn<span style={{ opacity: 0.5 }}>.music</span></span>
           </a>
           <div style={styles.navLinks}>
@@ -223,9 +223,9 @@ export default function Landing() {
         <div style={styles.heroContent}>
 
           <h1 style={styles.h1}>
-            Your catalog.
+            Your Music.
             <br />
-            <em style={styles.h1Em}>Your rules. Your keys.</em>
+            <em style={styles.h1Em}>Your rules.</em>
           </h1>
 
           <p style={styles.heroLede}>
@@ -237,19 +237,19 @@ export default function Landing() {
 
           <div style={styles.heroCtas}>
             <button
-              onClick={() => (window.location.href = '/browse')}
+              onClick={handleEnterApp}
               style={{ ...styles.btn, ...styles.btnPrimary }}
             >
               <span>Start listening</span>
               <span style={styles.btnArrow}>→</span>
             </button>
-            <button
+            {/* <button
               onClick={handleEnterApp}
               style={{ ...styles.btn, ...styles.btnSecondary }}
               disabled={!ready}
             >
               {authenticated ? 'Open app' : 'Connect wallet'}
-            </button>
+            </button> */}
             <a href="#artists" style={{ ...styles.btn, ...styles.btnGhost }}>
               Publish your music
             </a>
@@ -258,7 +258,7 @@ export default function Landing() {
           <div style={styles.heroMeta}>
             <MetaStat label="You keep" value="100%" />
             <MetaStat label="Platform cut" value="0%" />
-            <MetaStat label="Settlement" value="~2s" />
+            <MetaStat label="Settlement" value="~500ms" />
             <MetaStat label="Ownership" value="yours" />
           </div>
         </div>
@@ -370,24 +370,34 @@ export default function Landing() {
                 onClick={() => (window.location.href = '/publish')}
                 style={{ ...styles.btn, ...styles.btnPrimary, marginTop: '2rem' }}
               >
-                <span>Start publishing</span>
+                <span>Start publishing [Coming Soon]</span>
                 <span style={styles.btnArrow}>→</span>
               </button>
             </div>
             <aside style={styles.artistCard}>
               <div style={styles.artistCardHeader}>
                 <span style={styles.pulseDot} />
-                <span style={styles.mono}>schema.json</span>
+                <span style={styles.mono}>data.json</span>
               </div>
-              <pre style={styles.codeBlock}>{`{
-  "track": "midnight_roots.flac",
-  "price_usdc": 0.50,
-  "splits": [
-    { "to": "0xArt...ist",     "bps": 8500 },
-    { "to": "0xPro...ducer",   "bps": 1500 }
-  ],
-  "settlement": "sonder_v1"
-}`}</pre>
+              <pre style={styles.codeBlock}>{`[
+  {
+    "name": "atom-heart-mother",
+    "fields": {
+      "title": "Atom Heart Mother",
+      "artist": "Pink Floyd",
+      "album": "1970-04-30: Ohm Suite Ohm - Fillmore West, San Francisco",
+      "trackNumber": "1",
+      "genre": "Unknown",
+      "duration": "0",
+      "image": "",
+      "audio": {
+        "@type": "handle",
+        "uri": "r2://music/01.-atom-heart-mother/[1970-04-29] Ohm Suite Ohm - Fillmore West, San Francisco/01. Atom Heart Mother.mp3",
+        "workerUrl": "https://fangorn-access-worker.quickbeam.workers.dev"
+      }
+    }
+  }
+]`}</pre>
               <div style={styles.artistCardFoot}>
                 <span style={styles.mono}>registered on-chain · enforced by the protocol</span>
               </div>
@@ -450,13 +460,15 @@ export default function Landing() {
               ]} />
               <FooterCol title="Protocol" links={[
                 ['Fangorn Network', 'https://fangorn.network'],
-                ['Litepaper', '/litepaper.pdf'],
+                // ['Litepaper', '/litepaper.pdf'],
                 ['GitHub', 'https://github.com/fangorn-network'],
               ]} />
               <FooterCol title="Ecosystem" links={[
                 ['Arbitrum', 'https://arbitrum.io'],
-                ['SONDER', '/sonder'],
-                ['MCP server', '/mcp'],
+                ['x402f', 'https://github.com/fangorn-network/x402f'],
+                ['MCP server', 'https://github.com/fangorn-network/fangorn-mcp'],
+                ['Subgraphs', 'https://github.com/fangorn-network/subgraphs'],
+                ['Agent', 'https://github.com/fangorn-network/fangorn-agent'],
               ]} />
             </div>
           </div>
@@ -788,14 +800,14 @@ const styles: Record<string, React.CSSProperties> = {
     letterSpacing: '0.05em',
     textTransform: 'uppercase',
     marginBottom: '2.5rem',
-    animation: 'fadeUp 0.8s ease-out 0.2s both',
+    // animation: 'fadeUp 0.8s ease-out 0.2s both',
   },
   eyebrowDot: {
     width: '6px',
     height: '6px',
     borderRadius: '50%',
     background: colors.moss,
-    animation: 'pulse 2s ease-in-out infinite',
+    // animation: 'pulse 2s ease-in-out infinite',
   },
   h1: {
     fontFamily: '"Fraunces", serif',
@@ -805,13 +817,14 @@ const styles: Record<string, React.CSSProperties> = {
     letterSpacing: '-0.03em',
     margin: 0,
     marginBottom: '2rem',
-    animation: 'fadeUp 0.9s ease-out 0.3s both',
+    // // animation: 'fadeUp 0.9s ease-out 0.3s both',
   },
   h1Em: {
     fontStyle: 'italic',
     fontWeight: 400,
     color: colors.moss,
     fontVariationSettings: '"SOFT" 100, "WONK" 1',
+    fontFamily: 'Fraunces',
   },
   heroLede: {
     fontSize: 'clamp(1.1rem, 1.6vw, 1.35rem)',
@@ -820,14 +833,14 @@ const styles: Record<string, React.CSSProperties> = {
     maxWidth: '640px',
     margin: '0 0 3rem',
     fontWeight: 400,
-    animation: 'fadeUp 1s ease-out 0.45s both',
+    // animation: 'fadeUp 1s ease-out 0.45s both',
   },
   heroCtas: {
     display: 'flex',
     flexWrap: 'wrap',
     gap: '1rem',
     marginBottom: '5rem',
-    animation: 'fadeUp 1.1s ease-out 0.6s both',
+    // animation: 'fadeUp 1.1s ease-out 0.6s both',
   },
   btn: {
     display: 'inline-flex',
@@ -868,7 +881,7 @@ const styles: Record<string, React.CSSProperties> = {
     paddingTop: '2rem',
     borderTop: `1px solid ${colors.border}`,
     maxWidth: '720px',
-    animation: 'fadeUp 1.2s ease-out 0.75s both',
+    // animation: 'fadeUp 1.2s ease-out 0.75s both',
   },
   metaStat: {},
   metaValue: {
@@ -1099,7 +1112,7 @@ const styles: Record<string, React.CSSProperties> = {
     height: '8px',
     borderRadius: '50%',
     background: colors.accent,
-    animation: 'pulse 2s ease-in-out infinite',
+    // animation: 'pulse 2s ease-in-out infinite',
   },
   mono: {
     fontFamily: '"JetBrains Mono", monospace',

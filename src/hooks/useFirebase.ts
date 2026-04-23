@@ -42,8 +42,8 @@ export function useFirebase(userId: string | null) {
     async (id: string, nullifier: string) => {
       if (!userId) return
       const ref = doc(db, 'users', userId, 'library', id)
-
-      // console.log('got the ref)')
+      
+      console.log('got the ref)')
       await setDoc(ref, { id, nullifier })
     },
     [userId]

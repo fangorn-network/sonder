@@ -221,22 +221,18 @@ export default function Landing() {
       <header ref={heroRef} style={styles.hero}>
         <RootCanvas />
         <div style={styles.heroContent}>
-          {/* <div style={styles.eyebrow}>
-            <span style={styles.eyebrowDot} />
-            <span>live on arbitrum · sonder payments · zk settlement</span>
-          </div> */}
 
           <h1 style={styles.h1}>
-            Music that answers
+            Your catalog.
             <br />
-            <em style={styles.h1Em}>only to its makers.</em>
+            <em style={styles.h1Em}>Your rules. Your keys.</em>
           </h1>
 
           <p style={styles.heroLede}>
-            Fangorn Music is a marketplace where publishers define who can listen,
-            for how much, and on what terms — enforced by cryptography, not by
-            platform policy. No label intermediaries. No algorithmic gatekeepers.
-            Just roots.
+            Fangorn Music is built for artists who are done renting their
+            audience from a platform. Publish on your terms, set your own prices
+            and splits, and keep what you earn. Access is enforced by
+            cryptography, not by a company that can change its mind.
           </p>
 
           <div style={styles.heroCtas}>
@@ -244,7 +240,7 @@ export default function Landing() {
               onClick={() => (window.location.href = '/browse')}
               style={{ ...styles.btn, ...styles.btnPrimary }}
             >
-              <span>Listen now</span>
+              <span>Start listening</span>
               <span style={styles.btnArrow}>→</span>
             </button>
             <button
@@ -260,10 +256,10 @@ export default function Landing() {
           </div>
 
           <div style={styles.heroMeta}>
-            <MetaStat label="Tracks published" value="—" />
-            <MetaStat label="Artists onboarded" value="—" />
-            <MetaStat label="Settlement latency" value="~2s" />
+            <MetaStat label="You keep" value="100%" />
             <MetaStat label="Platform cut" value="0%" />
+            <MetaStat label="Settlement" value="~2s" />
+            <MetaStat label="Ownership" value="yours" />
           </div>
         </div>
       </header>
@@ -273,23 +269,30 @@ export default function Landing() {
         <div style={styles.container}>
           <div style={styles.manifestoGrid}>
             <aside style={styles.manifestoAside}>
-              <span style={styles.sectionLabel}>§ 01 · thesis</span>
+              <span style={styles.sectionLabel}>§ 01 · the thesis</span>
             </aside>
             <div style={styles.manifestoBody}>
               <p style={styles.manifestoLead}>
-                For a century, recorded music has been <em>about</em> the artist
-                but <em>belonged</em> to the distributor. Fangorn inverts that.
+                The platform era is ending. What replaces it should belong to
+                the people making the work, not the companies renting it back
+                to them.
               </p>
               <p style={styles.manifestoProse}>
-                Access control lives in the contract, not in the client. Payment
-                clears in two seconds through <code style={styles.code}>SONDER</code>,
-                our ERC-3009 + Semaphore settlement protocol. Proof of listening
-                is a zero-knowledge nullifier — the artist knows the track was
-                played, and that's the only thing they know.
+                For two decades, platforms built their moat on one mechanism:
+                controlling who could access what. Your followers live on their
+                servers. Your catalog runs on their licenses. Your audience is
+                rented, never owned. That arrangement was never eternal. It was
+                the equilibrium that held while platforms controlled the
+                interface between creator and listener.
               </p>
               <p style={styles.manifestoProse}>
-                This is not a streaming service with a blockchain bolted on.
-                It's a reference implementation of a different power structure.
+                Fangorn is a protocol that moves access control out of platform
+                policy and into code. Fangorn Music is a reference client that
+                speaks it. What a record label tried to promise through
+                contracts, Fangorn delivers through cryptography: ownership
+                that cannot be revoked, splits that execute on payment, and
+                infrastructure that works whether or not any one company stays
+                alive to run it.
               </p>
             </div>
           </div>
@@ -301,7 +304,7 @@ export default function Landing() {
       {/* ═══════════════════════════════════════════ FEATURES */}
       <section id="features" style={styles.section}>
         <div style={styles.container}>
-          <SectionHeader label="§ 02 · architecture" title="Four primitives. One protocol." />
+          <SectionHeader label="§ 02 · what you get" title="Four things a platform cannot promise." />
           <div style={styles.featureGrid}>
             {features.map((f, i) => (
               <article key={i} style={styles.featureCard}>
@@ -322,7 +325,7 @@ export default function Landing() {
       {/* ═══════════════════════════════════════════ HOW IT WORKS */}
       <section id="how" style={styles.section}>
         <div style={styles.container}>
-          <SectionHeader label="§ 03 · flow" title="From wallet to waveform in three steps." />
+          <SectionHeader label="§ 03 · how it works" title="Publish once. The protocol handles the rest." />
           <div style={styles.stepList}>
             {steps.map((s, i) => (
               <div key={i} style={styles.step}>
@@ -345,14 +348,15 @@ export default function Landing() {
       {/* ═══════════════════════════════════════════ FOR ARTISTS */}
       <section id="artists" style={styles.section}>
         <div style={styles.container}>
-          <SectionHeader label="§ 04 · publishing" title="Your catalog. Your rules." />
+          <SectionHeader label="§ 04 · for artists" title="Built for the ones who are done asking permission." />
           <div style={styles.artistGrid}>
             <div style={styles.artistCopy}>
               <p style={styles.artistLead}>
-                Fangorn treats your catalog as a first-class cryptographic
-                object. You define the schema — pricing tiers, geo-rules,
-                subscription windows, collaborator splits — and the protocol
-                enforces it across every listener, every stream, every payment.
+                A record label tries to promise ownership, transparency, and a
+                fair split. Those promises are only as durable as the contract
+                behind them, and the company willing to honor it. Fangorn makes
+                the same promises in code. That means the promises outlive the
+                company that made them.
               </p>
               <ul style={styles.checklist}>
                 {artistPoints.map((p, i) => (
@@ -373,23 +377,19 @@ export default function Landing() {
             <aside style={styles.artistCard}>
               <div style={styles.artistCardHeader}>
                 <span style={styles.pulseDot} />
-                <span style={styles.mono}>schema.publish()</span>
+                <span style={styles.mono}>schema.json</span>
               </div>
               <pre style={styles.codeBlock}>{`{
   "track": "midnight_roots.flac",
-  "price": {
-    "tier_1": { usdc: 0.50, plays: 1 },
-    "tier_2": { usdc: 3.00, plays: "∞" }
-  },
+  "price_usdc": 0.50,
   "splits": [
-    { to: "0xArt...ist", bps: 8500 },
-    { to: "0xPro...ducer", bps: 1500 }
+    { "to": "0xArt...ist",     "bps": 8500 },
+    { "to": "0xPro...ducer",   "bps": 1500 }
   ],
-  "geo_allow": "*",
-  "settlement": "SONDER_v1"
+  "settlement": "sonder_v1"
 }`}</pre>
               <div style={styles.artistCardFoot}>
-                <span style={styles.mono}>→ zk-verified · on-chain enforced</span>
+                <span style={styles.mono}>registered on-chain · enforced by the protocol</span>
               </div>
             </aside>
           </div>
@@ -401,7 +401,7 @@ export default function Landing() {
       {/* ═══════════════════════════════════════════ FAQ */}
       <section id="faq" style={styles.section}>
         <div style={styles.container}>
-          <SectionHeader label="§ 05 · questions" title="Answers, in plain forest-tongue." />
+          <SectionHeader label="§ 05 · questions" title="Plain answers to the honest questions." />
           <div style={styles.faqList}>
             {faqs.map((f, i) => (
               <div
@@ -438,8 +438,8 @@ export default function Landing() {
                 <span>fangorn<span style={{ opacity: 0.5 }}>.music</span></span>
               </div>
               <p style={styles.footerTag}>
-                A reference implementation of the Fangorn protocol. Built in
-                Texas. Settled on Arbitrum.
+                A reference client for the Fangorn protocol. Open, permissionless,
+                and built to be replaced by something better.
               </p>
             </div>
             <div style={styles.footerCols}>
@@ -580,76 +580,81 @@ function FooterCol({ title, links }: { title: string; links: [string, string][] 
 const features = [
   {
     icon: 'schema',
-    title: 'Schema registry',
-    body: 'Publishers declare the shape of their data — pricing, splits, access conditions — once. The registry enforces it everywhere, forever.',
-    tag: 'SchemaRegistry.sol',
+    title: 'You keep 100%',
+    body: 'No platform cut, no distributor middle layer, no hidden fees. The protocol charges network gas; that is the entire cost structure. Everything else belongs to you.',
+    tag: 'no platform fee',
   },
   {
     icon: 'settlement',
-    title: 'SONDER settlement',
-    body: 'ERC-3009 authorization plus Semaphore nullifiers. Payments clear in one transaction, replay-free, with the listener\'s identity never touched.',
-    tag: 'sonder/v1',
+    title: 'Splits execute on payment',
+    body: 'Collaborator splits run atomically when a listener pays. Producer, features, co-writers, whoever you name in the schema gets paid in the same transaction the listener signs. No invoicing, no waiting, no chasing.',
+    tag: 'atomic splits',
   },
   {
     icon: 'zk',
-    title: 'Zero-knowledge proofs',
-    body: 'Groth16 circuits prove "I paid for this track" without revealing who paid or what else they listen to. Privacy is the default, not a setting.',
-    tag: 'semaphore@v4',
+    title: 'Ownership you can prove',
+    body: 'Your catalog is a cryptographic object you control, not a row in a platform database. Nobody can take down your music, mute your account, or renegotiate your terms. Ownership is a key, not a user agreement.',
+    tag: 'cryptographic ownership',
   },
   {
     icon: 'storage',
-    title: 'Presigned object storage',
-    body: 'Audio sits in Cloudflare R2. A Worker mints short-lived URLs only after on-chain payment verification. No keys. No decryption clients.',
-    tag: 'r2 + workers',
+    title: 'Portable, always',
+    body: 'Your schema, your splits, your pricing, your audio files. All portable. Any client that speaks the Fangorn protocol can serve your catalog. Fangorn Music is one such client. It will not be the only one.',
+    tag: 'protocol, not platform',
   },
 ];
 
 const steps = [
   {
-    title: 'Connect any wallet — or make one in a tap',
-    body: 'Privy handles wallet onboarding. Email, Google, or existing wallet. An embedded wallet is provisioned if you don\'t have one.',
+    title: 'Define your catalog on your terms',
+    body: 'Set prices per track or per tier. Name your collaborators and their splits. Choose what access you grant and what you withhold. The schema is yours; you write it once and the protocol remembers it forever.',
   },
   {
-    title: 'Pay the artist directly, at the track level',
-    body: 'SONDER bundles payment and listening authorization into a single signed message. The artist is paid before the first byte of audio streams.',
+    title: 'Let the code enforce it',
+    body: 'When someone listens, payment clears to every address on the split in the same transaction. No label approving the release, no distributor taking a cut, no platform deciding whether your work deserves a slot today.',
   },
   {
-    title: 'Listen, with the proof in your pocket',
-    body: 'Your nullifier is stored client-side. Replay the track, share the rights, expire the license — all governed by the contract, not a server you rent.',
+    title: 'Stay portable, stay in control',
+    body: 'Your catalog lives on chain and in storage you can move. Any client that speaks the Fangorn protocol can serve it. If Fangorn Music disappears tomorrow, your music still works, and your listeners still have what they paid for.',
   },
 ];
 
 const artistPoints = [
-  'Define pricing per-track, per-tier, per-territory — whatever your deal demands.',
-  'Collaborator splits execute atomically on payment. No invoicing, no escrow.',
-  'You own the schema. You can export your catalog to any frontend that speaks Fangorn.',
-  'No platform cut. The protocol charges gas; that\'s the entire fee structure.',
+  'You keep 100% of what listeners pay. The protocol takes no cut.',
+  'Collaborator splits pay out atomically, in the same transaction as the listener.',
+  'Your pricing, your terms, your discovery. No A&R, no release calendar, no gatekeeper.',
+  'You own the schema. You can move your catalog to any Fangorn client, anytime.',
+  'If Fangorn the company disappears, your catalog keeps working. That is the point.',
 ];
 
 const faqs = [
   {
-    q: 'Do listeners need crypto to use this?',
-    a: 'No. Privy provisions an embedded wallet on email sign-in, and SONDER supports USDC on Arbitrum — so listeners fund once and the wallet handles signing invisibly. We\'re exploring fiat on-ramps for the next release.',
+    q: 'What is Fangorn, actually?',
+    a: 'Fangorn is a protocol for programmable access control. It lets publishers define exactly who can access their data and under what conditions, enforced by code instead of platform policy. Fangorn Music is a reference client for that protocol, built for artists and listeners. The protocol itself is open and permissionless, so other clients can and will exist.',
+  },
+  {
+    q: 'So this is not a marketplace or a streaming platform?',
+    a: 'No. Marketplaces and platforms sit between creators and audiences and take a cut for the privilege. Fangorn is infrastructure, closer in spirit to Stripe or HTTPS than to Spotify or Bandcamp. Fangorn Music happens to be where you can listen today because we built the reference client. It is not the point.',
+  },
+  {
+    q: 'Do listeners need to understand crypto to use this?',
+    a: 'No. Sign in with email, Google, or an existing wallet. An embedded wallet is created for you automatically if you do not have one. Payments clear in USDC on Arbitrum. The cryptography runs in the background; listening feels like listening.',
+  },
+  {
+    q: 'What happens if Fangorn, the company, disappears?',
+    a: 'Your catalog lives on chain and in storage you can control. Your splits, your prices, and your audio stay enforceable because the enforcement lives in code, not in a service we operate. Any Fangorn client, built by anyone, can serve your music. That portability is the whole point of the architecture.',
   },
   {
     q: 'Is this open source?',
-    a: 'The protocol contracts (Schema, Datasource, Settlement registries) and SONDER are open source. This marketplace is a reference implementation meant to be forked; the goal is many Fangorn-speaking frontends, not one platform.',
-  },
-  {
-    q: 'What happens if Fangorn the company disappears?',
-    a: 'Your catalog lives on-chain and in object storage you control. The schema is portable. Any frontend that reads the registry can serve your music. That\'s the whole point — we\'re infrastructure, not a platform you depend on.',
-  },
-  {
-    q: 'Why Arbitrum?',
-    a: 'Sub-second finality, low enough fees for per-track micropayments, and real USDC liquidity. We\'re chain-agnostic at the protocol level; Arbitrum is where the reference implementation runs today.',
+    a: 'The protocol contracts and the SONDER settlement protocol are open source. This client is a reference implementation meant to be forked, extended, and replaced by better clients over time. We are trying to build infrastructure you depend on, not a platform you are trapped inside.',
   },
   {
     q: 'How is this different from Audius, Sound.xyz, or Catalog?',
-    a: 'Those are platforms with crypto features. Fangorn is a protocol with a platform on top. The access-control logic lives in contracts you can point any client at — which means competition, forks, and artist-owned frontends are first-class outcomes, not anomalies.',
+    a: 'Those are platforms with crypto bolted on. They still control the client, the discovery, and the rules. Fangorn is a protocol that any client can speak. Competition, forks, and artist-owned frontends are first-class outcomes here, not threats we route around.',
   },
   {
     q: 'Where does the name come from?',
-    a: 'Fangorn Forest. The Ents tended trees nobody was looking at, on a timescale nobody was measuring. Felt right.',
+    a: 'Fangorn Forest. The Ents tended trees nobody was looking at, on a timescale nobody was measuring, and when the moment came they moved. Felt right for infrastructure meant to outlast the platforms it replaces.',
   },
 ];
 

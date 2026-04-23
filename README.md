@@ -8,7 +8,7 @@
 | -------- | ------------------------------------------------------------------ |
 | Schema   | `fangorn.music.test.v0`                                            |
 | SchemaId | 0x7a69b1c49f16834707fe1d8bcc69ec485ea1b3c7bc68dd3ab81b05ec539952cd |
-| CID      | bafkreigwlsaxxbzoadhdfevy24hwtfjwrmcou23plg2lqz3rsb5uc3m3m4        |
+| CID      | bafkreidq7fgcmlctpv3k4uhy43gw2mp7kxn3k4cpy3wh2h76twfmjworbm        |
 
 ### Graph Codegen
 

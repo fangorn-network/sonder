@@ -4,6 +4,8 @@ import { useFangornMiddleware } from '../hooks/useX402fFetch'
 import { usePrivy } from '@privy-io/react-auth'
 import { useFirebase } from '../hooks/useFirebase'
 import './mobile.css'
+import { useFangornAgent } from '../hooks/useFangornAgent'
+// import { useLibrary } from '../hooks/useLibrary'
 
 const toUsdc = (raw: string | undefined): number => {
   if (!raw || raw === '0') return 0
@@ -56,6 +58,7 @@ export function BrowseView({
   const [priceFilter, setPriceFilter] = useState<PriceFilter>('all')
   const [maxPrice, setMaxPrice] = useState('')
   const [ownerFilter, setOwnerFilter] = useState('')
+	const {sendMessage} = useFangornAgent()
 
   const middleware = useFangornMiddleware()
   const { user } = usePrivy()

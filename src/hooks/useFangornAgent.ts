@@ -85,6 +85,13 @@ export function useFangornAgent() {
 				if (!res.ok) throw new Error(`Agent returned ${res.status}`);
 				const data = await res.json();
 
+				const agentMessage = data.response
+				let mcpData = {}
+
+				if (data.mcpResults) {
+					mcpData = data.mcpResults
+				}
+
 				const newEntries: ChatEntry[] = [];
 
 				// Add the LLM's text response if present

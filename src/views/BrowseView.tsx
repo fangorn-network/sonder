@@ -3,7 +3,7 @@ import type { Track } from '../types'
 import { useFangornMiddleware } from '../hooks/useX402fFetch'
 import { usePrivy } from '@privy-io/react-auth'
 import { useFirebase } from '../hooks/useFirebase'
-// import { useLibrary } from '../hooks/useLibrary'
+import './mobile.css'
 
 const toUsdc = (raw: string | undefined): number => {
   if (!raw || raw === '0') return 0
@@ -308,6 +308,56 @@ export function BrowseView({
                   <div className="tg-body">
                     <div className="tg-title">{track.title}</div>
                     <div className="tg-artist">{track.artist}</div>
+                    {track.genre && (
+                      <div className="tg-meta">
+                        <span
+                          className="tg-genre"
+                          style={{ color, background: `${color}15`, borderColor: `${color}30` }}
+                        >
+                          {track.genre}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* action row — always visible, replaces price in meta */}
+                  {owned ? (
+                    <div className="tg-action tg-action--owned">
+                      <span className="tg-action-label">owned</span>
+                      <span className="tg-action-verb">✓</span>
+                    </div>
+                  ) : justGot ? (
+                    <div className="tg-action tg-action--owned">
+                      <span className="tg-action-label">saved</span>
+                      <span className="tg-action-verb">✦</span>
+                    </div>
+                  ) : (
+                    <button
+                      className={`tg-action tg-action--buy ${isFree ? 'tg-action--free' : ''}`}
+                      disabled={isBuying}
+                      onClick={e => handleBuy(e, track)}
+                      style={!isFree ? { '--action-color': color } as React.CSSProperties : undefined}
+                    >
+                      {isBuying ? (
+                        <>
+                          <span className="upload-spinner" />
+                          <span className="tg-action-verb">processing</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="tg-action-label">
+                            {isFree ? 'free' : fmtUsdc(track.price)}
+                          </span>
+                          <span className="tg-action-verb">{isFree ? 'get →' : 'buy →'}</span>
+                        </>
+                      )}
+                    </button>
+                  )}
+
+                  {/* info */}
+                  {/* <div className="tg-body">
+                    <div className="tg-title">{track.title}</div>
+                    <div className="tg-artist">{track.artist}</div>
                     <div className="tg-meta">
                       {track.genre && (
                         <span
@@ -321,10 +371,10 @@ export function BrowseView({
                         {owned ? 'owned' : fmtUsdc(track.price)}
                       </span>
                     </div>
-                  </div>
+                  </div> */}
 
                   {/* buy / owned state */}
-                  {!owned && (
+                  {/* {!owned && (
                     <button
                       className="tg-buy"
                       disabled={isBuying}
@@ -333,10 +383,10 @@ export function BrowseView({
                     >
                       {isBuying ? <span className="upload-spinner" /> : 'Buy'}
                     </button>
-                  )}
-                  {justGot && (
+                  )} */}
+                  {/* {justGot && (
                     <div className="tg-buy-confirm">saved ✦</div>
-                  )}
+                  )} */}
                 </div>
               )
             })

@@ -49,3 +49,9 @@ export interface AlbumView {
 export interface HueStyle extends CSSProperties {
   '--hue': number
 }
+
+export interface RecommendedTracks {
+	tracks: Track[]
+	sourceId: string
+	sourceTitle: string
+}

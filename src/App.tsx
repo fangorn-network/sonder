@@ -3,7 +3,7 @@ import { Nav } from './components/Nav'
 import { ConnectWallet } from './components/ConnectWallet'
 import { BrowseView } from './views/BrowseView'
 import { useGraph } from './hooks/useGraph'
-import type { Track, ViewName } from './types'
+import type { RecommendedTracks, Track, ViewName } from './types'
 import './App.css'
 import { UploadView } from './views/UploadView'
 import { PlayerBar } from './components/PlayerBar'
@@ -12,6 +12,8 @@ import { LibraryView } from './views/LibraryView'
 import { usePrivy } from '@privy-io/react-auth'
 import { useFirebase } from './hooks/useFirebase'
 import Landing from './views/LandingView'
+import { useFangornAgent } from './hooks/useFangornAgent'
+import { agentResultToTracks } from './utils/agentToTrack'
 
 export default function App() {
   const { ready, authenticated, user } = usePrivy()
@@ -23,6 +25,38 @@ export default function App() {
   const [currentTrack, setCurrentTrack] = useState<Track | null>(null)
   const { tracks, loading, loadingMore, error, hasMore, loadMore, search, setSearch } = useGraph()
   const { ids: libraryIds } = useFirebase(user?.id ?? null)
+	const [recommendedTracks, setRecommendedTracks] = useState<RecommendedTracks | null>(null)
+	const [recommendLoading, setRecommendLoading] = useState(false)
+	const { sendMessage } = useFangornAgent()
+
+	// add handler
+const handleFindSimilar = useCallback(async (track: Track) => {
+  setRecommendLoading(true)
+  setView('Discover')
+
+  try {
+    const prompt = `Find at most 7 files ${track.genre ? `with the genre: ${track.genre}` : `by artist ${track.artist}`}.`
+    const result = await sendMessage(prompt)
+    const tracks = agentResultToTracks(result)
+
+		const recommendedTracks: RecommendedTracks = {
+			tracks,
+			sourceId: track.id,
+			sourceTitle: track.title
+		}
+
+    setRecommendedTracks(tracks.length > 0 ? recommendedTracks : null)
+  } catch (e) {
+    console.error('Recommendation failed:', e)
+    setRecommendedTracks(null)
+  } finally {
+    setRecommendLoading(false)
+  }
+}, [sendMessage])
+
+const clearRecommendations = useCallback(() => {
+  setRecommendedTracks(null)
+}, [])
 
   const handlePlay = useCallback((track: Track) => {
     setCurrentTrack({ ...track, owned: libraryIds.includes(track.id) })
@@ -77,6 +111,9 @@ export default function App() {
             setSearch={setSearch}
             onPlay={handlePlay}
             currentTrack={currentTrack}
+						recommendedTracks={recommendedTracks}
+  					recommendLoading={recommendLoading}
+  					onClearRecommendations={clearRecommendations}
           />
         )}
         {view === 'Library' && (
@@ -85,6 +122,7 @@ export default function App() {
             loading={loading}
             onPlay={handlePlay}
             currentTrack={currentTrack}
+						onFindSimilar={handleFindSimilar}
           />
         )}
         {view === 'Upload' && <UploadView />}

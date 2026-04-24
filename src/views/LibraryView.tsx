@@ -14,9 +14,10 @@ interface LibraryViewProps {
   loading: boolean
   onPlay: (track: Track) => void
   currentTrack: Track | null
+	onFindSimilar: (track: Track) => void  // new
 }
 
-export function LibraryView({ tracks, loading, onPlay, currentTrack }: LibraryViewProps) {
+export function LibraryView({ tracks, loading, onPlay, currentTrack, onFindSimilar }: LibraryViewProps) {
   const [removing, setRemoving] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [activeGenres, setActiveGenres] = useState<Set<string>>(new Set())
@@ -240,6 +241,14 @@ export function LibraryView({ tracks, loading, onPlay, currentTrack }: LibraryVi
                     {track.genre}
                   </span>
                 )}
+
+								<button
+								  className="lib-row-similar"
+								  onClick={e => { e.stopPropagation(); onFindSimilar(track) }}
+								  title="Find similar in store"
+								>
+								  ✦
+								</button>
 
                 {/* remove */}
                 <button

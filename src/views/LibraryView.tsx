@@ -2,36 +2,24 @@ import { useState, useMemo } from 'react'
 import type { Track } from '../types'
 import { usePrivy } from '@privy-io/react-auth'
 import { useFirebase } from '../hooks/useFirebase'
-// import { useLibrary } from '../hooks/useLibrary'
+import { useLibraryTracks } from '../hooks/useLibraryTracks'
+import { usePlayer } from '../providers/PlayerProvider'
 
 const GENRE_PALETTE = [
   '#a78bfa', '#60a5fa', '#f472b6', '#22c55e',
   '#f97316', '#7c5de8', '#f87171', '#34d399',
 ]
 
-interface LibraryViewProps {
-  tracks: Track[]
-  loading: boolean
-  onPlay: (track: Track) => void
-  currentTrack: Track | null
-}
-
-export function LibraryView({ tracks, loading, onPlay, currentTrack }: LibraryViewProps) {
+export function LibraryView() {
   const [removing, setRemoving] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [activeGenres, setActiveGenres] = useState<Set<string>>(new Set())
   const [activeArtists, setActiveArtists] = useState<Set<string>>(new Set())
   const [showingOnly, setShowingOnly] = useState(false)
   const { user } = usePrivy()
-  const { ids, removeFromLibrary } = useFirebase(user?.id ?? null)
-
-  const owned = useMemo(() => {
-    // console.log(tracks)
-    return tracks.filter(t => ids.includes(t.id))
-  },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [tracks, ids.join(',')]
-  )
+  const { entries, removeFromLibrary } = useFirebase(user?.id ?? null)
+  const { tracks: owned, loading, error } = useLibraryTracks(entries)
+  const { currentTrack, selectTrack } = usePlayer()
 
   const genres = useMemo(() => {
     const set = new Set<string>()
@@ -97,7 +85,7 @@ export function LibraryView({ tracks, loading, onPlay, currentTrack }: LibraryVi
     }, 300)
   }
 
-  if (loading) {
+  if (loading && owned.length === 0) {
     return (
       <div className="browse-view">
         <div className="chain-loading" style={{ padding: '60px 0' }}>
@@ -119,7 +107,8 @@ export function LibraryView({ tracks, loading, onPlay, currentTrack }: LibraryVi
         </span>
       </div>
 
-      {/* Filter bar */}
+      {error && <div className="upload-error">{error}</div>}
+
       {owned.length > 0 && (
         <div className="lib-filters">
           <div className="lib-search-wrap">
@@ -136,7 +125,7 @@ export function LibraryView({ tracks, loading, onPlay, currentTrack }: LibraryVi
             )}
           </div>
 
-          {currentTrack && ids.includes(currentTrack.id) && (
+          {currentTrack && entries[currentTrack.id] && (
             <button
               className={`lib-pill lib-pill--playing ${showingOnly ? 'lib-pill--active' : ''}`}
               onClick={() => setShowingOnly(p => !p)}
@@ -182,7 +171,7 @@ export function LibraryView({ tracks, loading, onPlay, currentTrack }: LibraryVi
         </div>
       )}
 
-      {owned.length === 0 && (
+      {owned.length === 0 && !loading && (
         <div className="empty-state">
           <div className="empty-icon">♪</div>
           <p>Nothing here yet.</p>
@@ -213,9 +202,8 @@ export function LibraryView({ tracks, loading, onPlay, currentTrack }: LibraryVi
               <div
                 key={track.id}
                 className={`lib-row ${isPlaying ? 'lib-row--playing' : ''} ${isRemoving ? 'lib-row--removing' : ''}`}
-                onClick={() => onPlay(track)}
+                onClick={() => selectTrack(track)}
               >
-                {/* index / eq indicator */}
                 <div className="lib-row-num">
                   {isPlaying
                     ? <div className="lib-row-eq" style={{ '--eq-color': color } as React.CSSProperties}>
@@ -225,23 +213,19 @@ export function LibraryView({ tracks, loading, onPlay, currentTrack }: LibraryVi
                   }
                 </div>
 
-                {/* color accent swatch */}
                 <div className="lib-row-swatch" style={{ background: color }} />
 
-                {/* title + artist */}
                 <div className="lib-row-info">
                   <span className="lib-row-title">{track.title}</span>
                   <span className="lib-row-artist">{track.artist}</span>
                 </div>
 
-                {/* genre */}
                 {track.genre && (
                   <span className="lib-row-genre" style={{ color, borderColor: `${color}35` }}>
                     {track.genre}
                   </span>
                 )}
 
-                {/* remove */}
                 <button
                   className="lib-row-remove"
                   onClick={e => handleRemove(e, track)}

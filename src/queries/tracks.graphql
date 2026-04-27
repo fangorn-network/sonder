@@ -41,6 +41,24 @@ query SearchTracks($search: String!) {
   }
 }
 
+query GetTracksByStateIds($ids: [Bytes!]!) {
+  manifestStates(where: { id_in: $ids }, first: 1000) {
+    id
+    owner
+    schemaName
+    manifest {
+      files {
+        name
+        fileFields {
+          name
+          value
+          acc
+        }
+      }
+    }
+  }
+}
+
 query GetTracksByOwner($owner: Bytes!, $first: Int!, $skip: Int!) {
   manifestStates(
     where: {

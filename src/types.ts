@@ -2,6 +2,7 @@ import type { CSSProperties } from 'react'
 
 export interface Track {
   id: string
+  manifestStateId: string,
   title: string
   artist: string
   album: string

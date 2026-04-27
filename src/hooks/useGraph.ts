@@ -3,7 +3,7 @@ import { execute } from '../../.graphclient'
 import { GetTracksDocument, SearchTracksDocument } from '../../.graphclient'
 import type { Track } from '../types'
 
-const PAGE_SIZE = 10
+const PAGE_SIZE = 20
 
 function normalizeManifestState(state: any): Track[] {
     const { id: stateId, owner, schemaName, manifest } = state
@@ -16,6 +16,7 @@ function normalizeManifestState(state: any): Track[] {
         const name = file.name ?? `track-${i}`
         return {
             id: `${stateId}-${name}-${i}`,
+            manifestStateId: stateId,
             title: fields['title']?.value ?? name,
             artist: fields['artist']?.value ?? owner.slice(0, 8) + '…',
             album: fields['album']?.value ?? schemaName,
@@ -78,23 +79,38 @@ export function useGraph(): UseGraphResult {
     const [search, setSearch] = useState('')
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+    // Inside useGraph.ts -> fetchPage function
+
     const fetchPage = useCallback(async (pageSkip: number, replace: boolean) => {
-        replace ? setLoading(true) : setLoadingMore(true)
+        replace ? setLoading(true) : setLoadingMore(true);
         try {
-            const result = await execute(GetTracksDocument, { first: PAGE_SIZE, skip: pageSkip }) as any
-            if (result.errors?.length) throw new Error(result.errors[0].message)
-            const normalized = normalizeResults(result.data ?? {})
+            const result = await execute(GetTracksDocument, {
+                first: PAGE_SIZE,
+                skip: pageSkip
+            }) as any;
+
+            if (result.errors?.length) throw new Error(result.errors[0].message);
+
+            // 1. Check length on the RAW data from the graph, not the normalized data
+            const rawItems = result.data?.manifestStates ?? [];
+            const fetchedCount = rawItems.length;
+
+            const normalized = normalizeResults(result.data ?? {});
+
             setTracks(prev => {
-                const next = replace ? normalized : [...prev, ...normalized]
-                return dedup(next)  // dedup on the way into state too
-            })
-            setHasMore(normalized.length === PAGE_SIZE)
+                const next = replace ? normalized : [...prev, ...normalized];
+                return dedup(next);
+            });
+
+            // 2. hasMore should depend on whether the API gave us a full page
+            setHasMore(fetchedCount === PAGE_SIZE);
+
         } catch (e: any) {
-            setError(e instanceof Error ? e.message : String(e))
+            setError(e instanceof Error ? e.message : String(e));
         } finally {
-            replace ? setLoading(false) : setLoadingMore(false)
+            replace ? setLoading(false) : setLoadingMore(false);
         }
-    }, [])
+    }, []);
 
     const fetchSearch = useCallback(async (term: string) => {
         setLoading(true)

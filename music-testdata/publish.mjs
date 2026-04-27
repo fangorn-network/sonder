@@ -3,7 +3,7 @@ import { readdirSync, statSync, writeFileSync } from "fs";
 import { join, basename } from "path";
 import { execSync } from "child_process";
 
-const IA_DATA_DIR = "./data";
+const IA_DATA_DIR = "./ia-data";
 const BUCKET_NAME = "my-first-bucket";
 const R2_PREFIX = "my-first-dir";
 const WORKER_URL = "https://fangorn-access-worker.quickbeam.workers.dev";
@@ -28,7 +28,6 @@ function slugify(str) {
 }
 
 async function buildPublishRecords(dir) {
-  console.log('*********************** ' + dir);
   const records = [];
   const items = readdirSync(dir);
   console.log(`found ${items.length} entries`);
@@ -96,7 +95,7 @@ async function buildPublishRecords(dir) {
   return records;
 }
 
-uploadToR2();
-const records = await buildPublishRecords('./data');
+// uploadToR2();
+const records = await buildPublishRecords('./ia-data');
 writeFileSync("./data.json", JSON.stringify(records, null, 2));
 console.log(`\nWrote ${records.length} records to data.json`);

@@ -3,7 +3,9 @@ import type { Track } from '../types'
 import { useFangornMiddleware } from '../hooks/useX402fFetch'
 import { usePrivy } from '@privy-io/react-auth'
 import { useFirebase } from '../hooks/useFirebase'
+import { TrackDetails } from './TrackDetails'
 import './mobile.css'
+import { usePlayer } from '../providers/PlayerProvider'
 
 const toUsdc = (raw: string | undefined): number => {
   if (!raw || raw === '0') return 0
@@ -27,26 +29,17 @@ interface BrowseViewProps {
   loadMore: () => void
   search: string
   setSearch: (s: string) => void
-  onPlay: (track: Track) => void
-  currentTrack: Track | null
 }
 
 type PriceFilter = 'all' | 'free' | 'paid'
 
 const GENRE_PALETTE = [
-  '#a78bfa',
-  '#60a5fa',
-  '#f472b6',
-  '#22c55e',
-  '#f97316',
-  '#7c5de8',
-  '#f87171',
-  '#34d399',
+  '#a78bfa', '#60a5fa', '#f472b6', '#22c55e',
+  '#f97316', '#7c5de8', '#f87171', '#34d399',
 ]
 
 export function BrowseView({
-  tracks, loading, loadingMore, error, hasMore, loadMore,
-  search, setSearch, onPlay, currentTrack
+  tracks, loading, loadingMore, error, hasMore, loadMore, search, setSearch,
 }: BrowseViewProps) {
   const sentinelRef = useRef<HTMLDivElement>(null)
   const [buying, setBuying] = useState<string | null>(null)
@@ -56,10 +49,12 @@ export function BrowseView({
   const [priceFilter, setPriceFilter] = useState<PriceFilter>('all')
   const [maxPrice, setMaxPrice] = useState('')
   const [ownerFilter, setOwnerFilter] = useState('')
+  const [detailsTrack, setDetailsTrack] = useState<Track | null>(null)
 
   const middleware = useFangornMiddleware()
   const { user } = usePrivy()
   const { addToLibrary, isInLibrary } = useFirebase(user?.id ?? null)
+  const { currentTrack, selectTrack, loadFromBytes } = usePlayer()
 
   const genres = useMemo(() => {
     const set = new Set<string>()
@@ -101,56 +96,56 @@ export function BrowseView({
     return () => observer.disconnect()
   }, [loadMore])
 
-  async function handleBuy(e: React.MouseEvent, track: Track) {
-    e.stopPropagation()
+  // ── unified buy: register, persist nullifier, autoplay ────────────────
+  async function handleBuy(track: Track) {
     if (!middleware) return
 
     setBuyError(null)
     setBuying(track.id)
 
     try {
-      console.log('x402f fetch')
       const result = await middleware.fetchResource({
         owner: track.owner as `0x${string}`,
         schemaName: track.datasourceName,
         name: track.name,
-        baseUrl: '/facilitator'
+        baseUrl: '/facilitator',
       })
 
-      if (!result.data) {
-        console.log(JSON.stringify(result))
-        throw new Error('No data returned')
-      }
+      if (!result.data) throw new Error('No data returned')
 
       const bytes = result.data instanceof Uint8Array
         ? result.data
         : new Uint8Array(result.data as ArrayBuffer)
 
-      // todo: check result status
-      // write to library
-      console.log('writing to library: ' + track.id + ' with nullifier ' + result.paymentResponse)
-      // payment response = nullifier
-      addToLibrary(track.id, result.paymentResponse as string)
-      setJustBought(track.id)
-      setTimeout(() => setJustBought(null), 2000)
-
+      // basic audio sanity check
       const magic = bytes.slice(0, 4)
       const isMP3 = (magic[0] === 0x49 && magic[1] === 0x44 && magic[2] === 0x33)
         || (magic[0] === 0xFF && (magic[1] & 0xE0) === 0xE0)
       const isWAV = magic[0] === 0x52 && magic[1] === 0x49 && magic[2] === 0x46 && magic[3] === 0x46
       if (!isMP3 && !isWAV) throw new Error('Downloaded file does not appear to be valid audio')
 
-      // // TODO: do we need to download here?
-      // const blob = new Blob([bytes.buffer.slice(0) as ArrayBuffer], { type: 'audio/mpeg' })
-      // const url = URL.createObjectURL(blob)
-      // const a = document.createElement('a')
-      // a.href = url; a.download = `${track.title}.mp3`; a.click()
-      // URL.revokeObjectURL(url)
+      addToLibrary(track.id, result.paymentResponse as string, track.manifestStateId)
+      setJustBought(track.id)
+      setTimeout(() => setJustBought(null), 2000)
 
-    } catch (e: any) {
-      setBuyError(e?.message ?? 'Purchase failed')
+      // hand bytes to player → autoplay, no second fetch
+      await loadFromBytes(track, bytes)
+
+      // close details if it was open for this track
+      if (detailsTrack?.id === track.id) setDetailsTrack(null)
+    } catch (e) {
+      setBuyError(e instanceof Error ? e.message : 'Purchase failed')
     } finally {
       setBuying(null)
+    }
+  }
+
+  // ── card click: owned plays, unowned opens details ────────────────────
+  function handleCardClick(track: Track) {
+    if (isInLibrary(track.id)) {
+      selectTrack(track)
+    } else {
+      setDetailsTrack(track)
     }
   }
 
@@ -159,7 +154,6 @@ export function BrowseView({
   return (
     <div className="browse-view">
 
-      {/* toolbar */}
       <div className="browse-toolbar">
         <div className="search-box">
           <span className="search-icon">⌕</span>
@@ -176,7 +170,6 @@ export function BrowseView({
         <span className="browse-count">{filtered.length} of {tracks.length}</span>
       </div>
 
-      {/* filters */}
       <div className="browse-filters">
         <div className="bf-group">
           <span className="bf-label">Genre</span>
@@ -255,7 +248,6 @@ export function BrowseView({
         </div>
       )}
 
-      {/* grid */}
       {(loading || filtered.length > 0) && (
         <div className="track-grid">
           {loading
@@ -285,15 +277,12 @@ export function BrowseView({
                   key={track.id}
                   className={`tg-card ${isPlaying ? 'tg-card--playing' : ''} ${owned ? 'tg-card--owned' : ''}`}
                   style={{ borderTop: `2px solid ${color}` }}
-                  onClick={() => onPlay(track)}
+                  onClick={() => handleCardClick(track)}
                 >
-                  {/* art */}
                   <div className="tg-art" style={{ background: `${color}40` }}>
-                    {false ? <div /> : (
-                      <span className="tg-art-initial" style={{ color }}>
-                        {track.title.slice(0, 1).toUpperCase()}
-                      </span>
-                    )}
+                    <span className="tg-art-initial" style={{ color }}>
+                      {track.title.slice(0, 1).toUpperCase()}
+                    </span>
                     {isPlaying && (
                       <div className="tg-eq" style={{ '--eq-color': color } as React.CSSProperties}>
                         <span /><span /><span />
@@ -304,7 +293,6 @@ export function BrowseView({
                     )}
                   </div>
 
-                  {/* info */}
                   <div className="tg-body">
                     <div className="tg-title">{track.title}</div>
                     <div className="tg-artist">{track.artist}</div>
@@ -320,7 +308,6 @@ export function BrowseView({
                     )}
                   </div>
 
-                  {/* action row — always visible, replaces price in meta */}
                   {owned ? (
                     <div className="tg-action tg-action--owned">
                       <span className="tg-action-label">owned</span>
@@ -335,7 +322,7 @@ export function BrowseView({
                     <button
                       className={`tg-action tg-action--buy ${isFree ? 'tg-action--free' : ''}`}
                       disabled={isBuying}
-                      onClick={e => handleBuy(e, track)}
+                      onClick={e => { e.stopPropagation(); handleBuy(track) }}
                       style={!isFree ? { '--action-color': color } as React.CSSProperties : undefined}
                     >
                       {isBuying ? (
@@ -353,40 +340,6 @@ export function BrowseView({
                       )}
                     </button>
                   )}
-
-                  {/* info */}
-                  {/* <div className="tg-body">
-                    <div className="tg-title">{track.title}</div>
-                    <div className="tg-artist">{track.artist}</div>
-                    <div className="tg-meta">
-                      {track.genre && (
-                        <span
-                          className="tg-genre"
-                          style={{ color, background: `${color}15`, borderColor: `${color}30` }}
-                        >
-                          {track.genre}
-                        </span>
-                      )}
-                      <span className={`tg-price ${isFree ? 'tg-price--free' : ''} ${owned ? 'tg-price--owned' : ''}`}>
-                        {owned ? 'owned' : fmtUsdc(track.price)}
-                      </span>
-                    </div>
-                  </div> */}
-
-                  {/* buy / owned state */}
-                  {/* {!owned && (
-                    <button
-                      className="tg-buy"
-                      disabled={isBuying}
-                      onClick={e => handleBuy(e, track)}
-                      title={`Buy ${track.title}`}
-                    >
-                      {isBuying ? <span className="upload-spinner" /> : 'Buy'}
-                    </button>
-                  )} */}
-                  {/* {justGot && (
-                    <div className="tg-buy-confirm">saved ✦</div>
-                  )} */}
                 </div>
               )
             })
@@ -405,6 +358,16 @@ export function BrowseView({
 
       {!hasMore && !search && !hasActiveFilter && tracks.length > 0 && (
         <div className="end-of-list">that's everything ✦</div>
+      )}
+
+      {detailsTrack && (
+        <TrackDetails
+          track={detailsTrack}
+          color={col(detailsTrack)}
+          buying={buying === detailsTrack.id}
+          onBuy={() => handleBuy(detailsTrack)}
+          onClose={() => setDetailsTrack(null)}
+        />
       )}
     </div>
   )

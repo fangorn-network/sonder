@@ -71,7 +71,7 @@ function usePublisherFangorn() {
                     }
                 },
                 config: FangornConfig.ArbitrumSepolia,
-                domain: window.location.host,
+            domain: window.location.host,
             })
             if (cancelled) return
             setFangorn(fg)
@@ -330,6 +330,10 @@ export function UploadView() {
             <div className="studio-wrap">
                 <div className="studio-header">
                     <h2 className="studio-title">Artist Studio</h2>
+                    <p>
+                        The artist studio is under construction. If you're interested in publishing tracks, contact us at 
+                        fangorn@fangorn.network.
+                    </p>
                 </div>
                 {/* <UploadPanel fangorn={fangorn} address={address} /> */}
             </div>

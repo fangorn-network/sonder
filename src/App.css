@@ -131,7 +131,8 @@
 
   .header {
     grid-area: header;
-    display: flex;
+    /* display: flex; */
+    display: contents;
     align-items: center;
     padding: 0 var(--sp-6);
     height: var(--header-h);
@@ -145,10 +146,11 @@
   }
 
   .header-brand {
-    display: flex;
+    padding: 10px;
+    /* display: flex;
     align-items: center;
     gap: var(--sp-2);
-    flex-shrink: 0;
+    flex-shrink: 0; */
   }
 
   .brand-mark {
@@ -183,12 +185,12 @@
   .wallet-chip {
     display: inline-flex;
     align-items: center;
-    gap: var(--sp-2);
+    /* gap: var(--sp-2); */
     padding: 4px 4px 4px 10px;
-    border: 1px solid var(--border2);
-    border-radius: var(--r-pill);
-    background: var(--surface-1);
-    transition: border-color var(--t1), background var(--t1);
+    /* border: 1px solid var(--border2); */
+    /* border-radius: var(--r-pill); */
+    /* background: var(--surface-1); */
+    /* transition: border-color var(--t1), background var(--t1); */
   }
 
   .wallet-chip.connected {
@@ -287,8 +289,8 @@
 
   @media (max-width: 680px) {
     .wallet-chip {
-      gap: 6px;
-      padding: 3px 3px 3px 8px;
+      /* gap: 6px;
+      padding: 3px 3px 3px 8px; */
     }
 
     /* Keep label visible but constrain width so it truncates gracefully */
@@ -2335,6 +2337,7 @@
     }
 
     .header {
+      /* position: absolute; */
       padding: 0 var(--sp-4);
     }
 

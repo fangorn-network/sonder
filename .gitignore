@@ -25,6 +25,7 @@ dist-ssr
 node_modules
 
 music-data/data
+music-data/ia-data
 deploy.sh
 
 .env

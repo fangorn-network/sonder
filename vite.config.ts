@@ -9,7 +9,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/facilitator': {
-        target: 'http://localhost:30333',
+        target: 'https:/facilitator.fangorn.network',
         changeOrigin: true,
         secure: false,
         followRedirects: true,

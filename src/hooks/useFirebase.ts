@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   collection,
   doc,
@@ -12,26 +12,32 @@ import { db } from '../lib/firebase'
 export interface LibraryEntry {
   id: string
   nullifier: string
+  manifestStateId: string
 }
 
-// Pass the user identifier (wallet address, uid, etc.) as an argument
 export function useFirebase(userId: string | null) {
-  const [entries, setEntries] = useState<LibraryEntry[]>([])
+  const [entries, setEntries] = useState<Record<string, LibraryEntry>>({})
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     if (!userId) {
-      setEntries([])
+      setEntries({})
       setLoading(false)
       return
     }
 
-    console.log('with user id ' + userId)
     const q = query(collection(db, 'users', userId, 'library'))
-
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const docs = snapshot.docs.map((d) => d.data() as LibraryEntry)
-      setEntries(docs)
+      const next: Record<string, LibraryEntry> = {}
+      for (const d of snapshot.docs) {
+        const raw = d.data() as Partial<LibraryEntry>
+        next[d.id] = {
+          id: d.id,
+          nullifier: raw.nullifier ?? '',
+          manifestStateId: raw.manifestStateId ?? '',
+        }
+      }
+      setEntries(next)
       setLoading(false)
     })
 
@@ -39,12 +45,10 @@ export function useFirebase(userId: string | null) {
   }, [userId])
 
   const addToLibrary = useCallback(
-    async (id: string, nullifier: string) => {
+    async (id: string, nullifier: string, manifestStateId: string) => {
       if (!userId) return
       const ref = doc(db, 'users', userId, 'library', id)
-      
-      console.log('got the ref)')
-      await setDoc(ref, { id, nullifier })
+      await setDoc(ref, { id, nullifier, manifestStateId })
     },
     [userId]
   )
@@ -59,17 +63,24 @@ export function useFirebase(userId: string | null) {
   )
 
   const isInLibrary = useCallback(
-    (id: string): boolean => entries.some((e) => e.id === id),
+    (id: string): boolean => id in entries,
     [entries]
   )
 
   const getNullifier = useCallback(
-    (id: string): string | null =>
-      entries.find((e) => e.id === id)?.nullifier ?? null,
+    (id: string): string | null => entries[id]?.nullifier ?? null,
     [entries]
   )
 
-  const ids = entries.map((e) => e.id)
+  const ids = useMemo(() => Object.keys(entries), [entries])
 
-  return { ids, entries, addToLibrary, removeFromLibrary, isInLibrary, getNullifier, loading }
+  return {
+    ids,
+    entries,
+    addToLibrary,
+    removeFromLibrary,
+    isInLibrary,
+    getNullifier,
+    loading,
+  }
 }

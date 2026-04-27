@@ -981,6 +981,7 @@
   /* Mobile: single column stack — cards are full-width rows */
   @media (max-width: 680px) {
     .track-grid {
+      display: block;
       grid-template-columns: 1fr;
       border-radius: var(--r-md);
     }
@@ -2339,6 +2340,7 @@
     .header {
       /* position: absolute; */
       padding: 0 var(--sp-4);
+      display: flex;
     }
 
     /* Nav: bottom, horizontal, full-width ─────────────────────────── */

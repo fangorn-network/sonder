@@ -35,7 +35,7 @@ const handleFindSimilar = useCallback(async (track: Track) => {
   setView('Discover')
 
   try {
-    const prompt = `It is 12:30 pm on a Monday. Choose one music genre for this time of day and find at most 9 files using get_files_by_file_fields. Available genres can be found using  Your response should be a one sentence blurb. Please avoid using first person pronouns.`;
+    const prompt = `It is 12:30 pm on a Monday. Choose one music genre for this time of day and find at most 9 files using get_files_by_file_fields. Your response should be a one sentence blurb. Please avoid using first person pronouns.`;
     const result = await sendMessage(prompt)
 		const tracks = agentResultToTracks(result?.mcpResults)
     // const tracks = agentResultToTracks(result)

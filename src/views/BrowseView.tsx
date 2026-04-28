@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState, useMemo } from 'react'
-import type { Track } from '../types'
+import type { RecommendedTracks, Track } from '../types'
 import { useFangornMiddleware } from '../hooks/useX402fFetch'
 import { usePrivy } from '@privy-io/react-auth'
 import { useFirebase } from '../hooks/useFirebase'
 import { TrackDetails } from './TrackDetails'
-import './mobile.css'
 import { usePlayer } from '../providers/PlayerProvider'
+import './mobile.css'
 
 const toUsdc = (raw: string | undefined): number => {
   if (!raw || raw === '0') return 0
@@ -29,6 +29,9 @@ interface BrowseViewProps {
   loadMore: () => void
   search: string
   setSearch: (s: string) => void
+  recommendedTracks?: RecommendedTracks | null
+  recommendLoading?: boolean
+  onClearRecommendations?: () => void
 }
 
 type PriceFilter = 'all' | 'free' | 'paid'
@@ -40,6 +43,7 @@ const GENRE_PALETTE = [
 
 export function BrowseView({
   tracks, loading, loadingMore, error, hasMore, loadMore, search, setSearch,
+  recommendedTracks, recommendLoading, onClearRecommendations,
 }: BrowseViewProps) {
   const sentinelRef = useRef<HTMLDivElement>(null)
   const [buying, setBuying] = useState<string | null>(null)
@@ -117,7 +121,6 @@ export function BrowseView({
         ? result.data
         : new Uint8Array(result.data as ArrayBuffer)
 
-      // basic audio sanity check
       const magic = bytes.slice(0, 4)
       const isMP3 = (magic[0] === 0x49 && magic[1] === 0x44 && magic[2] === 0x33)
         || (magic[0] === 0xFF && (magic[1] & 0xE0) === 0xE0)
@@ -128,10 +131,8 @@ export function BrowseView({
       setJustBought(track.id)
       setTimeout(() => setJustBought(null), 2000)
 
-      // hand bytes to player → autoplay, no second fetch
       await loadFromBytes(track, bytes)
 
-      // close details if it was open for this track
       if (detailsTrack?.id === track.id) setDetailsTrack(null)
     } catch (e) {
       setBuyError(e instanceof Error ? e.message : 'Purchase failed')
@@ -151,9 +152,87 @@ export function BrowseView({
 
   const col = (track: Track) => genreColor[track.genre ?? ''] ?? '#888780'
 
+  // ── single card renderer, shared by recommendations + main grid ───────
+  const renderCard = (track: Track) => {
+    const isPlaying = currentTrack?.id === track.id
+    const isFree = !track.price || track.price === '0'
+    const isBuying = buying === track.id
+    const owned = isInLibrary(track.id)
+    const justGot = justBought === track.id
+    const color = col(track)
+
+    return (
+      <div
+        key={track.id}
+        className={`tg-card ${isPlaying ? 'tg-card--playing' : ''} ${owned ? 'tg-card--owned' : ''}`}
+        style={{ borderTop: `2px solid ${color}` }}
+        onClick={() => handleCardClick(track)}
+      >
+        <div className="tg-art" style={{ background: `${color}40` }}>
+          <span className="tg-art-initial" style={{ color }}>
+            {track.title.slice(0, 1).toUpperCase()}
+          </span>
+          {isPlaying && (
+            <div className="tg-eq" style={{ '--eq-color': color } as React.CSSProperties}>
+              <span /><span /><span />
+            </div>
+          )}
+          {owned && !isPlaying && <div className="tg-owned-badge">✓</div>}
+        </div>
+
+        <div className="tg-body">
+          <div className="tg-title">{track.title}</div>
+          <div className="tg-artist">{track.artist}</div>
+          {track.genre && (
+            <div className="tg-meta">
+              <span
+                className="tg-genre"
+                style={{ color, background: `${color}15`, borderColor: `${color}30` }}
+              >
+                {track.genre}
+              </span>
+            </div>
+          )}
+        </div>
+
+        {owned ? (
+          <div className="tg-action tg-action--owned">
+            <span className="tg-action-label">owned</span>
+            <span className="tg-action-verb">✓</span>
+          </div>
+        ) : justGot ? (
+          <div className="tg-action tg-action--owned">
+            <span className="tg-action-label">saved</span>
+            <span className="tg-action-verb">✦</span>
+          </div>
+        ) : (
+          <button
+            className={`tg-action tg-action--buy ${isFree ? 'tg-action--free' : ''}`}
+            disabled={isBuying}
+            onClick={e => { e.stopPropagation(); handleBuy(track) }}
+            style={!isFree ? { '--action-color': color } as React.CSSProperties : undefined}
+          >
+            {isBuying ? (
+              <>
+                <span className="upload-spinner" />
+                <span className="tg-action-verb">processing</span>
+              </>
+            ) : (
+              <>
+                <span className="tg-action-label">
+                  {isFree ? 'free' : fmtUsdc(track.price)}
+                </span>
+                <span className="tg-action-verb">{isFree ? 'get →' : 'buy →'}</span>
+              </>
+            )}
+          </button>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div className="browse-view">
-
       <div className="browse-toolbar">
         <div className="search-box">
           <span className="search-icon">⌕</span>
@@ -248,6 +327,27 @@ export function BrowseView({
         </div>
       )}
 
+      {recommendedTracks && recommendedTracks.tracks && recommendedTracks.tracks.length > 0 && !recommendLoading && (
+        <div className="rec-section">
+          <div className="rec-banner">
+            <div className="rec-banner-left">
+              <span className="rec-banner-icon">✦</span>
+              <span>Similar to <strong>{recommendedTracks.sourceTitle}</strong></span>
+            </div>
+            <button className="rec-banner-clear" onClick={onClearRecommendations}>✕ Clear</button>
+          </div>
+          <div className="track-grid">
+            {recommendedTracks.tracks
+              .filter(t => t.id !== recommendedTracks.sourceId)
+              .map(renderCard)}
+          </div>
+        </div>
+      ) || (
+          <div>
+             Hi
+          </div>
+        )}
+
       {(loading || filtered.length > 0) && (
         <div className="track-grid">
           {loading
@@ -264,85 +364,7 @@ export function BrowseView({
                 </div>
               </div>
             ))
-            : filtered.map(track => {
-              const isPlaying = currentTrack?.id === track.id
-              const isFree = !track.price || track.price === '0'
-              const isBuying = buying === track.id
-              const owned = isInLibrary(track.id)
-              const justGot = justBought === track.id
-              const color = col(track)
-
-              return (
-                <div
-                  key={track.id}
-                  className={`tg-card ${isPlaying ? 'tg-card--playing' : ''} ${owned ? 'tg-card--owned' : ''}`}
-                  style={{ borderTop: `2px solid ${color}` }}
-                  onClick={() => handleCardClick(track)}
-                >
-                  <div className="tg-art" style={{ background: `${color}40` }}>
-                    <span className="tg-art-initial" style={{ color }}>
-                      {track.title.slice(0, 1).toUpperCase()}
-                    </span>
-                    {isPlaying && (
-                      <div className="tg-eq" style={{ '--eq-color': color } as React.CSSProperties}>
-                        <span /><span /><span />
-                      </div>
-                    )}
-                    {owned && !isPlaying && (
-                      <div className="tg-owned-badge">✓</div>
-                    )}
-                  </div>
-
-                  <div className="tg-body">
-                    <div className="tg-title">{track.title}</div>
-                    <div className="tg-artist">{track.artist}</div>
-                    {track.genre && (
-                      <div className="tg-meta">
-                        <span
-                          className="tg-genre"
-                          style={{ color, background: `${color}15`, borderColor: `${color}30` }}
-                        >
-                          {track.genre}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-
-                  {owned ? (
-                    <div className="tg-action tg-action--owned">
-                      <span className="tg-action-label">owned</span>
-                      <span className="tg-action-verb">✓</span>
-                    </div>
-                  ) : justGot ? (
-                    <div className="tg-action tg-action--owned">
-                      <span className="tg-action-label">saved</span>
-                      <span className="tg-action-verb">✦</span>
-                    </div>
-                  ) : (
-                    <button
-                      className={`tg-action tg-action--buy ${isFree ? 'tg-action--free' : ''}`}
-                      disabled={isBuying}
-                      onClick={e => { e.stopPropagation(); handleBuy(track) }}
-                      style={!isFree ? { '--action-color': color } as React.CSSProperties : undefined}
-                    >
-                      {isBuying ? (
-                        <>
-                          <span className="upload-spinner" />
-                          <span className="tg-action-verb">processing</span>
-                        </>
-                      ) : (
-                        <>
-                          <span className="tg-action-label">
-                            {isFree ? 'free' : fmtUsdc(track.price)}
-                          </span>
-                          <span className="tg-action-verb">{isFree ? 'get →' : 'buy →'}</span>
-                        </>
-                      )}
-                    </button>
-                  )}
-                </div>
-              )
-            })
+            : filtered.map(renderCard)
           }
         </div>
       )}

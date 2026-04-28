@@ -10,7 +10,11 @@ const GENRE_PALETTE = [
   '#f97316', '#7c5de8', '#f87171', '#34d399',
 ]
 
-export function LibraryView() {
+interface LibraryViewProps {
+  onFindSimilar: (track: Track) => void
+}
+
+export function LibraryView({ onFindSimilar }: LibraryViewProps) {
   const [removing, setRemoving] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [activeGenres, setActiveGenres] = useState<Set<string>>(new Set())
@@ -226,6 +230,15 @@ export function LibraryView() {
                   </span>
                 )}
 
+                <button
+                  className="lib-row-similar"
+                  onClick={e => { e.stopPropagation(); onFindSimilar(track) }}
+                  title="Find similar in store"
+                >
+                  ✦
+                </button>
+
+                {/* remove */}
                 <button
                   className="lib-row-remove"
                   onClick={e => handleRemove(e, track)}

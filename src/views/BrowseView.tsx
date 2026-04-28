@@ -327,6 +327,11 @@ export function BrowseView({
         </div>
       )}
 
+      {
+        <div>
+          <span>recommended count {recommendedTracks ? recommendedTracks.tracks.length : 0}</span>
+        </div>
+      }
       {recommendedTracks && recommendedTracks.tracks && recommendedTracks.tracks.length > 0 && !recommendLoading && (
         <div className="rec-section">
           <div className="rec-banner">
@@ -342,11 +347,7 @@ export function BrowseView({
               .map(renderCard)}
           </div>
         </div>
-      ) || (
-          <div>
-             Hi
-          </div>
-        )}
+      )}
 
       {(loading || filtered.length > 0) && (
         <div className="track-grid">

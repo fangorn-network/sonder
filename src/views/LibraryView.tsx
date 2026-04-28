@@ -11,7 +11,7 @@ const GENRE_PALETTE = [
 ]
 
 interface LibraryViewProps {
-  onFindSimilar: (track: Track) => void
+  onFindSimilar: (track?: Track) => void
 }
 
 export function LibraryView({ onFindSimilar }: LibraryViewProps) {
@@ -109,6 +109,14 @@ export function LibraryView({ onFindSimilar }: LibraryViewProps) {
           {filtered.length}{filtered.length !== owned.length ? `/${owned.length}` : ''}{' '}
           {owned.length === 1 ? 'track' : 'tracks'}
         </span>
+				{/* Update onFindSimilar to be more generic for mood buttons via a prompt builder. */}
+					<button
+						className="lib-row-similar"
+						onClick={e => { e.stopPropagation(); onFindSimilar() }}
+						title="Find similar in store"
+					>
+								  ✦
+					</button>
       </div>
 
       {error && <div className="upload-error">{error}</div>}
@@ -229,14 +237,6 @@ export function LibraryView({ onFindSimilar }: LibraryViewProps) {
                     {track.genre}
                   </span>
                 )}
-
-                <button
-                  className="lib-row-similar"
-                  onClick={e => { e.stopPropagation(); onFindSimilar(track) }}
-                  title="Find similar in store"
-                >
-                  ✦
-                </button>
 
                 {/* remove */}
                 <button

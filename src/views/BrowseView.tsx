@@ -264,7 +264,8 @@ export function BrowseView({
     <div className="rec-banner">
       <div className="rec-banner-left">
         <span className="rec-banner-icon">✦</span>
-        <span>Similar to <strong>{recommendedTracks.sourceTitle}</strong></span>
+				{/* Update this from sourceTitle to agentMessage */}
+        <span>{recommendedTracks.sourceTitle}</span>
       </div>
       <button className="rec-banner-clear" onClick={onClearRecommendations}>✕ Clear</button>
     </div>
@@ -276,17 +277,6 @@ export function BrowseView({
               const owned = isInLibrary(track.id)
               const justGot = justBought === track.id
               const color = col(track)
-
-							if (track.id === recommendedTracks.sourceId) {
-								return 
-							}
-
-							if (track.title === recommendedTracks.sourceTitle) {
-
-								console.log(`Source id: ${recommendedTracks.sourceId}`)
-								console.log(`Current id: ${track.id}`)
-
-							}
 
               return (
                 <div

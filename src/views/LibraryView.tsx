@@ -118,6 +118,14 @@ export function LibraryView({ tracks, loading, onPlay, currentTrack, onFindSimil
           {filtered.length}{filtered.length !== owned.length ? `/${owned.length}` : ''}{' '}
           {owned.length === 1 ? 'track' : 'tracks'}
         </span>
+				{/* Update onFindSimilar to be more generic for mood buttons via a prompt builder. */}
+					<button
+						className="lib-row-similar"
+						onClick={e => { e.stopPropagation(); onFindSimilar() }}
+						title="Find similar in store"
+					>
+								  ✦
+					</button>
       </div>
 
       {/* Filter bar */}
@@ -241,14 +249,6 @@ export function LibraryView({ tracks, loading, onPlay, currentTrack, onFindSimil
                     {track.genre}
                   </span>
                 )}
-
-								<button
-								  className="lib-row-similar"
-								  onClick={e => { e.stopPropagation(); onFindSimilar(track) }}
-								  title="Find similar in store"
-								>
-								  ✦
-								</button>
 
                 {/* remove */}
                 <button

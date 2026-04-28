@@ -10,7 +10,8 @@ export function agentIsEnabled() {
 
 export interface AgentMcpResult {
   resultType?: string;
-  data?: unknown;
+  mcpResults?: unknown;
+	agentMessage?: string;
 }
 
 export function useFangornAgent() {
@@ -35,7 +36,8 @@ export function useFangornAgent() {
 
       if (!res.ok) throw new Error(`Agent returned ${res.status}`);
       const data = await res.json();
-      return data.mcpResults ?? null;
+			const agentResponse = {mcpResults: data.mcpResults, agentMessage: data.response}
+      return agentResponse.mcpResults ? agentResponse : null
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Agent request failed";
       console.error("Agent error:", err);

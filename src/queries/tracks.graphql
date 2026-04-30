@@ -14,7 +14,7 @@ query GetTracks($first: Int!, $skip: Int!) {
     skip: $skip
     orderBy: lastUpdated
     orderDirection: desc
-    where: { schemaId: "0x7a69b1c49f16834707fe1d8bcc69ec485ea1b3c7bc68dd3ab81b05ec539952cd" }
+    where: { schemaId: "0x8d4f6bf05a8afde7ed7df74637712e32d0d8b1e24f741c1db416e6229cac8f6b" }
   ) {
     ...TrackFields
     manifest {
@@ -28,7 +28,7 @@ query GetTracks($first: Int!, $skip: Int!) {
 
 query SearchTracks($search: String!) {
   manifestStates(
-    where: { schemaId: "0x7a69b1c49f16834707fe1d8bcc69ec485ea1b3c7bc68dd3ab81b05ec539952cd" }
+    where: { schemaId: "0x8d4f6bf05a8afde7ed7df74637712e32d0d8b1e24f741c1db416e6229cac8f6b" }
     first: 100
   ) {
     ...TrackFields
@@ -63,7 +63,7 @@ query GetTracksByOwner($owner: Bytes!, $first: Int!, $skip: Int!) {
   manifestStates(
     where: {
       owner: $owner
-      schemaId: "0x7a69b1c49f16834707fe1d8bcc69ec485ea1b3c7bc68dd3ab81b05ec539952cd"
+      schemaId: "0x8d4f6bf05a8afde7ed7df74637712e32d0d8b1e24f741c1db416e6229cac8f6b"
     }
     first: $first
     skip: $skip
@@ -94,7 +94,7 @@ query GetTrackByOwnerAndTitle($owner: Bytes!, $title: String!) {
   manifestStates(
     where: {
       owner: $owner
-      schemaId: "0x7a69b1c49f16834707fe1d8bcc69ec485ea1b3c7bc68dd3ab81b05ec539952cd"
+      schemaId: "0x8d4f6bf05a8afde7ed7df74637712e32d0d8b1e24f741c1db416e6229cac8f6b"
     }
     first: 10
   ) {

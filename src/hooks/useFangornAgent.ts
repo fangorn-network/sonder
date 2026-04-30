@@ -27,16 +27,19 @@ export function useFangornAgent() {
     setLoading(true);
     setError(null);
 
+		const toolNameList = ["get_files_by_file_fields"]
+
     try {
       const res = await fetch(`${apiUrl}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message }),
+        body: JSON.stringify({ message, toolNameList }),
       });
 
       if (!res.ok) throw new Error(`Agent returned ${res.status}`);
       const data = await res.json();
 			const agentResponse = {mcpResults: data.mcpResults, agentMessage: data.response}
+			console.log(`agentResponse: ${JSON.stringify(agentResponse, null, 2)}`)
       return agentResponse.mcpResults ? agentResponse : null
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Agent request failed";

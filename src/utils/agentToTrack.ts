@@ -27,6 +27,7 @@ export function agentFileToTrack(file: AgentFile): Track {
 
   return {
     id: file.id,
+    manifestStateId: file.manifestStateId,
     name: file.name,
     title: field(fields, 'title') || file.name.replace(/-/g, ' '),
     artist: field(fields, 'artist'),
@@ -44,6 +45,15 @@ export function agentFileToTrack(file: AgentFile): Track {
 }
 
 export function agentResultToTracks(mcpResult: any): Track[] {
-  const files = Array.isArray(mcpResult?.data) ? mcpResult.data : []
-  return files.map(agentFileToTrack)
+  const files = Array.isArray(mcpResult?.data) ? mcpResult.data : [];
+  const tracks = files.map(agentFileToTrack);
+
+  const latestByKey = new Map<string, Track>();
+  for (const track of tracks) {
+    const key = track.audio?.toString().toLowerCase()
+      ?? `${track.artist}|${track.title}|${track.album}`.toLowerCase();
+    if (!key || key === '||') continue;
+    latestByKey.set(key, track); // overwrites — last wins
+  }
+  return Array.from(latestByKey.values());
 }

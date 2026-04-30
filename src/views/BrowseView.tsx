@@ -326,18 +326,16 @@ export function BrowseView({
           <p>{search || hasActiveFilter ? 'No tracks match your filters.' : 'No tracks published yet.'}</p>
         </div>
       )}
-
-      {
-        <div>
-          <span>recommended count {recommendedTracks ? recommendedTracks.tracks.length : 0}</span>
-        </div>
-      }
+       
       {recommendedTracks && recommendedTracks.tracks && recommendedTracks.tracks.length > 0 && !recommendLoading && (
         <div className="rec-section">
           <div className="rec-banner">
             <div className="rec-banner-left">
               <span className="rec-banner-icon">✦</span>
-              <span>Similar to <strong>{recommendedTracks.sourceTitle}</strong></span>
+              <span>Made for you</span>
+              {/* <span>
+                <strong>{recommendedTracks.sourceTitle}</strong>
+              </span> */}
             </div>
             <button className="rec-banner-clear" onClick={onClearRecommendations}>✕ Clear</button>
           </div>

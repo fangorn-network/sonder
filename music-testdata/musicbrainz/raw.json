@@ -1,0 +1,782 @@
+[
+  {
+    "mbid": "8e3feed0-59a3-4f3b-a985-75dd00a5353a",
+    "title": "My Cup",
+    "artist": "Bob Marley & The Wailers",
+    "year": 2002
+  },
+  {
+    "mbid": "b9bb35ff-6aa7-4d0e-9557-b5a906fe454f",
+    "title": "Lively Up Yourself",
+    "artist": "Bob Marley & The Wailers",
+    "year": 1989
+  },
+  {
+    "mbid": "791d1149-b12f-4e77-8a7a-6e24837bbbd6",
+    "title": "Riding High",
+    "artist": "Bob Marley & The Wailers",
+    "year": 1989
+  },
+  {
+    "mbid": "71a54361-5f4f-4bcf-b34d-9465538dc0c5",
+    "title": "Trench Town Rock",
+    "artist": "Bob Marley & The Wailers",
+    "year": 1992
+  },
+  {
+    "mbid": "82c49e23-30c5-40d4-8d4d-f3454ce36444",
+    "title": "Nice Time (alternate)",
+    "artist": "Bob Marley & The Wailers",
+    "year": 1998
+  },
+  {
+    "mbid": "02a4111c-fe9c-45da-b1c1-4f2a4846eafd",
+    "title": "Waiting In Vain",
+    "artist": "Bob Marley & The Wailers",
+    "year": 1987
+  },
+  {
+    "mbid": "8d8ed978-d363-4517-b687-18a74e875202",
+    "title": "Exodus",
+    "artist": "Bob Marley & The Wailers",
+    "year": 0
+  },
+  {
+    "mbid": "d14844cf-e4fa-4d3a-af95-0e35e91981e0",
+    "title": "Rock to the Rock",
+    "artist": "Bob Marley & The Wailers",
+    "year": 1998
+  },
+  {
+    "mbid": "b7a3e1b1-5829-4708-b3b1-415909c4dfc5",
+    "title": "Soul Rebel",
+    "artist": "Bob Marley & The Wailers",
+    "year": 0
+  },
+  {
+    "mbid": "fae7818a-2e93-425e-918e-419ed8817bc3",
+    "title": "Soul Almighty",
+    "artist": "Bob Marley & The Wailers",
+    "year": 0
+  },
+  {
+    "mbid": "b94ba7fc-1849-4c30-9859-fe3197e6f65f",
+    "title": "A Hymn",
+    "artist": "Khruangbin",
+    "year": 2021
+  },
+  {
+    "mbid": "fbca4b38-c664-4dcc-af05-a9fcbf7c7878",
+    "title": "People Everywhere (Still Alive)",
+    "artist": "Khruangbin",
+    "year": 2023
+  },
+  {
+    "mbid": "5d06fa70-6225-4082-9432-4bb1b5316e0d",
+    "title": "Chom Nang",
+    "artist": "Khruangbin",
+    "year": 2012
+  },
+  {
+    "mbid": "9da10ae1-6ef7-4f6f-9321-354e3eb2367c",
+    "title": "Bin Bin",
+    "artist": "Khruangbin",
+    "year": 2023
+  },
+  {
+    "mbid": "7e7987e2-4c34-46e3-a806-1c12e8d1d7f7",
+    "title": "La Javanaise",
+    "artist": "Khruangbin",
+    "year": 2012
+  },
+  {
+    "mbid": "47607801-4c68-4a61-946a-76cf8f42786c",
+    "title": "Two Fish and an Elephant",
+    "artist": "Khruangbin",
+    "year": 2023
+  },
+  {
+    "mbid": "bf4a24aa-82f0-4e94-9ff6-ad3ff3fd05e6",
+    "title": "A Calf Born in Winter",
+    "artist": "Khruangbin",
+    "year": 2023
+  },
+  {
+    "mbid": "c8ad6ad7-72c0-4586-80d1-0d9b1f645513",
+    "title": "Shida",
+    "artist": "Khruangbin",
+    "year": 2023
+  },
+  {
+    "mbid": "847a290f-60ec-421c-a07f-2bf1ea0e8731",
+    "title": "White Gloves",
+    "artist": "Khruangbin",
+    "year": 2023
+  },
+  {
+    "mbid": "f6fbfa5e-67ad-4d04-962b-0fef2b676399",
+    "title": "Dern Kala",
+    "artist": "Khruangbin",
+    "year": 2023
+  },
+  {
+    "mbid": "306490a9-59d0-4b20-8ca2-a1ac5f9b44b3",
+    "title": "[untitled]",
+    "artist": "Aphex Twin",
+    "year": 1995
+  },
+  {
+    "mbid": "b5429b09-8437-48d5-84c5-4df24d0b392e",
+    "title": "[untitled]",
+    "artist": "Aphex Twin",
+    "year": 1995
+  },
+  {
+    "mbid": "4196d4d9-5f19-4122-9a02-e42988d3207b",
+    "title": "[untitled]",
+    "artist": "Aphex Twin",
+    "year": 1995
+  },
+  {
+    "mbid": "ebc4d913-71d8-4972-bc20-c3cd4a78e6e1",
+    "title": "[untitled]",
+    "artist": "Aphex Twin",
+    "year": 1995
+  },
+  {
+    "mbid": "2e7a88e9-d778-41a6-a3ae-5f29de599814",
+    "title": "Ventolin (Plain‐An‐Gwarry mix)",
+    "artist": "Aphex Twin",
+    "year": 1995
+  },
+  {
+    "mbid": "6f2286a8-f94c-45f1-8e65-489a8c0e20ee",
+    "title": "73-Yips",
+    "artist": "Aphex Twin",
+    "year": 1994
+  },
+  {
+    "mbid": "e10b3c43-e661-49cb-8576-c00ec66d999b",
+    "title": "Inkey$",
+    "artist": "Aphex Twin",
+    "year": 1997
+  },
+  {
+    "mbid": "56e80714-1d27-4ed7-a947-f98bd2833a53",
+    "title": "The Garden of Linmiri",
+    "artist": "Aphex Twin",
+    "year": 1994
+  },
+  {
+    "mbid": "56d91f00-25d1-46a4-bb24-749f517d33a9",
+    "title": "Words (Processed)",
+    "artist": "Aphex Twin",
+    "year": 1994
+  },
+  {
+    "mbid": "f09c9368-6adc-4221-bc55-4957bbbe3bf9",
+    "title": "Hexagon",
+    "artist": "Aphex Twin",
+    "year": 1994
+  },
+  {
+    "mbid": "9b573561-a446-4764-a874-fd96ffbb3c2c",
+    "title": "Gutted",
+    "artist": "Burial",
+    "year": 2006
+  },
+  {
+    "mbid": "cf2c947f-8bc0-4c9a-bbe5-caa38a9ebdfa",
+    "title": "Among the Fools",
+    "artist": "Burial",
+    "year": 2005
+  },
+  {
+    "mbid": "a35520b9-14b7-4332-a235-1b54e1bcf699",
+    "title": "No One Who Leads, No One Who Follows",
+    "artist": "Burial",
+    "year": 2005
+  },
+  {
+    "mbid": "e24ea133-9e78-4e00-884a-7c000b2687a9",
+    "title": "Immortal Will",
+    "artist": "Burial",
+    "year": 2005
+  },
+  {
+    "mbid": "66700b2a-69c5-4bd5-8f29-a16b4434c4b3",
+    "title": "Archangel",
+    "artist": "Burial",
+    "year": 2008
+  },
+  {
+    "mbid": "38c0e32f-d9de-4062-ab57-9bf2cd9d9dca",
+    "title": "Perpetual Demise (demo)",
+    "artist": "Burial",
+    "year": 1992
+  },
+  {
+    "mbid": "dbb4b72d-89c6-4b63-a00b-22b93b53ab9a",
+    "title": "Ghost Hardware",
+    "artist": "Burial",
+    "year": 2016
+  },
+  {
+    "mbid": "fa4bc99c-87e0-43d9-b682-d96d16a244a1",
+    "title": "Homeless",
+    "artist": "Burial",
+    "year": 2016
+  },
+  {
+    "mbid": "9684ead8-4642-4877-a709-590b527eae4f",
+    "title": "Raver",
+    "artist": "Burial",
+    "year": 2016
+  },
+  {
+    "mbid": "c996cab4-3b47-4a53-88f2-84cd421376da",
+    "title": "Reticent Roleplay",
+    "artist": "Burial",
+    "year": 2008
+  },
+  {
+    "mbid": "0e0d54c4-be82-4460-bd49-9a1802915211",
+    "title": "Nights (Adieu flip)",
+    "artist": "Frank Ocean",
+    "year": 2023
+  },
+  {
+    "mbid": "2e8d8685-85b5-41d7-90cd-96c9866e8442",
+    "title": "Come On World, You Can't Go!",
+    "artist": "Frank Ocean",
+    "year": 0
+  },
+  {
+    "mbid": "dc884d61-64df-4ae6-8953-4324a034661a",
+    "title": "Thinkin’ About You (remixed by Shag)",
+    "artist": "Frank Ocean",
+    "year": 2012
+  },
+  {
+    "mbid": "47802ca3-5b3d-4e4a-ba8e-4193df67f300",
+    "title": "Lost (album version)",
+    "artist": "Frank Ocean",
+    "year": 2013
+  },
+  {
+    "mbid": "d90934be-302a-4e0d-a1dd-b94df3421f33",
+    "title": "Pink + White",
+    "artist": "Frank Ocean",
+    "year": 2016
+  },
+  {
+    "mbid": "c3e901e3-f2fb-4b84-add4-ec16ce173476",
+    "title": "Seigfried",
+    "artist": "Frank Ocean",
+    "year": 2016
+  },
+  {
+    "mbid": "2e689177-6d5c-4a8d-a800-4e3ec3d74d4e",
+    "title": "Novacane",
+    "artist": "Frank Ocean",
+    "year": 2015
+  },
+  {
+    "mbid": "86d1e6ef-41b5-4c06-b7ba-6037352e6d49",
+    "title": "Richest Man in the Room",
+    "artist": "Frank Ocean",
+    "year": 2011
+  },
+  {
+    "mbid": "57e5939e-9e50-4868-937f-6bc8426f93ce",
+    "title": "The City",
+    "artist": "Frank Ocean",
+    "year": 2011
+  },
+  {
+    "mbid": "f81076a9-1cbc-4413-b67d-b772cdea4806",
+    "title": "Denim",
+    "artist": "Frank Ocean",
+    "year": 2011
+  },
+  {
+    "mbid": "4da958a7-ed77-4a07-b3a3-c4ae35b565ab",
+    "title": "Prove Yourself",
+    "artist": "Radiohead",
+    "year": 2004
+  },
+  {
+    "mbid": "ed00171a-bf46-4f85-94ec-c434824c4d3e",
+    "title": "Pearly*",
+    "artist": "Radiohead",
+    "year": 2004
+  },
+  {
+    "mbid": "4bc78586-56ba-4473-bf35-87c1d79eff35",
+    "title": "Creep",
+    "artist": "Radiohead",
+    "year": 2001
+  },
+  {
+    "mbid": "9ca74400-d419-44f6-b7ef-b9ef8f4d6d0a",
+    "title": "Big Boots",
+    "artist": "Radiohead",
+    "year": 2001
+  },
+  {
+    "mbid": "6af7906b-d730-4969-9e29-703fcefa23ef",
+    "title": "Rhinestone Cowboy",
+    "artist": "Radiohead",
+    "year": 2001
+  },
+  {
+    "mbid": "d2f74388-ba2d-4e2c-9b81-4e10dd4740b8",
+    "title": "Idioteque",
+    "artist": "Radiohead",
+    "year": 2003
+  },
+  {
+    "mbid": "1a9ac3a1-b4e2-4726-9ad2-47940986fb1e",
+    "title": "Just",
+    "artist": "Radiohead",
+    "year": 2000
+  },
+  {
+    "mbid": "2e4a94c8-d5dd-4631-a919-ced157a71a4c",
+    "title": "Everything in Its Right Place",
+    "artist": "Radiohead",
+    "year": 2000
+  },
+  {
+    "mbid": "73b58481-aff6-436a-b12c-759f0acc2f16",
+    "title": "The Bends",
+    "artist": "Radiohead",
+    "year": 2000
+  },
+  {
+    "mbid": "0790ba6c-e0b1-4891-b82f-b4db9a5a927f",
+    "title": "Karma Police",
+    "artist": "Radiohead",
+    "year": 2000
+  },
+  {
+    "mbid": "9fd3ddc9-e4b8-4489-8ecb-d8c53a8b9361",
+    "title": "On a Mission / Cruddy",
+    "artist": "Madlib",
+    "year": 2000
+  },
+  {
+    "mbid": "b0676313-50b4-4c41-b5b3-880527bc9c1e",
+    "title": "Outro",
+    "artist": "Madlib",
+    "year": 2003
+  },
+  {
+    "mbid": "e3bfdc8e-d18d-491e-aa38-0753c07c57e0",
+    "title": "Mystic Bounce",
+    "artist": "Madlib",
+    "year": 2003
+  },
+  {
+    "mbid": "0e067b30-ee36-4368-9eba-b83589281a33",
+    "title": "Untitled",
+    "artist": "Madlib",
+    "year": 2004
+  },
+  {
+    "mbid": "dc2788a7-bd6a-48a0-86b1-2db9238d46d2",
+    "title": "What About the Beats",
+    "artist": "Madlib",
+    "year": 0
+  },
+  {
+    "mbid": "fda581fe-6434-44de-a77e-edfded9988bf",
+    "title": "Filthy (Untouched)",
+    "artist": "Madlib",
+    "year": 2006
+  },
+  {
+    "mbid": "015633bb-c5fe-41f6-97dc-bf4eb1f504aa",
+    "title": "Friends (Foes)",
+    "artist": "Madlib",
+    "year": 2006
+  },
+  {
+    "mbid": "8d1052ff-aa47-492e-86a0-22085eddd664",
+    "title": "Take It Back",
+    "artist": "Madlib",
+    "year": 2006
+  },
+  {
+    "mbid": "37bbfd5b-a4eb-42d1-b247-c7cc21306bfe",
+    "title": "Earth Sounds",
+    "artist": "Madlib",
+    "year": 2001
+  },
+  {
+    "mbid": "bd46f607-5178-4920-92dc-9e683430aa77",
+    "title": "Painted Pictures (Art)",
+    "artist": "Madlib",
+    "year": 2005
+  },
+  {
+    "mbid": "6a864f69-c848-4520-a530-051a57595319",
+    "title": "Moving Like Mike",
+    "artist": "Mac DeMarco",
+    "year": 2012
+  },
+  {
+    "mbid": "6e133473-a859-4b7c-beba-a06468a12952",
+    "title": "Only You",
+    "artist": "Mac DeMarco",
+    "year": 2010
+  },
+  {
+    "mbid": "6ed7b779-68fb-4658-b2fb-9c4da95e0720",
+    "title": "One Another (instrumental)",
+    "artist": "Mac DeMarco",
+    "year": 2017
+  },
+  {
+    "mbid": "a6f2d275-b640-4ea8-872f-33efe5d17986",
+    "title": "Hoso Boyo",
+    "artist": "Mac DeMarco",
+    "year": 2015
+  },
+  {
+    "mbid": "6b4d4e99-0020-4119-83a3-c698c3acec38",
+    "title": "Avocado Andrew",
+    "artist": "Mac DeMarco",
+    "year": 2014
+  },
+  {
+    "mbid": "fd5b7a17-2007-44d0-a40d-f5fe6af95ce0",
+    "title": "Untitled I",
+    "artist": "Mac DeMarco",
+    "year": 2018
+  },
+  {
+    "mbid": "3d86b9f3-a690-470d-a780-69ebf22ad9b2",
+    "title": "20240425 v2nm",
+    "artist": "Mac DeMarco",
+    "year": 2025
+  },
+  {
+    "mbid": "40d78e22-f975-4bf3-9aab-cd44f9a3137c",
+    "title": "Let My Baby Stay",
+    "artist": "Mac DeMarco",
+    "year": 2014
+  },
+  {
+    "mbid": "de7660e8-b654-4719-88f5-872a3fb74598",
+    "title": "Stars Keep on Calling My Name",
+    "artist": "Mac DeMarco",
+    "year": 2014
+  },
+  {
+    "mbid": "e9ec9491-85f6-427d-b983-9b4f7c1e4db4",
+    "title": "Rock ’n’ Roll Night Club",
+    "artist": "Mac DeMarco",
+    "year": 2014
+  },
+  {
+    "mbid": "f5ce7305-a468-47be-a87e-b5f07a763b75",
+    "title": "Marmalade",
+    "artist": "System of a Down",
+    "year": 1998
+  },
+  {
+    "mbid": "01038e8c-86c6-469d-a444-37e8f93a3cef",
+    "title": "War?",
+    "artist": "System of a Down",
+    "year": 0
+  },
+  {
+    "mbid": "e36e1185-c790-4fff-a2e2-eeba49df0e22",
+    "title": "Needles",
+    "artist": "System of a Down",
+    "year": 2002
+  },
+  {
+    "mbid": "ad760776-2c2d-45ba-9d82-586df501107c",
+    "title": "Temper",
+    "artist": "System of a Down",
+    "year": 1996
+  },
+  {
+    "mbid": "e66f1902-446b-41f7-abfe-c52271b3bf0e",
+    "title": "Peep‐Hole",
+    "artist": "System of a Down",
+    "year": 1997
+  },
+  {
+    "mbid": "2a617383-feb8-4127-8773-e94018bf8d0a",
+    "title": "Mind",
+    "artist": "System of a Down",
+    "year": 1997
+  },
+  {
+    "mbid": "5ac92c41-edfb-435d-ad33-781707315cf2",
+    "title": "Know",
+    "artist": "System of a Down",
+    "year": 1998
+  },
+  {
+    "mbid": "66fccc84-c767-4a08-b877-34d86936218e",
+    "title": "The Metro",
+    "artist": "System of a Down",
+    "year": 1997
+  },
+  {
+    "mbid": "913058bb-212d-4acc-902c-3b4785a220e1",
+    "title": "Darts",
+    "artist": "System of a Down",
+    "year": 0
+  },
+  {
+    "mbid": "5b07636e-5058-49ae-81a7-ed5eac8b5705",
+    "title": "B.Y.O.B",
+    "artist": "System of a Down",
+    "year": 0
+  },
+  {
+    "mbid": "242c2a82-a641-41fd-b38f-c2873df8c4c6",
+    "title": "Got the Life (Vorticist's Suite)",
+    "artist": "Korn",
+    "year": 1998
+  },
+  {
+    "mbid": "302f6c6e-eb12-4500-905b-b5b3147f96b7",
+    "title": "Got the Life",
+    "artist": "Korn",
+    "year": 1999
+  },
+  {
+    "mbid": "987fc311-2a28-45fb-85c3-1762b91471e9",
+    "title": "Falling Away From Me (Mantronik extended remix)",
+    "artist": "Korn",
+    "year": 1999
+  },
+  {
+    "mbid": "a1b8e94b-f322-4b3e-b75f-1723f5267816",
+    "title": "Uber-Time",
+    "artist": "Korn",
+    "year": 2010
+  },
+  {
+    "mbid": "1f9120b6-1315-4778-924e-6f1f3b1f4fa3",
+    "title": "Falling Away From Me",
+    "artist": "Korn",
+    "year": 1999
+  },
+  {
+    "mbid": "cbbc20d5-d882-4769-8110-3b2ae4325efd",
+    "title": "Blind",
+    "artist": "Korn",
+    "year": 2010
+  },
+  {
+    "mbid": "3e28a4bc-dc62-4867-b9c8-4794a339d93a",
+    "title": "Evolution (David Garcia + Margan Page dub)",
+    "artist": "Korn",
+    "year": 2007
+  },
+  {
+    "mbid": "2e2fa17e-ee84-4135-bc90-8b3d66c65ccf",
+    "title": "Christmas Song (Squeak by the FCC version)",
+    "artist": "Korn",
+    "year": 1993
+  },
+  {
+    "mbid": "7a6dfd3c-53a4-4197-b406-e68d4ec5f0e3",
+    "title": "Twist Acapella",
+    "artist": "Korn",
+    "year": 2009
+  },
+  {
+    "mbid": "00376815-1ced-42af-84e4-c9c94d45fc47",
+    "title": "Another Brick in the Wall",
+    "artist": "Korn",
+    "year": 2008
+  },
+  {
+    "mbid": "ed1f8c30-62db-4f17-953f-dba9cbeba799",
+    "title": "Love Yourself",
+    "artist": "Justin Bieber",
+    "year": 2017
+  },
+  {
+    "mbid": "5a3637a0-aa83-402c-b56e-e1f7304df316",
+    "title": "Sorry",
+    "artist": "Justin Bieber",
+    "year": 2015
+  },
+  {
+    "mbid": "7b1c6474-c271-42fe-b8ba-07b8027c6067",
+    "title": "FIRST PLACE",
+    "artist": "Justin Bieber",
+    "year": 2025
+  },
+  {
+    "mbid": "2c0b3b9a-423f-44ca-9339-b0c689c31514",
+    "title": "Rockin’ Around the Christmas Tree",
+    "artist": "Justin Bieber",
+    "year": 2020
+  },
+  {
+    "mbid": "8a1938d3-acbd-4db7-9e41-c96e20696269",
+    "title": "Take It Out on Me",
+    "artist": "Justin Bieber",
+    "year": 2020
+  },
+  {
+    "mbid": "3b81926b-c662-48b9-93b3-adfa1b429be2",
+    "title": "E.T.A.",
+    "artist": "Justin Bieber",
+    "year": 2020
+  },
+  {
+    "mbid": "fedf5d39-1f95-469d-a524-55f41da345a2",
+    "title": "What Do You Mean (Thunderbird Juicebox remix)",
+    "artist": "Justin Bieber",
+    "year": 2016
+  },
+  {
+    "mbid": "a2a7ac6d-1119-4d04-8d47-1f250634cf1b",
+    "title": "Santa Claus Is Coming to Town",
+    "artist": "Justin Bieber",
+    "year": 2011
+  },
+  {
+    "mbid": "cbe3f3b7-cae7-4d0a-b31b-32925d5c3ac9",
+    "title": "Be Alright",
+    "artist": "Justin Bieber",
+    "year": 2013
+  },
+  {
+    "mbid": "b4952cb1-dd1a-4301-9996-be89796f4324",
+    "title": "As Long as You Love Me",
+    "artist": "Justin Bieber",
+    "year": 2013
+  },
+  {
+    "mbid": "ebaf7636-33cc-4c06-990a-ea7ce682fa15",
+    "title": "Stuck on You",
+    "artist": "Paramore",
+    "year": 2006
+  },
+  {
+    "mbid": "3b0fe0dd-849d-46f0-843b-45d13830038a",
+    "title": "Alibi",
+    "artist": "Paramore",
+    "year": 2001
+  },
+  {
+    "mbid": "032f29fd-0e2c-4359-9796-b2afb1b95a90",
+    "title": "Continental",
+    "artist": "Paramore",
+    "year": 2001
+  },
+  {
+    "mbid": "04dab652-8ab6-4ea8-97c9-8b2706ff1c85",
+    "title": "Amaze Me",
+    "artist": "Paramore",
+    "year": 2001
+  },
+  {
+    "mbid": "0dad078d-4373-409b-8a89-e8d4303418ee",
+    "title": "Saturday",
+    "artist": "Paramore",
+    "year": 2001
+  },
+  {
+    "mbid": "cc9cabaf-d58e-4bfe-8c05-d971ac1d12d9",
+    "title": "Until Tomorrow",
+    "artist": "Paramore",
+    "year": 2001
+  },
+  {
+    "mbid": "79122bb0-8440-427a-9de1-81629b47e51e",
+    "title": "Ignorance",
+    "artist": "Paramore",
+    "year": 2009
+  },
+  {
+    "mbid": "90a05829-06b9-49cb-832b-8eb669138d57",
+    "title": "crushcrushcrush (radio edit)",
+    "artist": "Paramore",
+    "year": 2007
+  },
+  {
+    "mbid": "f9512515-4d09-4fec-9849-fc910947450b",
+    "title": "The Only Exception (album version)",
+    "artist": "Paramore",
+    "year": 2010
+  },
+  {
+    "mbid": "7de52852-707f-427c-8a67-f55f8029b0dd",
+    "title": "Careful",
+    "artist": "Paramore",
+    "year": 2010
+  },
+  {
+    "mbid": "1d779648-dbe9-4974-9be5-1740b52cb29a",
+    "title": "La La Land (Wideboys club mix)",
+    "artist": "Demi Lovato",
+    "year": 2009
+  },
+  {
+    "mbid": "568c6c5a-61e9-464f-9df8-8ed61a1896d0",
+    "title": "It’s Not Too Late",
+    "artist": "Demi Lovato",
+    "year": 2010
+  },
+  {
+    "mbid": "dd2fc66c-c024-45e4-b60b-40c80df14637",
+    "title": "Different Summers",
+    "artist": "Demi Lovato",
+    "year": 2010
+  },
+  {
+    "mbid": "4a3f545e-bb4c-4fc9-8786-36ddb411d7e4",
+    "title": "Neon Lights (Jump Smokers Remix)",
+    "artist": "Demi Lovato",
+    "year": 2014
+  },
+  {
+    "mbid": "69e004aa-7a83-4ed4-9124-babf09e9a0eb",
+    "title": "In the Mirror",
+    "artist": "Demi Lovato",
+    "year": 2020
+  },
+  {
+    "mbid": "cefa4fff-cba5-4bec-8de4-9258e41c7019",
+    "title": "Anyone",
+    "artist": "Demi Lovato",
+    "year": 2020
+  },
+  {
+    "mbid": "9274369d-180d-4bb2-85e8-b536e404d675",
+    "title": "Nightingale (live)",
+    "artist": "Demi Lovato",
+    "year": 2014
+  },
+  {
+    "mbid": "0bc4f938-c7a7-44ea-9000-32afbe3f1be2",
+    "title": "Give Me Love (live)",
+    "artist": "Demi Lovato",
+    "year": 2014
+  },
+  {
+    "mbid": "a8a38f77-1205-47d3-9712-45c20ed7d345",
+    "title": "Behind Enemy Lines",
+    "artist": "Demi Lovato",
+    "year": 2009
+  },
+  {
+    "mbid": "838266eb-eabb-46ec-a8d1-c453e96d5dc8",
+    "title": "La La Land",
+    "artist": "Demi Lovato",
+    "year": 2009
+  }
+]

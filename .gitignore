@@ -29,3 +29,4 @@ music-data/ia-data
 deploy.sh
 
 .env
+**/venv

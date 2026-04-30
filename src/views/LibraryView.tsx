@@ -11,7 +11,7 @@ const GENRE_PALETTE = [
 ]
 
 interface LibraryViewProps {
-  onFindSimilar: (track?: Track) => void
+  onFindSimilar: (track?: Track, query?: string) => void
 }
 
 export function LibraryView({ onFindSimilar }: LibraryViewProps) {
@@ -24,6 +24,17 @@ export function LibraryView({ onFindSimilar }: LibraryViewProps) {
   const { entries, removeFromLibrary } = useFirebase(user?.id ?? null)
   const { tracks: owned, loading, error } = useLibraryTracks(entries)
   const { currentTrack, selectTrack } = usePlayer()
+  const [showSimilarInput, setShowSimilarInput] = useState(false)
+  const [similarInput, setSimilarInput] = useState('')
+
+  function submitSimilar() {
+    const q = similarInput.trim()
+    if (!q) return
+    onFindSimilar(undefined, q)
+    setSimilarInput('')
+    setShowSimilarInput(false)
+  }
+
 
   const genres = useMemo(() => {
     const set = new Set<string>()
@@ -103,21 +114,54 @@ export function LibraryView({ onFindSimilar }: LibraryViewProps) {
   return (
     <div className="browse-view">
 
-      <div className="browse-toolbar">
+      {/* <div className="browse-toolbar">
         <span className="label-mono">Your Library</span>
         <span className="browse-count" style={{ marginLeft: 'auto' }}>
           {filtered.length}{filtered.length !== owned.length ? `/${owned.length}` : ''}{' '}
           {owned.length === 1 ? 'track' : 'tracks'}
-        </span>
-				{/* Update onFindSimilar to be more generic for mood buttons via a prompt builder. */}
-					<button
-						className="lib-row-similar"
-						onClick={e => { e.stopPropagation(); onFindSimilar() }}
-						title="Find similar in store"
-					>
-								  ✦
-					</button>
-      </div>
+        </span> */}
+        <div className="browse-toolbar">
+          <span className="label-mono">Your Library</span>
+          <span className="browse-count" style={{ marginLeft: 'auto' }}>
+            {filtered.length}{filtered.length !== owned.length ? `/${owned.length}` : ''}{' '}
+            {owned.length === 1 ? 'track' : 'tracks'}
+          </span>
+          <button
+            className={`lib-row-similar ${showSimilarInput ? 'lib-row-similar--active' : ''}`}
+            onClick={e => {
+              e.stopPropagation()
+              setShowSimilarInput(p => !p)
+            }}
+            title="Find similar in store"
+          >
+            ✦
+          </button>
+        </div>
+
+        {showSimilarInput && (
+          <div className="lib-similar-wrap">
+            <input
+              className="lib-similar-input"
+              type="text"
+              placeholder="tell me what you want…"
+              value={similarInput}
+              onChange={e => setSimilarInput(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') submitSimilar()
+                if (e.key === 'Escape') setShowSimilarInput(false)
+              }}
+              autoFocus
+            />
+            <button
+              className="lib-pill lib-pill--active"
+              onClick={submitSimilar}
+              disabled={!similarInput.trim()}
+            >
+              ✦ go
+            </button>
+          </div>
+        )}
+      {/* </div> */}
 
       {error && <div className="upload-error">{error}</div>}
 

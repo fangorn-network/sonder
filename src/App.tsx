@@ -27,22 +27,108 @@ export default function App() {
   const { sendMessage } = useFangornAgent()
 
   // add handler
-  const handleFindSimilar = useCallback(async (track: Track) => {
+  const handleFindSimilar = useCallback(async (track?: Track, query?: string) => {
     setRecommendLoading(true)
     setView('Discover')
 
-  try {
-    const prompt = `It is 12:30 pm on a Monday. Choose one music genre for this time of day and find at most 9 files using get_files_by_file_fields. Your response should be a one sentence blurb. Please avoid using first person pronouns.`;
-    const result = await sendMessage(prompt)
-		const tracks = agentResultToTracks(result?.mcpResults)
-    // const tracks = agentResultToTracks(result)
-		const agentMessage = result?.agentMessage
+    try {
+      const userIntent = query?.trim() || 'focus'
+      const simpleScrobble = [
+        {
+          artist: "Pink Floyd",
+          title: "Atom Heart Mother",
+          listens: "10"
+        },
+        {
+          artist: "Chon",
+          title: "Elliptical Illumination",
+          listens: "12"
+        },
+        {
+          artist: "Glitterbug",
+          title: "Jackie O",
+          listens: "7"
+        },
+        {
+          artist: "Ickymack",
+          title: "Flavor (Prod. by Boy Kid Cloud remixed by Ickymack)",
+          listens: "4"
+        },
+      ];
 
-		const recommendedTracks: RecommendedTracks = {
-			tracks,
-			sourceId: track.id,
-			sourceTitle: agentMessage!
-		}
+      const prompt = `
+      ROLE
+Discovery agent for fangorn.music.
+
+INPUT
+user_intent: ${userIntent}
+exclude_artists: ${JSON.stringify(simpleScrobble.map(s => s.artist))}
+
+TOOL
+get_files_by_file_fields(args)
+  Use ONLY this argument shape:
+  { schemaName: "fangorn.music.test.v0",
+    fieldName: "title",
+    fieldValue: "<one short common word>" }
+  Returns tracks whose title contains that word.
+
+PROCEDURE
+1. Read user_intent. Generate THREE single common words that a song
+   title in this mood might contain. Pick words that often appear in
+   real song titles, not abstract concepts.
+   Examples:
+     intent "swanky dinner party" → words: "love", "night", "blue"
+     intent "rainy morning focus" → words: "rain", "morning", "light"
+     intent "high energy workout"  → words: "fire", "run", "go"
+   Pick concrete, common, single words. One syllable preferred.
+2. Call the tool three times, once per word.
+3. Collect all returned tracks into a working set.
+4. Drop any track whose artist is in exclude_artists.
+5. Deduplicate by (artist, title).
+6. If working set is empty, output the EMPTY shape.
+7. Pick up to 6 tracks that fit user_intent. One track per artist.
+8. Pick 1 more track that feels furthest. Place last.
+9. Total 1 to 9 tracks.
+
+OUTPUT
+First character: "{". Last character: "}". No prose. No markdown.
+
+{
+  "tracks": [{ "manifestStateId": "...", "artist": "...", "title": "..." }],
+  "blurb": "..."
+}
+
+EMPTY:
+{ "tracks": [], "blurb": "the catalog has no fit for that intent yet" }
+
+BLURB RULES
+- One sentence the describes why you selected the output.
+- No first-person pronouns: I, me, my, we, us, our.
+- Reflect user_intent.
+- Hint at the final track reaching further out, without labeling it.
+
+HARD RULES
+- Every manifestStateId came from a tool response. No inventions.
+- exclude_artists never appear in tracks.
+- "Fangorn" is the platform, not an artist.
+- One track per artist.
+- When the tool returns files, do not summarize counts — return a one-sentence header and let the UI render the cards. When the tool returns zero files, say so plainly.
+- fieldValue is always a single common English word, lowercase.
+    `
+      const result = await sendMessage(prompt)
+      const tracks = agentResultToTracks(result?.mcpResults)
+      // const tracks = agentResultToTracks(result)
+      const agentMessage = result?.agentMessage
+
+      console.log(JSON.stringify(`track: ${track}`))
+
+      const id = track?.id ?? ""
+
+      const recommendedTracks: RecommendedTracks = {
+        tracks,
+        sourceId: id,
+        sourceTitle: agentMessage!
+      }
 
       setRecommendedTracks(tracks.length > 0 ? recommendedTracks : null)
     } catch (e) {
@@ -109,6 +195,9 @@ export default function App() {
               loadMore={loadMore}
               search={search}
               setSearch={setSearch}
+              recommendedTracks={recommendedTracks}
+              recommendLoading={recommendLoading}
+              onClearRecommendations={clearRecommendations}
             />
           )}
           {view === 'Library' && (

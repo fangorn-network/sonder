@@ -5,7 +5,7 @@ pip install anthropic
 export ANTHROPIC_API_KEY=sk-ant-api...
 
 python fetch.py > raw.json && \
-export ANTHROPIC_API_KEY=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 && \
+export ANTHROPIC_API_KEY=sk-ant-<> && \
 python enrich.py raw.json > data.json
 ```
 

@@ -16,6 +16,6 @@ python enrich.py raw.json > data.json
 | CID      | bafkreibsep3oybc7hih5nidjycuunsj2xviool3cqhlnvuasubztaimv5m        |
 
 
-
-
-
+test.tags.v5
+│  Schema ID: 0x969f34ddaffa9a35c0092dd77cf2fab555fe88a551a435722fd0feca677c9a2b  │
+│  CID:       bafkreifaboagyjkprtcd2hskon5cfzgzlkijzfv44mwxseuvagxx3sshgq         │

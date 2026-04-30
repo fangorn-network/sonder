@@ -1,41 +1,16 @@
 import { useEffect } from 'react'
 import type { Track } from '../types'
-import { usePrivy } from '@privy-io/react-auth'
-import { useFirebase } from '../hooks/useFirebase'
 import './TrackDetails.css'
-
-const toUsdc = (raw: string | undefined): number => {
-  if (!raw || raw === '0') return 0
-  return Number(raw) / 1_000_000
-}
-
-const fmtUsdc = (raw: string | undefined): string => {
-  const n = toUsdc(raw)
-  if (n === 0) return 'free'
-  return n < 0.01
-    ? `$${n.toFixed(6)}`
-    : `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`
-}
 
 interface TrackDetailsProps {
   track: Track
   color: string
-  buying: boolean
-  onBuy: () => void
   onClose: () => void
 }
 
-export function TrackDetails({ track, color, buying, onBuy, onClose }: TrackDetailsProps) {
-  const { user } = usePrivy()
-  const { isInLibrary } = useFirebase(user?.id ?? null)
-  const owned = isInLibrary(track.id)
-  const isFree = !track.price || track.price === '0'
-
-  // ESC to close
+export function TrackDetails({ track, color, onClose }: TrackDetailsProps) {
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', onKey)
     document.body.style.overflow = 'hidden'
     return () => {
@@ -52,57 +27,95 @@ export function TrackDetails({ track, color, buying, onBuy, onClose }: TrackDeta
         style={{ '--td-color': color } as React.CSSProperties}
       >
         <div className="td-handle" aria-hidden />
-
         <button className="td-close" onClick={onClose} aria-label="Close">✕</button>
 
         <div className="td-art" style={{ background: `${color}40` }}>
           <span className="td-art-initial" style={{ color }}>
             {track.title.slice(0, 1).toUpperCase()}
           </span>
+          {track.energy !== null && (
+            <div
+              className="td-energy-bar"
+              style={{ width: `${Math.round(track.energy * 100)}%`, background: color }}
+            />
+          )}
         </div>
 
         <div className="td-info">
           <h2 className="td-title">{track.title}</h2>
-          <p className="td-artist">{track.artist}</p>
-          {track.album && <p className="td-album">{track.album}</p>}
+          <p className="td-artist">
+            {track.artist}
+            {track.year !== null && <span className="td-year"> · {track.year}</span>}
+          </p>
 
-          <div className="td-tags">
-            {track.genre && (
-              <span className="td-tag" style={{ color, borderColor: `${color}40` }}>
-                {track.genre}
-              </span>
-            )}
-          </div>
+          {track.genres.length > 0 && (
+            <div className="td-tags">
+              {track.genres.map((g, i) => (
+                <span
+                  key={g}
+                  className="td-tag td-tag--genre"
+                  style={{
+                    color,
+                    borderColor: `${color}${i === 0 ? '80' : '40'}`,
+                    opacity: i === 0 ? 1 : 0.7,
+                  }}
+                >
+                  {g}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {track.moods.length > 0 && (
+            <div className="td-tags td-tags--moods">
+              {track.moods.map(m => (
+                <span key={m} className="td-tag td-tag--mood">{m}</span>
+              ))}
+            </div>
+          )}
+
+          {track.themes.length > 0 && (
+            <div className="td-tags td-tags--themes">
+              {track.themes.map(t => (
+                <span key={t} className="td-tag td-tag--theme">{t}</span>
+              ))}
+            </div>
+          )}
+
+          {track.contexts.length > 0 && (
+            <div className="td-tags td-tags--contexts">
+              {track.contexts.map(c => (
+                <span key={c} className="td-tag td-tag--context">{c}</span>
+              ))}
+            </div>
+          )}
 
           <dl className="td-fields">
-            <div className="td-field">
-              <dt>price</dt>
-              <dd>{fmtUsdc(track.price)}</dd>
-            </div>
+            {track.energy !== null && (
+              <div className="td-field">
+                <dt>energy</dt>
+                <dd>
+                  <div className="td-energy-track">
+                    <div
+                      className="td-energy-fill"
+                      style={{ width: `${Math.round(track.energy * 100)}%`, background: color }}
+                    />
+                  </div>
+                  <span className="td-energy-val">{Math.round(track.energy * 100)}</span>
+                </dd>
+              </div>
+            )}
+            {track.mbid && (
+              <div className="td-field">
+                <dt>mbid</dt>
+                <dd className="td-mono">{track.mbid}</dd>
+              </div>
+            )}
             <div className="td-field">
               <dt>artist address</dt>
               <dd className="td-mono">{track.owner.slice(0, 6)}…{track.owner.slice(-4)}</dd>
             </div>
           </dl>
-        </div>
-
-        <div className="td-action">
-          {owned ? (
-            <button className="td-btn td-btn--owned" disabled>
-              ✓ in library
-            </button>
-          ) : (
-            <button
-              className="td-btn td-btn--buy"
-              onClick={onBuy}
-              disabled={buying}
-            >
-              {buying
-                ? <><span className="upload-spinner" /> processing</>
-                : <>{isFree ? 'get' : `buy · ${fmtUsdc(track.price)}`} →</>
-              }
-            </button>
-          )}
         </div>
       </div>
     </div>

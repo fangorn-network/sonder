@@ -2570,12 +2570,11 @@ const merger = new(BareMerger as any)({
         store: rootStore.child('bareMerger')
       })
 const documentHashMap = {
-        "6a14ee979c40cd1f82e475da01c24f4902fb648ce2bf5d50032049bec41464e1": GetTracksDocument,
-"6a14ee979c40cd1f82e475da01c24f4902fb648ce2bf5d50032049bec41464e1": SearchTracksDocument,
-"6a14ee979c40cd1f82e475da01c24f4902fb648ce2bf5d50032049bec41464e1": GetTracksByStateIdsDocument,
-"6a14ee979c40cd1f82e475da01c24f4902fb648ce2bf5d50032049bec41464e1": GetTracksByOwnerDocument,
-"6a14ee979c40cd1f82e475da01c24f4902fb648ce2bf5d50032049bec41464e1": GetTrackDocument,
-"6a14ee979c40cd1f82e475da01c24f4902fb648ce2bf5d50032049bec41464e1": GetTrackByOwnerAndTitleDocument
+        "6c9a3649c81a3eff8c6516eb79a44bf51912ac42d9e978af99ab5c11cefabbf3": GetTagsDocument,
+"6c9a3649c81a3eff8c6516eb79a44bf51912ac42d9e978af99ab5c11cefabbf3": GetAllTagsForSearchDocument,
+"6c9a3649c81a3eff8c6516eb79a44bf51912ac42d9e978af99ab5c11cefabbf3": GetTagsByStateIdsDocument,
+"6c9a3649c81a3eff8c6516eb79a44bf51912ac42d9e978af99ab5c11cefabbf3": GetTagsByOwnerDocument,
+"6c9a3649c81a3eff8c6516eb79a44bf51912ac42d9e978af99ab5c11cefabbf3": GetTagDocument
       }
 additionalEnvelopPlugins.push(usePersistedOperations({
         getPersistedOperation(key) {
@@ -2597,47 +2596,40 @@ additionalEnvelopPlugins.push(usePersistedOperations({
     get documents() {
       return [
       {
-        document: GetTracksDocument,
+        document: GetTagsDocument,
         get rawSDL() {
-          return printWithCache(GetTracksDocument);
+          return printWithCache(GetTagsDocument);
         },
-        location: 'GetTracksDocument.graphql',
-        sha256Hash: '6a14ee979c40cd1f82e475da01c24f4902fb648ce2bf5d50032049bec41464e1'
+        location: 'GetTagsDocument.graphql',
+        sha256Hash: '6c9a3649c81a3eff8c6516eb79a44bf51912ac42d9e978af99ab5c11cefabbf3'
       },{
-        document: SearchTracksDocument,
+        document: GetAllTagsForSearchDocument,
         get rawSDL() {
-          return printWithCache(SearchTracksDocument);
+          return printWithCache(GetAllTagsForSearchDocument);
         },
-        location: 'SearchTracksDocument.graphql',
-        sha256Hash: '6a14ee979c40cd1f82e475da01c24f4902fb648ce2bf5d50032049bec41464e1'
+        location: 'GetAllTagsForSearchDocument.graphql',
+        sha256Hash: '6c9a3649c81a3eff8c6516eb79a44bf51912ac42d9e978af99ab5c11cefabbf3'
       },{
-        document: GetTracksByStateIdsDocument,
+        document: GetTagsByStateIdsDocument,
         get rawSDL() {
-          return printWithCache(GetTracksByStateIdsDocument);
+          return printWithCache(GetTagsByStateIdsDocument);
         },
-        location: 'GetTracksByStateIdsDocument.graphql',
-        sha256Hash: '6a14ee979c40cd1f82e475da01c24f4902fb648ce2bf5d50032049bec41464e1'
+        location: 'GetTagsByStateIdsDocument.graphql',
+        sha256Hash: '6c9a3649c81a3eff8c6516eb79a44bf51912ac42d9e978af99ab5c11cefabbf3'
       },{
-        document: GetTracksByOwnerDocument,
+        document: GetTagsByOwnerDocument,
         get rawSDL() {
-          return printWithCache(GetTracksByOwnerDocument);
+          return printWithCache(GetTagsByOwnerDocument);
         },
-        location: 'GetTracksByOwnerDocument.graphql',
-        sha256Hash: '6a14ee979c40cd1f82e475da01c24f4902fb648ce2bf5d50032049bec41464e1'
+        location: 'GetTagsByOwnerDocument.graphql',
+        sha256Hash: '6c9a3649c81a3eff8c6516eb79a44bf51912ac42d9e978af99ab5c11cefabbf3'
       },{
-        document: GetTrackDocument,
+        document: GetTagDocument,
         get rawSDL() {
-          return printWithCache(GetTrackDocument);
+          return printWithCache(GetTagDocument);
         },
-        location: 'GetTrackDocument.graphql',
-        sha256Hash: '6a14ee979c40cd1f82e475da01c24f4902fb648ce2bf5d50032049bec41464e1'
-      },{
-        document: GetTrackByOwnerAndTitleDocument,
-        get rawSDL() {
-          return printWithCache(GetTrackByOwnerAndTitleDocument);
-        },
-        location: 'GetTrackByOwnerAndTitleDocument.graphql',
-        sha256Hash: '6a14ee979c40cd1f82e475da01c24f4902fb648ce2bf5d50032049bec41464e1'
+        location: 'GetTagDocument.graphql',
+        sha256Hash: '6c9a3649c81a3eff8c6516eb79a44bf51912ac42d9e978af99ab5c11cefabbf3'
       }
     ];
     },
@@ -2692,104 +2684,84 @@ export function getBuiltGraphSDK<TGlobalContext = any, TOperationContext = any>(
   const sdkRequester$ = getBuiltGraphClient().then(({ sdkRequesterFactory }) => sdkRequesterFactory(globalContext));
   return getSdk<TOperationContext, TGlobalContext>((...args) => sdkRequester$.then(sdkRequester => sdkRequester(...args)));
 }
-export type TrackFieldsFragment = Pick<ManifestState, 'id' | 'owner' | 'schemaId' | 'schemaName' | 'manifestCid' | 'version' | 'lastUpdated'>;
+export type TagFieldsFragment = Pick<ManifestState, 'id' | 'owner' | 'schemaId' | 'schemaName' | 'manifestCid' | 'version' | 'lastUpdated'>;
 
-export type GetTracksQueryVariables = Exact<{
+export type TagManifestFieldsFragment = { manifest?: Maybe<{ files?: Maybe<Array<(
+      Pick<File, 'name'>
+      & { fileFields?: Maybe<Array<Pick<FileField, 'name' | 'value' | 'atType'>>> }
+    )>> }> };
+
+export type GetTagsQueryVariables = Exact<{
   first: Scalars['Int']['input'];
   skip: Scalars['Int']['input'];
 }>;
 
 
-export type GetTracksQuery = { manifestStates: Array<(
+export type GetTagsQuery = { manifestStates: Array<(
     Pick<ManifestState, 'id' | 'owner' | 'schemaId' | 'schemaName' | 'manifestCid' | 'version' | 'lastUpdated'>
     & { manifest?: Maybe<{ files?: Maybe<Array<(
         Pick<File, 'name'>
-        & { fileFields?: Maybe<Array<(
-          Pick<FileField, 'name' | 'value' | 'atType' | 'acc'>
-          & { pricing?: Maybe<Pick<PricingResource, 'price' | 'currency'>> }
-        )>> }
+        & { fileFields?: Maybe<Array<Pick<FileField, 'name' | 'value' | 'atType'>>> }
       )>> }> }
   )> };
 
-export type SearchTracksQueryVariables = Exact<{
-  search: Scalars['String']['input'];
+export type GetAllTagsForSearchQueryVariables = Exact<{
+  first: Scalars['Int']['input'];
+  skip: Scalars['Int']['input'];
 }>;
 
 
-export type SearchTracksQuery = { manifestStates: Array<(
+export type GetAllTagsForSearchQuery = { manifestStates: Array<(
     Pick<ManifestState, 'id' | 'owner' | 'schemaId' | 'schemaName' | 'manifestCid' | 'version' | 'lastUpdated'>
     & { manifest?: Maybe<{ files?: Maybe<Array<(
         Pick<File, 'name'>
-        & { fileFields?: Maybe<Array<(
-          Pick<FileField, 'name' | 'value' | 'atType' | 'acc'>
-          & { pricing?: Maybe<Pick<PricingResource, 'price' | 'currency'>> }
-        )>> }
+        & { fileFields?: Maybe<Array<Pick<FileField, 'name' | 'value' | 'atType'>>> }
       )>> }> }
   )> };
 
-export type GetTracksByStateIdsQueryVariables = Exact<{
+export type GetTagsByStateIdsQueryVariables = Exact<{
   ids: Array<Scalars['Bytes']['input']> | Scalars['Bytes']['input'];
 }>;
 
 
-export type GetTracksByStateIdsQuery = { manifestStates: Array<(
-    Pick<ManifestState, 'id' | 'owner' | 'schemaName'>
+export type GetTagsByStateIdsQuery = { manifestStates: Array<(
+    Pick<ManifestState, 'id' | 'owner' | 'schemaId' | 'schemaName' | 'manifestCid' | 'version' | 'lastUpdated'>
     & { manifest?: Maybe<{ files?: Maybe<Array<(
         Pick<File, 'name'>
-        & { fileFields?: Maybe<Array<Pick<FileField, 'name' | 'value' | 'acc'>>> }
+        & { fileFields?: Maybe<Array<Pick<FileField, 'name' | 'value' | 'atType'>>> }
       )>> }> }
   )> };
 
-export type GetTracksByOwnerQueryVariables = Exact<{
+export type GetTagsByOwnerQueryVariables = Exact<{
   owner: Scalars['Bytes']['input'];
   first: Scalars['Int']['input'];
   skip: Scalars['Int']['input'];
 }>;
 
 
-export type GetTracksByOwnerQuery = { manifestStates: Array<(
+export type GetTagsByOwnerQuery = { manifestStates: Array<(
     Pick<ManifestState, 'id' | 'owner' | 'schemaId' | 'schemaName' | 'manifestCid' | 'version' | 'lastUpdated'>
     & { manifest?: Maybe<{ files?: Maybe<Array<(
         Pick<File, 'name'>
-        & { fileFields?: Maybe<Array<(
-          Pick<FileField, 'name' | 'value' | 'atType' | 'acc'>
-          & { pricing?: Maybe<Pick<PricingResource, 'price' | 'currency'>> }
-        )>> }
+        & { fileFields?: Maybe<Array<Pick<FileField, 'name' | 'value' | 'atType'>>> }
       )>> }> }
   )> };
 
-export type GetTrackQueryVariables = Exact<{
+export type GetTagQueryVariables = Exact<{
   id: Scalars['ID']['input'];
 }>;
 
 
-export type GetTrackQuery = { manifestState?: Maybe<(
+export type GetTagQuery = { manifestState?: Maybe<(
     Pick<ManifestState, 'id' | 'owner' | 'schemaId' | 'schemaName' | 'manifestCid' | 'version' | 'lastUpdated'>
     & { manifest?: Maybe<{ files?: Maybe<Array<(
         Pick<File, 'name'>
-        & { fileFields?: Maybe<Array<(
-          Pick<FileField, 'name' | 'value' | 'atType' | 'acc'>
-          & { pricing?: Maybe<Pick<PricingResource, 'price' | 'currency'>> }
-        )>> }
+        & { fileFields?: Maybe<Array<Pick<FileField, 'name' | 'value' | 'atType'>>> }
       )>> }> }
   )> };
 
-export type GetTrackByOwnerAndTitleQueryVariables = Exact<{
-  owner: Scalars['Bytes']['input'];
-  title: Scalars['String']['input'];
-}>;
-
-
-export type GetTrackByOwnerAndTitleQuery = { manifestStates: Array<(
-    Pick<ManifestState, 'id' | 'owner' | 'schemaId' | 'schemaName' | 'manifestCid' | 'version' | 'lastUpdated'>
-    & { manifest?: Maybe<{ files?: Maybe<Array<(
-        Pick<File, 'name'>
-        & { fileFields?: Maybe<Array<Pick<FileField, 'name' | 'value'>>> }
-      )>> }> }
-  )> };
-
-export const TrackFieldsFragmentDoc = gql`
-    fragment TrackFields on ManifestState {
+export const TagFieldsFragmentDoc = gql`
+    fragment TagFields on ManifestState {
   id
   owner
   schemaId
@@ -2798,147 +2770,84 @@ export const TrackFieldsFragmentDoc = gql`
   version
   lastUpdated
 }
-    ` as unknown as DocumentNode<TrackFieldsFragment, unknown>;
-export const GetTracksDocument = gql`
-    query GetTracks($first: Int!, $skip: Int!) {
+    ` as unknown as DocumentNode<TagFieldsFragment, unknown>;
+export const TagManifestFieldsFragmentDoc = gql`
+    fragment TagManifestFields on ManifestState {
+  manifest {
+    files {
+      name
+      fileFields {
+        name
+        value
+        atType
+      }
+    }
+  }
+}
+    ` as unknown as DocumentNode<TagManifestFieldsFragment, unknown>;
+export const GetTagsDocument = gql`
+    query GetTags($first: Int!, $skip: Int!) {
   manifestStates(
     first: $first
     skip: $skip
     orderBy: lastUpdated
     orderDirection: desc
-    where: {schemaId: "0x7a69b1c49f16834707fe1d8bcc69ec485ea1b3c7bc68dd3ab81b05ec539952cd"}
+    where: {schemaId: "0x969f34ddaffa9a35c0092dd77cf2fab555fe88a551a435722fd0feca677c9a2b"}
   ) {
-    ...TrackFields
-    manifest {
-      files {
-        name
-        fileFields {
-          name
-          value
-          atType
-          acc
-          pricing {
-            price
-            currency
-          }
-        }
-      }
-    }
+    ...TagFields
+    ...TagManifestFields
   }
 }
-    ${TrackFieldsFragmentDoc}` as unknown as DocumentNode<GetTracksQuery, GetTracksQueryVariables>;
-export const SearchTracksDocument = gql`
-    query SearchTracks($search: String!) {
+    ${TagFieldsFragmentDoc}
+${TagManifestFieldsFragmentDoc}` as unknown as DocumentNode<GetTagsQuery, GetTagsQueryVariables>;
+export const GetAllTagsForSearchDocument = gql`
+    query GetAllTagsForSearch($first: Int!, $skip: Int!) {
   manifestStates(
-    where: {schemaId: "0x7a69b1c49f16834707fe1d8bcc69ec485ea1b3c7bc68dd3ab81b05ec539952cd"}
-    first: 100
-  ) {
-    ...TrackFields
-    manifest {
-      files {
-        name
-        fileFields {
-          name
-          value
-          atType
-          acc
-          pricing {
-            price
-            currency
-          }
-        }
-      }
-    }
-  }
-}
-    ${TrackFieldsFragmentDoc}` as unknown as DocumentNode<SearchTracksQuery, SearchTracksQueryVariables>;
-export const GetTracksByStateIdsDocument = gql`
-    query GetTracksByStateIds($ids: [Bytes!]!) {
-  manifestStates(where: {id_in: $ids}, first: 1000) {
-    id
-    owner
-    schemaName
-    manifest {
-      files {
-        name
-        fileFields {
-          name
-          value
-          acc
-        }
-      }
-    }
-  }
-}
-    ` as unknown as DocumentNode<GetTracksByStateIdsQuery, GetTracksByStateIdsQueryVariables>;
-export const GetTracksByOwnerDocument = gql`
-    query GetTracksByOwner($owner: Bytes!, $first: Int!, $skip: Int!) {
-  manifestStates(
-    where: {owner: $owner, schemaId: "0x7a69b1c49f16834707fe1d8bcc69ec485ea1b3c7bc68dd3ab81b05ec539952cd"}
     first: $first
     skip: $skip
+    orderBy: lastUpdated
+    orderDirection: desc
+    where: {schemaId: "0x969f34ddaffa9a35c0092dd77cf2fab555fe88a551a435722fd0feca677c9a2b"}
   ) {
-    ...TrackFields
-    manifest {
-      files {
-        name
-        fileFields {
-          name
-          value
-          atType
-          acc
-          pricing {
-            price
-            currency
-          }
-        }
-      }
-    }
+    ...TagFields
+    ...TagManifestFields
   }
 }
-    ${TrackFieldsFragmentDoc}` as unknown as DocumentNode<GetTracksByOwnerQuery, GetTracksByOwnerQueryVariables>;
-export const GetTrackDocument = gql`
-    query GetTrack($id: ID!) {
-  manifestState(id: $id) {
-    ...TrackFields
-    manifest {
-      files {
-        name
-        fileFields {
-          name
-          value
-          atType
-          acc
-          pricing {
-            price
-            currency
-          }
-        }
-      }
-    }
+    ${TagFieldsFragmentDoc}
+${TagManifestFieldsFragmentDoc}` as unknown as DocumentNode<GetAllTagsForSearchQuery, GetAllTagsForSearchQueryVariables>;
+export const GetTagsByStateIdsDocument = gql`
+    query GetTagsByStateIds($ids: [Bytes!]!) {
+  manifestStates(where: {id_in: $ids}, first: 1000) {
+    ...TagFields
+    ...TagManifestFields
   }
 }
-    ${TrackFieldsFragmentDoc}` as unknown as DocumentNode<GetTrackQuery, GetTrackQueryVariables>;
-export const GetTrackByOwnerAndTitleDocument = gql`
-    query GetTrackByOwnerAndTitle($owner: Bytes!, $title: String!) {
+    ${TagFieldsFragmentDoc}
+${TagManifestFieldsFragmentDoc}` as unknown as DocumentNode<GetTagsByStateIdsQuery, GetTagsByStateIdsQueryVariables>;
+export const GetTagsByOwnerDocument = gql`
+    query GetTagsByOwner($owner: Bytes!, $first: Int!, $skip: Int!) {
   manifestStates(
-    where: {owner: $owner, schemaId: "0x7a69b1c49f16834707fe1d8bcc69ec485ea1b3c7bc68dd3ab81b05ec539952cd"}
-    first: 10
+    where: {owner: $owner, schemaId: "0x969f34ddaffa9a35c0092dd77cf2fab555fe88a551a435722fd0feca677c9a2b"}
+    first: $first
+    skip: $skip
+    orderBy: lastUpdated
+    orderDirection: desc
   ) {
-    ...TrackFields
-    manifest {
-      files {
-        name
-        fileFields {
-          name
-          value
-        }
-      }
-    }
+    ...TagFields
+    ...TagManifestFields
   }
 }
-    ${TrackFieldsFragmentDoc}` as unknown as DocumentNode<GetTrackByOwnerAndTitleQuery, GetTrackByOwnerAndTitleQueryVariables>;
-
+    ${TagFieldsFragmentDoc}
+${TagManifestFieldsFragmentDoc}` as unknown as DocumentNode<GetTagsByOwnerQuery, GetTagsByOwnerQueryVariables>;
+export const GetTagDocument = gql`
+    query GetTag($id: ID!) {
+  manifestState(id: $id) {
+    ...TagFields
+    ...TagManifestFields
+  }
+}
+    ${TagFieldsFragmentDoc}
+${TagManifestFieldsFragmentDoc}` as unknown as DocumentNode<GetTagQuery, GetTagQueryVariables>;
 
 
 
@@ -2948,23 +2857,20 @@ export const GetTrackByOwnerAndTitleDocument = gql`
 export type Requester<C = {}, E = unknown> = <R, V>(doc: DocumentNode, vars?: V, options?: C) => Promise<R> | AsyncIterable<R>
 export function getSdk<C, E>(requester: Requester<C, E>) {
   return {
-    GetTracks(variables: GetTracksQueryVariables, options?: C): Promise<GetTracksQuery> {
-      return requester<GetTracksQuery, GetTracksQueryVariables>(GetTracksDocument, variables, options) as Promise<GetTracksQuery>;
+    GetTags(variables: GetTagsQueryVariables, options?: C): Promise<GetTagsQuery> {
+      return requester<GetTagsQuery, GetTagsQueryVariables>(GetTagsDocument, variables, options) as Promise<GetTagsQuery>;
     },
-    SearchTracks(variables: SearchTracksQueryVariables, options?: C): Promise<SearchTracksQuery> {
-      return requester<SearchTracksQuery, SearchTracksQueryVariables>(SearchTracksDocument, variables, options) as Promise<SearchTracksQuery>;
+    GetAllTagsForSearch(variables: GetAllTagsForSearchQueryVariables, options?: C): Promise<GetAllTagsForSearchQuery> {
+      return requester<GetAllTagsForSearchQuery, GetAllTagsForSearchQueryVariables>(GetAllTagsForSearchDocument, variables, options) as Promise<GetAllTagsForSearchQuery>;
     },
-    GetTracksByStateIds(variables: GetTracksByStateIdsQueryVariables, options?: C): Promise<GetTracksByStateIdsQuery> {
-      return requester<GetTracksByStateIdsQuery, GetTracksByStateIdsQueryVariables>(GetTracksByStateIdsDocument, variables, options) as Promise<GetTracksByStateIdsQuery>;
+    GetTagsByStateIds(variables: GetTagsByStateIdsQueryVariables, options?: C): Promise<GetTagsByStateIdsQuery> {
+      return requester<GetTagsByStateIdsQuery, GetTagsByStateIdsQueryVariables>(GetTagsByStateIdsDocument, variables, options) as Promise<GetTagsByStateIdsQuery>;
     },
-    GetTracksByOwner(variables: GetTracksByOwnerQueryVariables, options?: C): Promise<GetTracksByOwnerQuery> {
-      return requester<GetTracksByOwnerQuery, GetTracksByOwnerQueryVariables>(GetTracksByOwnerDocument, variables, options) as Promise<GetTracksByOwnerQuery>;
+    GetTagsByOwner(variables: GetTagsByOwnerQueryVariables, options?: C): Promise<GetTagsByOwnerQuery> {
+      return requester<GetTagsByOwnerQuery, GetTagsByOwnerQueryVariables>(GetTagsByOwnerDocument, variables, options) as Promise<GetTagsByOwnerQuery>;
     },
-    GetTrack(variables: GetTrackQueryVariables, options?: C): Promise<GetTrackQuery> {
-      return requester<GetTrackQuery, GetTrackQueryVariables>(GetTrackDocument, variables, options) as Promise<GetTrackQuery>;
-    },
-    GetTrackByOwnerAndTitle(variables: GetTrackByOwnerAndTitleQueryVariables, options?: C): Promise<GetTrackByOwnerAndTitleQuery> {
-      return requester<GetTrackByOwnerAndTitleQuery, GetTrackByOwnerAndTitleQueryVariables>(GetTrackByOwnerAndTitleDocument, variables, options) as Promise<GetTrackByOwnerAndTitleQuery>;
+    GetTag(variables: GetTagQueryVariables, options?: C): Promise<GetTagQuery> {
+      return requester<GetTagQuery, GetTagQueryVariables>(GetTagDocument, variables, options) as Promise<GetTagQuery>;
     }
   };
 }

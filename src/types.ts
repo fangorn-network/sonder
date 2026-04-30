@@ -2,21 +2,19 @@ import type { CSSProperties } from 'react'
 
 export interface Track {
   id: string
-  manifestStateId: string,
+  manifestStateId: string
+  mbid: string | null
   title: string
   artist: string
-  album: string
-  trackNumber: string
-  duration: string
-  price: string
-  genre: string
+  year: number | null
+  energy: number | null
+  genres: string[]
+  moods: string[]
+  themes: string[]
+  contexts: string[]
   owner: string
-  acc: any
-  currency: string
   datasourceName: string
   name: string
-  image: string
-  owned?: boolean   // true if the connected wallet has already paid for this track
 }
 
 // export type FangornMiddleware = Awaited<ReturnType<typeof createFangornMiddleware>>
@@ -52,7 +50,7 @@ export interface HueStyle extends CSSProperties {
 }
 
 export interface RecommendedTracks {
-	tracks: Track[]
-	sourceId: string
-	sourceTitle: string
+  tracks: Track[]
+  sourceId: string
+  sourceTitle: string
 }

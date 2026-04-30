@@ -1,4 +1,4 @@
-fragment TrackFields on ManifestState {
+fragment TagFields on ManifestState {
   id
   owner
   schemaId
@@ -8,102 +8,67 @@ fragment TrackFields on ManifestState {
   lastUpdated
 }
 
-query GetTracks($first: Int!, $skip: Int!) {
+fragment TagManifestFields on ManifestState {
+  manifest {
+    files {
+      name
+      fileFields { name value atType }
+    }
+  }
+}
+
+query GetTags($first: Int!, $skip: Int!) {
   manifestStates(
     first: $first
     skip: $skip
     orderBy: lastUpdated
     orderDirection: desc
-    where: { schemaId: "0x8d4f6bf05a8afde7ed7df74637712e32d0d8b1e24f741c1db416e6229cac8f6b" }
+    where: { schemaId: "0x969f34ddaffa9a35c0092dd77cf2fab555fe88a551a435722fd0feca677c9a2b" }
   ) {
-    ...TrackFields
-    manifest {
-      files {
-        name
-        fileFields { name value atType acc pricing { price currency } }
-      }
-    }
+    ...TagFields
+    ...TagManifestFields
   }
 }
 
-query SearchTracks($search: String!) {
+query GetAllTagsForSearch($first: Int!, $skip: Int!) {
   manifestStates(
-    where: { schemaId: "0x8d4f6bf05a8afde7ed7df74637712e32d0d8b1e24f741c1db416e6229cac8f6b" }
-    first: 100
+    first: $first
+    skip: $skip
+    orderBy: lastUpdated
+    orderDirection: desc
+    where: { schemaId: "0x969f34ddaffa9a35c0092dd77cf2fab555fe88a551a435722fd0feca677c9a2b" }
   ) {
-    ...TrackFields
-    manifest {
-      files {
-        name
-        fileFields { name value atType acc pricing { price currency } }
-      }
-    }
+    ...TagFields
+    ...TagManifestFields
   }
 }
 
-query GetTracksByStateIds($ids: [Bytes!]!) {
+query GetTagsByStateIds($ids: [Bytes!]!) {
   manifestStates(where: { id_in: $ids }, first: 1000) {
-    id
-    owner
-    schemaName
-    manifest {
-      files {
-        name
-        fileFields {
-          name
-          value
-          acc
-        }
-      }
-    }
+    ...TagFields
+    ...TagManifestFields
   }
 }
 
-query GetTracksByOwner($owner: Bytes!, $first: Int!, $skip: Int!) {
+query GetTagsByOwner($owner: Bytes!, $first: Int!, $skip: Int!) {
   manifestStates(
     where: {
       owner: $owner
-      schemaId: "0x8d4f6bf05a8afde7ed7df74637712e32d0d8b1e24f741c1db416e6229cac8f6b"
+      schemaId: "0x969f34ddaffa9a35c0092dd77cf2fab555fe88a551a435722fd0feca677c9a2b"
     }
     first: $first
     skip: $skip
+    orderBy: lastUpdated
+    orderDirection: desc
   ) {
-    ...TrackFields
-    manifest {
-      files {
-        name
-        fileFields { name value atType acc pricing { price currency } }
-      }
-    }
+    ...TagFields
+    ...TagManifestFields
   }
 }
 
-query GetTrack($id: ID!) {
+query GetTag($id: ID!) {
   manifestState(id: $id) {
-    ...TrackFields
-    manifest {
-      files {
-        name
-        fileFields { name value atType acc pricing { price currency } }
-      }
-    }
-  }
-}
-
-query GetTrackByOwnerAndTitle($owner: Bytes!, $title: String!) {
-  manifestStates(
-    where: {
-      owner: $owner
-      schemaId: "0x8d4f6bf05a8afde7ed7df74637712e32d0d8b1e24f741c1db416e6229cac8f6b"
-    }
-    first: 10
-  ) {
-    ...TrackFields
-    manifest {
-      files {
-        name
-        fileFields { name value }
-      }
-    }
+    ...TagFields
+    ...TagManifestFields
   }
 }

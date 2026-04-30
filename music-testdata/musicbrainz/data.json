@@ -1,34 +1,5 @@
 [
   {
-    "name": "8e3feed0-59a3-4f3b-a985-75dd00a5353a",
-    "fields": {
-      "mbid": "8e3feed0-59a3-4f3b-a985-75dd00a5353a",
-      "title": "My Cup",
-      "artist": "Bob Marley & The Wailers",
-      "year": 2002,
-      "energy": 2,
-      "genres": [
-        "reggae",
-        "roots reggae"
-      ],
-      "moods": [
-        "spiritual",
-        "grounded",
-        "devotional"
-      ],
-      "themes": [
-        "faith",
-        "gratitude",
-        "spirituality"
-      ],
-      "contexts": [
-        "sunday-morning",
-        "meditation",
-        "background"
-      ]
-    }
-  },
-  {
     "name": "b9bb35ff-6aa7-4d0e-9557-b5a906fe454f",
     "fields": {
       "mbid": "b9bb35ff-6aa7-4d0e-9557-b5a906fe454f",

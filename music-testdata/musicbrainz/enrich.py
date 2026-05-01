@@ -32,7 +32,6 @@ Use your knowledge of the artist and track. If unfamiliar, infer from artist's s
 
 Output ONLY a JSON array. No preamble, no markdown fences. One object per input track, same order."""
 
-
 def enrich_batch(client: Anthropic, batch: list[dict]) -> list[dict]:
     payload = [
         {"mbid": t["mbid"], "title": t["title"], "artist": t["artist"], "year": t.get("year")}
@@ -68,6 +67,34 @@ def to_publish_record(track: dict) -> dict:
     }
 
 
+# def main() -> None:
+#     if len(sys.argv) != 2:
+#         sys.exit("usage: enrich_corpus.py corpus.json")
+
+#     corpus = json.load(open(sys.argv[1]))
+#     by_mbid = {t["mbid"]: t for t in corpus}
+#     client = Anthropic()
+#     records: list[dict] = []
+
+#     for i in range(0, len(corpus), BATCH):
+#         batch = corpus[i : i + BATCH]
+#         print(f"[{i + 1}-{i + len(batch)} / {len(corpus)}]", file=sys.stderr)
+#         try:
+#             tags = enrich_batch(client, batch)
+#         except Exception as e:
+#             print(f"  ! batch failed: {e}", file=sys.stderr)
+#             continue
+#         for tag in tags:
+#             base = by_mbid.get(tag.get("mbid"))
+#             if not base:
+#                 continue
+#             try:
+#                 records.append(to_publish_record({**base, **tag}))
+#             except KeyError as e:
+#                 print(f"  ! skipping {tag.get('mbid')}: missing {e}", file=sys.stderr)
+
+#     json.dump(records, sys.stdout, indent=2, ensure_ascii=False)
+
 def main() -> None:
     if len(sys.argv) != 2:
         sys.exit("usage: enrich_corpus.py corpus.json")
@@ -75,26 +102,40 @@ def main() -> None:
     corpus = json.load(open(sys.argv[1]))
     by_mbid = {t["mbid"]: t for t in corpus}
     client = Anthropic()
-    records: list[dict] = []
 
-    for i in range(0, len(corpus), BATCH):
-        batch = corpus[i : i + BATCH]
-        print(f"[{i + 1}-{i + len(batch)} / {len(corpus)}]", file=sys.stderr)
-        try:
-            tags = enrich_batch(client, batch)
-        except Exception as e:
-            print(f"  ! batch failed: {e}", file=sys.stderr)
-            continue
-        for tag in tags:
-            base = by_mbid.get(tag.get("mbid"))
-            if not base:
-                continue
+    out_path = "output.json"
+
+    with open(out_path, "w", encoding="utf-8") as f:
+        f.write("[\n")
+        first = True
+
+        for i in range(0, len(corpus), BATCH):
+            batch = corpus[i : i + BATCH]
+            print(f"[{i + 1}-{i + len(batch)} / {len(corpus)}]", file=sys.stderr)
+
             try:
-                records.append(to_publish_record({**base, **tag}))
-            except KeyError as e:
-                print(f"  ! skipping {tag.get('mbid')}: missing {e}", file=sys.stderr)
+                tags = enrich_batch(client, batch)
+            except Exception as e:
+                print(f"  ! batch failed: {e}", file=sys.stderr)
+                continue
 
-    json.dump(records, sys.stdout, indent=2, ensure_ascii=False)
+            for tag in tags:
+                base = by_mbid.get(tag.get("mbid"))
+                if not base:
+                    continue
+                try:
+                    record = to_publish_record({**base, **tag})
+
+                    if not first:
+                        f.write(",\n")
+                    f.write(json.dumps(record, ensure_ascii=False))
+                    f.flush()
+                    first = False
+
+                except KeyError as e:
+                    print(f"  ! skipping {tag.get('mbid')}: missing {e}", file=sys.stderr)
+
+        f.write("\n]\n")
 
 
 if __name__ == "__main__":

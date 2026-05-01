@@ -1,25 +1,30 @@
-"""Fetch a minimal music corpus from the MusicBrainz Web Service.
-
-  python fetch.py > raw.json
-
-MB rate limit is 1 req/sec; one artist = one request. Default list takes ~10s.
-Each track: mbid, title, artist, year.
+#!/usr/bin/env python3
 """
-from __future__ import annotations
+Scrape the top ~10,000 Spotify artists by monthly listeners from kworb.net.
+
+Outputs a CSV with: rank, artist, spotify_id, monthly_listeners, peak_rank, peak_listeners
+
+Usage:
+    python scrape_kworb.py [--max-rank 5000] [--out spotify_top.csv]
+
+Requires: pip install requests beautifulsoup4
+
+Notes:
+- Kworb publishes daily snapshots since March 2023; data is updated daily.
+- Page 1 (listeners.html)   covers ranks 1–2500.
+- Page 2 (listeners2.html)  covers ranks 2501–5000.
+- Page 3 (listeners3.html)  covers ranks 5001–7500.
+- Page 4 (listeners4.html)  covers ranks 7501–10000.
+- Spotify artist IDs are extracted from the song-page links.
+"""
 import argparse
 import csv
 import re
+import sys
+import time
 
 import requests
 from bs4 import BeautifulSoup
-
-import json
-import sys
-import time
-import urllib.parse
-import urllib.request
-
-
 
 PAGES = [
     "https://kworb.net/spotify/listeners.html",
@@ -77,53 +82,7 @@ def parse_page(html: str):
         yield rank, name, spotify_id, listeners, peak_rank, peak_listeners
 
 
-ARTISTS = [
-    "Bob Marley & The Wailers",
-    "Khruangbin",
-    "Aphex Twin",
-    "Burial",
-    "Frank Ocean",
-    "Radiohead",
-    "Madlib",
-    "Mac DeMarco",
-    "System of a Down",
-    "Korn",
-    "Justin Bieber",
-    "Paramore",
-    "Demi Lovato"
-]
-
-UA = "Fangorn-Curator-Experiment/0.1 ( driemworks@fangorn.network )"
-BASE = "https://musicbrainz.org/ws/2"
-
-
-def fetch(path: str, params: dict) -> dict:
-    qs = urllib.parse.urlencode({**params, "fmt": "json"})
-    req = urllib.request.Request(f"{BASE}/{path}?{qs}", headers={"User-Agent": UA})
-    with urllib.request.urlopen(req, timeout=20) as r:
-        return json.load(r)
-
-
-def recordings_for(artist: str, limit: int = 10) -> list[dict]:
-    data = fetch("recording", {"query": f'artist:"{artist}"', "limit": limit})
-    out = []
-    for r in data.get("recordings", []):
-        ac = r.get("artist-credit") or [{}]
-        artist_name = ac[0].get("name") or artist
-        year_str = (r.get("first-release-date") or "")[:4]
-        year = int(year_str) if year_str.isdigit() else 0
-        out.append({
-            "mbid": r["id"],
-            "title": r["title"],
-            "artist": artist_name,
-            "year": year,
-        })
-    print(f"  {artist}: {len(out)} recordings", file=sys.stderr)
-    return out
-
-def main() -> None:
-    
-    # load artists
+def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--max-rank", type=int, default=5000,
                     help="Stop after this rank (default 5000; max ~10000)")
@@ -167,20 +126,13 @@ def main() -> None:
 
     print(f"Wrote {len(rows)} artists to {args.out}", file=sys.stderr)
     
+    # print("ARTISTS = [ "  + artists + "]")
+    
     if rows:
         print(f"Range: rank {rows[0][0]} ({rows[0][1]}) "
               f"to rank {rows[-1][0]} ({rows[-1][1]})", file=sys.stderr)
-    
-    
-    corpus: list[dict] = []
-    for a in artists:
-        try:
-            corpus.extend(recordings_for(a))
-        except Exception as e:
-            print(f"# {a}: {e}", file=sys.stderr)
-        time.sleep(1.1)  # respect rate limit
-    json.dump(corpus, sys.stdout, indent=2, ensure_ascii=False)
 
 
 if __name__ == "__main__":
     main()
+    

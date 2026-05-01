@@ -33,39 +33,10 @@ export default function App() {
 
     try {
       const userIntent = query?.trim() || 'focus'
-      const simpleScrobble = [
-        {
-          artist: "Pink Floyd",
-          title: "Atom Heart Mother",
-          listens: "10"
-        },
-        {
-          artist: "Chon",
-          title: "Elliptical Illumination",
-          listens: "12"
-        },
-        {
-          artist: "Glitterbug",
-          title: "Jackie O",
-          listens: "7"
-        },
-        {
-          artist: "Ickymack",
-          title: "Flavor (Prod. by Boy Kid Cloud remixed by Ickymack)",
-          listens: "4"
-        },
-      ];
 
       const prompt =
         `
-      ROLE
-      You are a music recommendation engine, partiularly responsible for recommending tracks in schema "test.tags.v5".
-
-      GOAL
-      Find between one and three songs whose theme, context, energy, or other attibutes would either satisfy
-      or meaningfully correlate to the user intent: ${userIntent}.
-      
-      Output a single sentence. Do not use first person pronounces.
+        Find the top ten 'moods' that belong to tracks that would be good for a day at the beach.-
       `
       const result = await sendMessage(prompt)
       const tracks = agentResultToTracks(result?.mcpResults)
@@ -131,11 +102,11 @@ export default function App() {
       <div className="app">
         <header className="header">
           <div className="header-brand">
-            <span className="brand-name">Fangorn<span className="brand-dot">.</span>Music</span>
+            <span className="brand-name">SOND3R</span>
           </div>
           <ConnectWallet />
         </header>
-        <Nav view={view} setView={setView} />
+        {/* <Nav view={view} setView={setView} /> */}
         <main className="main">
           <button onClick={() => handleFindSimilar()}>
             HandleFindSimilar
@@ -144,7 +115,7 @@ export default function App() {
             <BrowseView
               tracks={tracks}
               loading={loading}
-              loadingMore={loadingMore} 
+              loadingMore={loadingMore}
               error={error}
               hasMore={hasMore}
               loadMore={loadMore}
@@ -162,7 +133,7 @@ export default function App() {
               onFindSimilar={handleFindSimilar}
             />
           )} */}
-          {view === 'Upload' && <UploadView />}
+          {/* {view === 'Upload' && <UploadView />} */}
         </main>
         <PlayerBar />
         {showScrollTop && createPortal(

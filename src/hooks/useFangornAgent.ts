@@ -11,7 +11,7 @@ export function agentIsEnabled() {
 export interface AgentMcpResult {
   resultType?: string;
   mcpResults?: unknown;
-	agentMessage?: string;
+  agentMessage?: string;
 }
 
 export function useFangornAgent() {
@@ -27,7 +27,14 @@ export function useFangornAgent() {
     setLoading(true);
     setError(null);
 
-		const toolNameList = ["get_files_by_file_fields"]
+    const toolNameList = [
+      "get_files_by_file_fields",
+      "get_file_by_file_field_value",
+      "get_schema_by_name", 
+      "get_manifests_by_schema_name", 
+      "get_manifests_by_file_field_value",
+      "get_files_by_manifest_state_id"
+    ]
 
     try {
       const res = await fetch(`${apiUrl}/chat`, {
@@ -38,8 +45,8 @@ export function useFangornAgent() {
 
       if (!res.ok) throw new Error(`Agent returned ${res.status}`);
       const data = await res.json();
-			const agentResponse = {mcpResults: data.mcpResults, agentMessage: data.response}
-			console.log(`agentResponse: ${JSON.stringify(agentResponse, null, 2)}`)
+      const agentResponse = { mcpResults: data.mcpResults, agentMessage: data.response }
+      console.log(`agentResponse: ${JSON.stringify(agentResponse, null, 2)}`)
       return agentResponse.mcpResults ? agentResponse : null
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Agent request failed";

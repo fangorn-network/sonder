@@ -5,7 +5,7 @@ pip install anthropic
 export ANTHROPIC_API_KEY=sk-ant-api...
 
 python fetch.py > raw.json && \
-export ANTHROPIC_API_KEY=sk-ant-<> && \
+export ANTHROPIC_API_KEY=sk-ant-... && \
 python enrich.py raw.json > data.json
 ```
 
@@ -19,3 +19,17 @@ python enrich.py raw.json > data.json
 test.tags.v5
 │  Schema ID: 0x969f34ddaffa9a35c0092dd77cf2fab555fe88a551a435722fd0feca677c9a2b  │
 │  CID:       bafkreifaboagyjkprtcd2hskon5cfzgzlkijzfv44mwxseuvagxx3sshgq         │
+
+
+
+
+We can scrape kworb to get the top 5000 artists, this updates daily
+
+kworb.py
+
+```
+pip install requests beautifulsoup4
+python kworb.py --max-rank 5000 --out spotify_top.csv
+```
+
+https://kworb.net/

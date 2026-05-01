@@ -30,8 +30,8 @@ export function useFangornAgent() {
     const toolNameList = [
       "get_files_by_file_fields",
       "get_file_by_file_field_value",
-      "get_schema_by_name", 
-      "get_manifests_by_schema_name", 
+      "get_schema_by_name",
+      "get_manifests_by_schema_name",
       "get_manifests_by_file_field_value",
       "get_files_by_manifest_state_id"
     ]

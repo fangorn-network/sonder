@@ -27,26 +27,26 @@ export default function App() {
   const { sendMessage } = useFangornAgent()
 
   // add handler
-  const handleFindSimilar = useCallback(async (track?: Track, query?: string) => {
-    setRecommendLoading(true)
-    setView('Discover')
+  const handleFindSimilar = useCallback(async (query?: string) => {
+    // setRecommendLoading(true)
+    // setView('Discover')
 
     try {
-      const userIntent = query?.trim() || 'focus'
+      const userIntent = query?.trim() || 'I have dream pop fever'
 
       const prompt =
-        `
-        Find the top ten 'moods' that belong to tracks that would be good for a day at the beach.-
+      `
+        Find the top ten tracks, given the user intent ${userIntent}.
       `
       const result = await sendMessage(prompt)
       const tracks = agentResultToTracks(result?.mcpResults)
       // const tracks = agentResultToTracks(result)
       const agentMessage = result?.agentMessage
 
-      console.log(JSON.stringify(`track: ${track}`))
+      // const id = track?.id ?? "
+      // c"
 
-      const id = track?.id ?? ""
-
+      const id = ""
       const recommendedTracks: RecommendedTracks = {
         tracks,
         sourceId: id,
@@ -108,9 +108,6 @@ export default function App() {
         </header>
         {/* <Nav view={view} setView={setView} /> */}
         <main className="main">
-          <button onClick={() => handleFindSimilar()}>
-            HandleFindSimilar
-          </button>
           {view === 'Discover' && (
             <BrowseView
               tracks={tracks}
@@ -124,6 +121,7 @@ export default function App() {
               recommendedTracks={recommendedTracks}
               recommendLoading={recommendLoading}
               onClearRecommendations={clearRecommendations}
+              onCallAgent={handleFindSimilar} 
             />
           )}
           {/* {view === 'Library' && (

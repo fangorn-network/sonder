@@ -6,9 +6,10 @@ interface TrackDetailsProps {
   track: Track
   color: string
   onClose: () => void
+  onCallAgent: (query?: string) => void;
 }
 
-export function TrackDetails({ track, color, onClose }: TrackDetailsProps) {
+export function TrackDetails({ track, color, onClose, onCallAgent }: TrackDetailsProps) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', onKey)
@@ -27,7 +28,9 @@ export function TrackDetails({ track, color, onClose }: TrackDetailsProps) {
         style={{ '--td-color': color } as React.CSSProperties}
       >
         <div className="td-handle" aria-hidden />
-        <button className="td-close" onClick={onClose} aria-label="Close">✕</button>
+        <button className="td-close" onClick={onClose} aria-label="Close">
+          ✕
+        </button>
 
         <div className="td-art" style={{ background: `${color}40` }}>
           <span className="td-art-initial" style={{ color }}>
@@ -47,6 +50,17 @@ export function TrackDetails({ track, color, onClose }: TrackDetailsProps) {
             {track.artist}
             {track.year !== null && <span className="td-year"> · {track.year}</span>}
           </p>
+
+              {/* // Find one to five songs that are similar to the song ${track.title} by the artist ${track.artist}. */}
+          <div>
+            <button className="find-similar-btn" onClick={() => onCallAgent(
+              `
+              Find one to five tracks whose moods          are semantically similar to ${track.moods}.  
+              `
+            )}>
+              ✦ Find Similar
+            </button>
+          </div>
 
           {track.genres.length > 0 && (
             <div className="td-tags">

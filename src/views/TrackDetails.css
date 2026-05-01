@@ -175,7 +175,7 @@
 
 /* ornamental anchor — the restrained ed hardy gesture */
 .td-title::before {
-  content: "✦";
+  /* content: "✦"; */
   display: inline-block;
   margin-right: 10px;
   font-size: 13px;
@@ -401,4 +401,8 @@
     from { transform: translateY(100%); opacity: 0.5; }
     to { transform: translateY(0); opacity: 1; }
   }
+}
+
+.find-similar-btn {
+  border: 2px solid white;
 }

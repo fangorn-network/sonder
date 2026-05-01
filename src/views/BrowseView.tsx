@@ -38,11 +38,12 @@ interface BrowseViewProps {
   recommendedTracks?: RecommendedTracks | null
   recommendLoading?: boolean
   onClearRecommendations?: () => void
+  onCallAgent: (query?: string) => void  
 }
 
 export function BrowseView({
   tracks, loading, loadingMore, error, hasMore, loadMore, search, setSearch,
-  recommendedTracks, recommendLoading, onClearRecommendations,
+  recommendedTracks, recommendLoading, onClearRecommendations, onCallAgent
 }: BrowseViewProps) {
   const sentinelRef = useRef<HTMLDivElement>(null)
   const [genreFilter, setGenreFilter] = useState('all')
@@ -480,6 +481,7 @@ export function BrowseView({
           track={detailsTrack}
           color={hashColor(detailsTrack.id)}
           onClose={() => setDetailsTrack(null)}
+          onCallAgent={onCallAgent}
         />
       )}
     </div>

@@ -286,7 +286,7 @@
 //                 <button
 //                   className="lib-row-remove"
 //                   onClick={e => handleRemove(e, track)}
-//                   title="Remove from library"
+//                   title="Remove from     library"
 //                 >
 //                   ✕
 //                 </button>

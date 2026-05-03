@@ -47,6 +47,8 @@ function manifestFileToTrack(
 ): Track {
   const fields = file.fileFields
 
+  console.log('the file fields are: ' + JSON.stringify(fields))
+
   return {
     id:              file.id,
     manifestStateId: state.id,

@@ -9,7 +9,7 @@ interface TrackDetailsProps {
   onCallAgent: (query?: string) => void;
 }
 
-export function TrackDetails({ track, color, onClose, onCallAgent }: TrackDetailsProps) {
+export function TrackDetails({ track, onClose, onCallAgent }: TrackDetailsProps) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', onKey)
@@ -25,21 +25,21 @@ export function TrackDetails({ track, color, onClose, onCallAgent }: TrackDetail
       <div
         className="td-panel"
         onClick={e => e.stopPropagation()}
-        style={{ '--td-color': color } as React.CSSProperties}
+        // style={{ '--td-color': color } as React.CSSProperties}
       >
         <div className="td-handle" aria-hidden />
         <button className="td-close" onClick={onClose} aria-label="Close">
           ✕
         </button>
 
-        <div className="td-art" style={{ background: `${color}40` }}>
-          <span className="td-art-initial" style={{ color }}>
+        <div className="td-art">
+          <span className="td-art-initial">
             {track.title.slice(0, 1).toUpperCase()}
           </span>
           {track.energy !== null && (
             <div
               className="td-energy-bar"
-              style={{ width: `${Math.round(track.energy * 100)}%`, background: color }}
+              style={{ width: `${Math.round(track.energy * 100)}%` }}
             />
           )}
         </div>
@@ -55,7 +55,7 @@ export function TrackDetails({ track, color, onClose, onCallAgent }: TrackDetail
           <div>
             <button className="find-similar-btn" onClick={() => onCallAgent(
               `
-              Find one to five tracks whose moods          are semantically similar to ${track.moods}.  
+              Find one to five tracks whose moods are semantically similar to ${track.moods}
               `
             )}>
               ✦ Find Similar
@@ -69,8 +69,6 @@ export function TrackDetails({ track, color, onClose, onCallAgent }: TrackDetail
                   key={g}
                   className="td-tag td-tag--genre"
                   style={{
-                    color,
-                    borderColor: `${color}${i === 0 ? '80' : '40'}`,
                     opacity: i === 0 ? 1 : 0.7,
                   }}
                 >
@@ -112,7 +110,7 @@ export function TrackDetails({ track, color, onClose, onCallAgent }: TrackDetail
                   <div className="td-energy-track">
                     <div
                       className="td-energy-fill"
-                      style={{ width: `${Math.round(track.energy * 100)}%`, background: color }}
+                      style={{ width: `${Math.round(track.energy * 100)}%` }}
                     />
                   </div>
                   <span className="td-energy-val">{Math.round(track.energy * 100)}</span>

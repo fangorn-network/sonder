@@ -23,7 +23,7 @@ query GetTags($first: Int!, $skip: Int!) {
     skip: $skip
     orderBy: lastUpdated
     orderDirection: desc
-    where: { schemaId: "0x969f34ddaffa9a35c0092dd77cf2fab555fe88a551a435722fd0feca677c9a2b" }
+    where: { schemaId: "0xd5033de283848b81aec6be7d9dde6ec878ec0b8ee7ad78321072e4b06877fa6d" }
   ) {
     ...TagFields
     ...TagManifestFields
@@ -36,7 +36,7 @@ query GetAllTagsForSearch($first: Int!, $skip: Int!) {
     skip: $skip
     orderBy: lastUpdated
     orderDirection: desc
-    where: { schemaId: "0x969f34ddaffa9a35c0092dd77cf2fab555fe88a551a435722fd0feca677c9a2b" }
+    where: { schemaId: "0xd5033de283848b81aec6be7d9dde6ec878ec0b8ee7ad78321072e4b06877fa6d" }
   ) {
     ...TagFields
     ...TagManifestFields
@@ -54,7 +54,7 @@ query GetTagsByOwner($owner: Bytes!, $first: Int!, $skip: Int!) {
   manifestStates(
     where: {
       owner: $owner
-      schemaId: "0x969f34ddaffa9a35c0092dd77cf2fab555fe88a551a435722fd0feca677c9a2b"
+      schemaId: "0xd5033de283848b81aec6be7d9dde6ec878ec0b8ee7ad78321072e4b06877fa6d"
     }
     first: $first
     skip: $skip

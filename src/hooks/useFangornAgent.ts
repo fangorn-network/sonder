@@ -44,9 +44,12 @@ export function useFangornAgent() {
       });
 
       if (!res.ok) throw new Error(`Agent returned ${res.status}`);
+
       const data = await res.json();
       const agentResponse = { mcpResults: data.mcpResults, agentMessage: data.response }
+
       console.log(`agentResponse: ${JSON.stringify(agentResponse, null, 2)}`)
+      
       return agentResponse.mcpResults ? agentResponse : null
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Agent request failed";

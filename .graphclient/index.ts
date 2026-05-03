@@ -2570,11 +2570,11 @@ const merger = new(BareMerger as any)({
         store: rootStore.child('bareMerger')
       })
 const documentHashMap = {
-        "6c9a3649c81a3eff8c6516eb79a44bf51912ac42d9e978af99ab5c11cefabbf3": GetTagsDocument,
-"6c9a3649c81a3eff8c6516eb79a44bf51912ac42d9e978af99ab5c11cefabbf3": GetAllTagsForSearchDocument,
-"6c9a3649c81a3eff8c6516eb79a44bf51912ac42d9e978af99ab5c11cefabbf3": GetTagsByStateIdsDocument,
-"6c9a3649c81a3eff8c6516eb79a44bf51912ac42d9e978af99ab5c11cefabbf3": GetTagsByOwnerDocument,
-"6c9a3649c81a3eff8c6516eb79a44bf51912ac42d9e978af99ab5c11cefabbf3": GetTagDocument
+        "d973ec09efffe8f47beb912eecaf6482f54de19853aa8e48f79c5e3227ba4727": GetTagsDocument,
+"d973ec09efffe8f47beb912eecaf6482f54de19853aa8e48f79c5e3227ba4727": GetAllTagsForSearchDocument,
+"d973ec09efffe8f47beb912eecaf6482f54de19853aa8e48f79c5e3227ba4727": GetTagsByStateIdsDocument,
+"d973ec09efffe8f47beb912eecaf6482f54de19853aa8e48f79c5e3227ba4727": GetTagsByOwnerDocument,
+"d973ec09efffe8f47beb912eecaf6482f54de19853aa8e48f79c5e3227ba4727": GetTagDocument
       }
 additionalEnvelopPlugins.push(usePersistedOperations({
         getPersistedOperation(key) {
@@ -2601,35 +2601,35 @@ additionalEnvelopPlugins.push(usePersistedOperations({
           return printWithCache(GetTagsDocument);
         },
         location: 'GetTagsDocument.graphql',
-        sha256Hash: '6c9a3649c81a3eff8c6516eb79a44bf51912ac42d9e978af99ab5c11cefabbf3'
+        sha256Hash: 'd973ec09efffe8f47beb912eecaf6482f54de19853aa8e48f79c5e3227ba4727'
       },{
         document: GetAllTagsForSearchDocument,
         get rawSDL() {
           return printWithCache(GetAllTagsForSearchDocument);
         },
         location: 'GetAllTagsForSearchDocument.graphql',
-        sha256Hash: '6c9a3649c81a3eff8c6516eb79a44bf51912ac42d9e978af99ab5c11cefabbf3'
+        sha256Hash: 'd973ec09efffe8f47beb912eecaf6482f54de19853aa8e48f79c5e3227ba4727'
       },{
         document: GetTagsByStateIdsDocument,
         get rawSDL() {
           return printWithCache(GetTagsByStateIdsDocument);
         },
         location: 'GetTagsByStateIdsDocument.graphql',
-        sha256Hash: '6c9a3649c81a3eff8c6516eb79a44bf51912ac42d9e978af99ab5c11cefabbf3'
+        sha256Hash: 'd973ec09efffe8f47beb912eecaf6482f54de19853aa8e48f79c5e3227ba4727'
       },{
         document: GetTagsByOwnerDocument,
         get rawSDL() {
           return printWithCache(GetTagsByOwnerDocument);
         },
         location: 'GetTagsByOwnerDocument.graphql',
-        sha256Hash: '6c9a3649c81a3eff8c6516eb79a44bf51912ac42d9e978af99ab5c11cefabbf3'
+        sha256Hash: 'd973ec09efffe8f47beb912eecaf6482f54de19853aa8e48f79c5e3227ba4727'
       },{
         document: GetTagDocument,
         get rawSDL() {
           return printWithCache(GetTagDocument);
         },
         location: 'GetTagDocument.graphql',
-        sha256Hash: '6c9a3649c81a3eff8c6516eb79a44bf51912ac42d9e978af99ab5c11cefabbf3'
+        sha256Hash: 'd973ec09efffe8f47beb912eecaf6482f54de19853aa8e48f79c5e3227ba4727'
       }
     ];
     },
@@ -2792,7 +2792,7 @@ export const GetTagsDocument = gql`
     skip: $skip
     orderBy: lastUpdated
     orderDirection: desc
-    where: {schemaId: "0x969f34ddaffa9a35c0092dd77cf2fab555fe88a551a435722fd0feca677c9a2b"}
+    where: {schemaId: "0xd5033de283848b81aec6be7d9dde6ec878ec0b8ee7ad78321072e4b06877fa6d"}
   ) {
     ...TagFields
     ...TagManifestFields
@@ -2807,7 +2807,7 @@ export const GetAllTagsForSearchDocument = gql`
     skip: $skip
     orderBy: lastUpdated
     orderDirection: desc
-    where: {schemaId: "0x969f34ddaffa9a35c0092dd77cf2fab555fe88a551a435722fd0feca677c9a2b"}
+    where: {schemaId: "0xd5033de283848b81aec6be7d9dde6ec878ec0b8ee7ad78321072e4b06877fa6d"}
   ) {
     ...TagFields
     ...TagManifestFields
@@ -2827,7 +2827,7 @@ ${TagManifestFieldsFragmentDoc}` as unknown as DocumentNode<GetTagsByStateIdsQue
 export const GetTagsByOwnerDocument = gql`
     query GetTagsByOwner($owner: Bytes!, $first: Int!, $skip: Int!) {
   manifestStates(
-    where: {owner: $owner, schemaId: "0x969f34ddaffa9a35c0092dd77cf2fab555fe88a551a435722fd0feca677c9a2b"}
+    where: {owner: $owner, schemaId: "0xd5033de283848b81aec6be7d9dde6ec878ec0b8ee7ad78321072e4b06877fa6d"}
     first: $first
     skip: $skip
     orderBy: lastUpdated

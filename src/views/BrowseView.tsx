@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useMemo } from 'react'
 import type { RecommendedTracks, Track } from '../types'
 import { TrackDetails } from './TrackDetails'
+import { PolyHalftone } from './PolyHalftone'
 import './mobile.css'
 import './Browse-Filters.css'
 
@@ -38,7 +39,7 @@ interface BrowseViewProps {
   recommendedTracks?: RecommendedTracks | null
   recommendLoading?: boolean
   onClearRecommendations?: () => void
-  onCallAgent: (query?: string) => void  
+  onCallAgent: (query?: string) => void
 }
 
 export function BrowseView({
@@ -141,7 +142,7 @@ export function BrowseView({
         style={{ borderTop: `2px solid ${primaryGenreColor}` }}
         onClick={() => setDetailsTrack(track)}
       >
-        <div className="tg-art" style={{ background: `${primaryGenreColor}40` }}>
+        <div className="tg-art" style={{ backgroundImage: `url(https://dn711103.ca.archive.org/0/items/mbid-${track.mbid}.jpg)` }}>
           <span className="tg-art-initial" style={{ color: primaryGenreColor }}>
             {track.title.slice(0, 1).toUpperCase()}
           </span>
@@ -400,7 +401,7 @@ export function BrowseView({
           {loading
             ? Array.from({ length: 12 }).map((_, i) => (
               <div key={i} className="tg-card tg-card--skeleton">
-                <div className="tg-art tg-skel" />
+                <div className="tg-skel" />
                 <div className="tg-body">
                   <div className="tg-skel tg-skel--title" />
                   <div className="tg-skel tg-skel--sub" />

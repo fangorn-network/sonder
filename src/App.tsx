@@ -34,12 +34,10 @@ export default function App() {
     try {
       const userIntent = query?.trim() || 'I have dream pop fever'
 
-      const prompt =
-      `
-        Find the top ten tracks, given the user intent ${userIntent}.
-      `
+      const prompt = userIntent
       const result = await sendMessage(prompt)
       const tracks = agentResultToTracks(result?.mcpResults)
+      console.log('WE GOT THE TRACKS: ' + JSON.stringify(tracks))
       // const tracks = agentResultToTracks(result)
       const agentMessage = result?.agentMessage
 

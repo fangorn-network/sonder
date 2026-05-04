@@ -12,7 +12,7 @@ from contextlib import asynccontextmanager
 
 SUBGRAPH_URL = "https://api.studio.thegraph.com/query/1745244/fangorn-data-discovery/version/latest"
 IPFS_GATEWAY = "https://ipfs.io/ipfs"
-SCHEMA_ID    = "0xd5033de283848b81aec6be7d9dde6ec878ec0b8ee7ad78321072e4b06877fa6d"
+SCHEMA_ID    = "0x7ff75e67e1374fa653b3f0101bb8472caca236857d934ba767235cd3f3fad90f"
 CHROMA_PATH  = "./chroma_db"
 COLLECTION   = "fangorn"
 PAGE_SIZE    = 100

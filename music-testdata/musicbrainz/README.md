@@ -4,8 +4,9 @@ source venv/bin/activate
 pip install anthropic
 export ANTHROPIC_API_KEY=sk-ant-api...
 
-python fetch.py > raw.json && \
-export ANTHROPIC_API_KEY=sk-ant-... && \
+python fetch.py > raw.json
+export ANTHROPIC_API_KEY=....
+
 python enrich.py raw.json > data.json
 ```
 
@@ -21,7 +22,14 @@ test.tags.v5
 │  CID:       bafkreifaboagyjkprtcd2hskon5cfzgzlkijzfv44mwxseuvagxx3sshgq         │
 
 
+fangorn.music.tags.test.0
 
+◇  Schema registered ─────────────────────────────────────────────────────────────╮
+│                                                                                 │
+│  Schema ID: 0x7ff75e67e1374fa653b3f0101bb8472caca236857d934ba767235cd3f3fad90f  │
+│  CID:       bafkreigjwy5cfqv4pceiw3s54swfb22x6zz3cy3fjp5zq65otjw32yemeq         │
+│                                                                                 │
+├─────────────────────────────────────────────────────────────────────────────────╯
 
 
 We can scrape kworb to get the top 5000 artists, this updates daily

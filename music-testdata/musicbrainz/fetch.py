@@ -22,7 +22,7 @@ import urllib.request
 
 
 PAGES = [
-    "https://kworb.net/spotify/listeners.html",
+    # "https://kworb.net/spotify/listeners.html",
     "https://kworb.net/spotify/listeners2.html",
     "https://kworb.net/spotify/listeners3.html",
     "https://kworb.net/spotify/listeners4.html",
@@ -76,23 +76,6 @@ def parse_page(html: str):
 
         yield rank, name, spotify_id, listeners, peak_rank, peak_listeners
 
-
-ARTISTS = [
-    "Bob Marley & The Wailers",
-    "Khruangbin",
-    "Aphex Twin",
-    "Burial",
-    "Frank Ocean",
-    "Radiohead",
-    "Madlib",
-    "Mac DeMarco",
-    "System of a Down",
-    "Korn",
-    "Justin Bieber",
-    "Paramore",
-    "Demi Lovato"
-]
-
 UA = "Fangorn-Curator-Experiment/0.1 ( driemworks@fangorn.network )"
 BASE = "https://musicbrainz.org/ws/2"
 
@@ -131,6 +114,8 @@ def main() -> None:
                     help="Output CSV path")
     ap.add_argument("--sleep", type=float, default=1.0,
                     help="Seconds to sleep between page fetches (be polite)")
+    ap.add_argument("--raw", default="raw.json",
+                    help="Output path for raw MusicBrainz recordings (default: raw.json)")
     args = ap.parse_args()
 
     rows = []
@@ -170,16 +155,29 @@ def main() -> None:
     if rows:
         print(f"Range: rank {rows[0][0]} ({rows[0][1]}) "
               f"to rank {rows[-1][0]} ({rows[-1][1]})", file=sys.stderr)
-    
-    
-    corpus: list[dict] = []
-    for a in artists:
-        try:
-            corpus.extend(recordings_for(a))
-        except Exception as e:
-            print(f"# {a}: {e}", file=sys.stderr)
-        time.sleep(1.1)  # respect rate limit
-    json.dump(corpus, sys.stdout, indent=2, ensure_ascii=False)
+
+    total = 0
+    with open(args.raw, "w", encoding="utf-8") as raw_f:
+        raw_f.write("[\n")
+        first_record = True
+        for a in artists:
+            try:
+                recordings = recordings_for(a)
+            except Exception as e:
+                print(f"# {a}: {e}", file=sys.stderr)
+                time.sleep(1.1)
+                continue
+            for rec in recordings:
+                if not first_record:
+                    raw_f.write(",\n")
+                raw_f.write(json.dumps(rec, ensure_ascii=False))
+                first_record = False
+                total += 1
+            raw_f.flush()
+            time.sleep(1.1)  # respect rate limit
+        raw_f.write("\n]\n")
+
+    print(f"Wrote {total} recordings to {args.raw}", file=sys.stderr)
 
 
 if __name__ == "__main__":

@@ -1,30 +1,29 @@
 import { app, shell, BrowserWindow, ipcMain, session } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
-// import icon from '../../resources/icon.png?asset'
 import { spawn } from 'child_process'
 import path from 'path'
-import * as http from 'http'
-import * as net from 'net'
 import { URL } from 'url'
 
 let pyProcess: ReturnType<typeof spawn> | null = null
 
 function startPython() {
-  const [bin, args] = app.isPackaged
-    ? [path.join(process.resourcesPath, 'server'), []]
+  // app.getAppPath() = project root in dev, resources/ in packaged
+  const root = is.dev ? app.getAppPath() : process.resourcesPath
+
+  const [bin, args]: [string, string[]] = app.isPackaged
+    ? [path.join(root, 'server'), []]
     : [
-      path.join(__dirname, '/vectordb/.venv/bin/python3'),  // venv python
-      [path.join(__dirname, '/vectordb/main.py')]           // absolute path to script
-    ]
+        path.join(root, 'vectordb/venv/bin/python'),
+        [path.join(root, 'vectordb/main.py')]
+      ]
 
   pyProcess = spawn(bin, args, {
-    env: { ...process.env }  // inherit PATH, HOME, etc.
+    env: { ...process.env }
   })
 
   pyProcess.stdout!.on('data', (d) => console.log('[py]', d.toString()))
   pyProcess.stderr!.on('data', (d) => console.error('[py]', d.toString()))
-
   pyProcess.on('error', (err) => console.error('[py] failed to start:', err))
   pyProcess.on('exit', (code) => console.log('[py] exited with code', code))
 }
@@ -40,7 +39,6 @@ async function waitForPython(url: string, retries = 20, delay = 300): Promise<vo
   }
   throw new Error(`Python server never came up at ${url}`)
 }
-// ─────────────────────────────────────────────────────────────────────
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
@@ -59,11 +57,9 @@ function createWindow(): void {
     backgroundColor: '#1a1a1a',
     resizable: true,
     autoHideMenuBar: true,
-    ...(process.platform === 'linux' ? {} : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
-      // TODO: INSECURE!!
       webSecurity: false,
       allowRunningInsecureContent: true,
       contextIsolation: true,
@@ -90,8 +86,7 @@ app.whenReady().then(async () => {
   electronApp.setAppUserModelId('com.electron')
 
   startPython()
-  // optionally wait for it before opening the window:
-  await waitForPython('http://127.0.0.1:8000/health')
+  await waitForPython('http://0.0.0.0:8080/health')
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
@@ -102,12 +97,12 @@ app.whenReady().then(async () => {
   session.defaultSession.webRequest.onBeforeSendHeaders(
     { urls: ['https://*.privy.io/*', 'https://explorer-api.walletconnect.com/*'] },
     (details, callback) => {
-      details.requestHeaders['Origin'] = 'http://localhost:5173';
-      details.requestHeaders['Referer'] = 'http://localhost:5173/';
-      details.requestHeaders['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
-      callback({ requestHeaders: details.requestHeaders });
+      details.requestHeaders['Origin'] = 'http://localhost:5173'
+      details.requestHeaders['Referer'] = 'http://localhost:5173/'
+      details.requestHeaders['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
+      callback({ requestHeaders: details.requestHeaders })
     }
-  );
+  )
 
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     const isPrivy = details.url.includes('privy.io') || details.url.includes('walletconnect.com')
@@ -171,9 +166,7 @@ app.whenReady().then(async () => {
 })
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit()
-  }
+  if (process.platform !== 'darwin') app.quit()
 })
 
 app.on('before-quit', () => {

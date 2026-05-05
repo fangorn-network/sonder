@@ -1,0 +1,233 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   PLAYER BAR
+   Replaces existing PlayerBar.css entirely.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.player-bar {
+  position: fixed;
+  bottom: 0;
+  left: var(--nav-width);
+  right: 0;
+  height: 76px;
+  background: rgba(8, 8, 10, 0.97);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border-top: 1px solid var(--border);
+  display: grid;
+  grid-template-columns: 1fr 2fr 1fr;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: 0 var(--sp-6);
+  z-index: 90;
+}
+
+/* ── track info (left) ── */
+.player-track {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-width: 0;
+}
+
+.player-art {
+  width: 42px;
+  height: 42px;
+  border-radius: var(--r-sm);
+  flex-shrink: 0;
+  background: hsl(var(--hue, 260), 30%, 16%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.player-art-initials {
+  font-family: var(--font-display);
+  font-size: 20px;
+  color: hsl(var(--hue, 260), 60%, 65%);
+  line-height: 1;
+  letter-spacing: 0.02em;
+}
+
+.player-track-info {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.player-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: -0.01em;
+}
+
+.player-artist {
+  font-size: 11px;
+  font-weight: 300;
+  color: var(--fg2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── center: controls + progress ── */
+.player-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.player-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.player-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--fg3);
+  font-size: 13px;
+  padding: 4px 6px;
+  border-radius: var(--r-sm);
+  transition: color var(--t1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+.player-btn:hover:not(:disabled) { color: var(--fg); }
+.player-btn:disabled { opacity: 0.2; cursor: not-allowed; }
+
+.player-btn--play {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--accent-hi);
+  color: var(--bg);
+  font-size: 12px;
+  transition: opacity var(--t1), transform var(--t1);
+}
+.player-btn--play:hover:not(:disabled) {
+  opacity: 0.85;
+  transform: scale(1.05);
+}
+.player-btn--play:disabled { opacity: 0.35; cursor: not-allowed; }
+
+.player-btn--skip { font-size: 14px; }
+
+/* progress */
+.player-progress-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  width: 100%;
+  max-width: 420px;
+}
+
+.player-time {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--fg3);
+  flex-shrink: 0;
+  min-width: 28px;
+  text-align: center;
+}
+
+.player-progress {
+  flex: 1;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  position: relative;
+}
+
+.player-progress-track {
+  width: 100%;
+  height: 2px;
+  background: var(--border);
+  border-radius: 1px;
+  position: relative;
+}
+
+.player-progress-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  background: var(--accent);
+  border-radius: 1px;
+  transition: width 0.1s linear;
+  pointer-events: none;
+}
+
+.player-progress-thumb {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--fg);
+  opacity: 0;
+  transition: opacity var(--t1);
+  pointer-events: none;
+}
+.player-progress:hover .player-progress-thumb { opacity: 1; }
+
+.player-error {
+  font-size: 10px;
+  color: var(--err);
+  font-family: var(--font-mono);
+}
+
+/* ── meta (right) ── */
+.player-meta {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--sp-3);
+  flex-shrink: 0;
+}
+
+.player-genre {
+  font-size: 10px;
+  color: var(--fg3);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-family: var(--font-mono);
+}
+
+.player-price {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--fg2);
+}
+
+.player-queue-pos {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--fg3);
+}
+
+/* ── responsive ── */
+@media (max-width: 680px) {
+  .player-bar {
+    left: 0;
+    grid-template-columns: 1fr auto;
+    grid-template-rows: auto auto;
+    height: auto;
+    padding: var(--sp-3) var(--sp-4);
+    gap: var(--sp-2);
+  }
+  .player-center { grid-column: 1 / -1; order: -1; }
+  .player-meta { display: none; }
+}

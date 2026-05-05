@@ -1,0 +1,36 @@
+<!doctype html>
+<html>
+
+<head>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <meta
+    content="
+      default-src 'self';
+      script-src 'self' 'unsafe-inline' 'unsafe-eval';
+      style-src 'self' 'unsafe-inline';
+      img-src 'self' data: https:;
+      connect-src 'self'
+        https://explorer-api.walletconnect.com
+        wss://*.bridge.walletconnect.org
+        https://*.privy.io
+        https://auth.privy.io
+        wss://*.privy.io
+        https://*.walletconnect.com
+        wss://*.walletconnect.com
+        http://localhost:8080
+        http://localhost:3001
+        http://localhost:4000;
+    frame-src 'self' https://*.privy.io;
+  " />
+  <title>Electron</title>
+  <!-- https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP -->
+  <meta
+    content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:" />
+</head>
+
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
+</body>
+
+</html>

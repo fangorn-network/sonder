@@ -1,0 +1,76 @@
+.browse-filters-redesign {
+  background: var(--bg-surface);
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border-subtle);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.filter-tabs {
+  display: flex;
+  gap: 16px;
+  padding: 0 16px;
+  margin-bottom: 12px;
+}
+
+.tab-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 0.85rem;
+  padding: 4px 0;
+  position: relative;
+  cursor: pointer;
+}
+
+.tab-btn.active {
+  color: var(--text-primary);
+}
+
+.tab-btn.active::after {
+  content: '';
+  position: absolute;
+  bottom: -4px;
+  left: 0; width: 100%; height: 2px;
+  background: var(--accent);
+}
+
+.tab-btn .dot {
+  display: inline-block;
+  width: 6px; height: 6px;
+  background: var(--accent);
+  border-radius: 50%;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
+.filter-scroll-container {
+  display: flex;
+  overflow-x: auto;
+  gap: 8px;
+  padding: 0 16px 4px 16px;
+  scrollbar-width: none; /* Hide for Firefox */
+}
+
+.filter-scroll-container::-webkit-scrollbar {
+  display: none; /* Hide for Chrome/Safari */
+}
+
+.bf-pill {
+  white-space: nowrap;
+  flex-shrink: 0;
+  border-radius: 20px;
+  padding: 6px 14px;
+  font-size: 0.8rem;
+  border: 1px solid var(--border-bold);
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.bf-pill--active {
+  background: var(--accent-light);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}

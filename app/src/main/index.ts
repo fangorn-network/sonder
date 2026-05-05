@@ -14,12 +14,15 @@ function startPython() {
   const [bin, args]: [string, string[]] = app.isPackaged
     ? [path.join(root, 'server'), []]
     : [
-        path.join(root, 'vectordb/venv/bin/python'),
-        [path.join(root, 'vectordb/main.py')]
-      ]
+      path.join(root, 'vectordb/venv/bin/python'),
+      [path.join(root, 'vectordb/main.py')]
+    ]
 
   pyProcess = spawn(bin, args, {
-    env: { ...process.env }
+    env: {
+      ...process.env,
+      CHROMA_PATH: path.join(app.getPath('userData'), 'chroma_db')
+    }
   })
 
   pyProcess.stdout!.on('data', (d) => console.log('[py]', d.toString()))
@@ -49,6 +52,9 @@ function createWindow(): void {
     show: false,
     darkTheme: true,
     movable: true,
+    title: 'SOND3R',
+    frame: false,
+    titleBarStyle: 'hidden',
     titleBarOverlay: {
       color: 'black',
       symbolColor: '#ffffff',

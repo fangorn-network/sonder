@@ -24,7 +24,16 @@ interface SpotifyState {
     } | null
 }
 
-export function useSpotify() {
+interface UseSpotifyOptions {
+    onTrackEnd?: () => void
+}
+
+export function useSpotify({ onTrackEnd }: UseSpotifyOptions = {}) {
+    const onTrackEndRef = useRef(onTrackEnd)
+    useEffect(() => { onTrackEndRef.current = onTrackEnd }, [onTrackEnd])
+
+    const userPausedRef = useRef(false)
+    const wasPlayingRef = useRef(false)
     const [tokens, setTokens] = useState<SpotifyTokens | null>(() => {
         try {
             const raw = localStorage.getItem(STORAGE_KEY)
@@ -85,7 +94,7 @@ export function useSpotify() {
         retries = 2
     ): Promise<{ status: number; data: any }> => {
         const token = await getToken()
-        const { status, headers, body: text } = await (window.api as any).spotifyApi({
+        const { status, body: text } = await (window.api as any).spotifyApi({
             url: `https://api.spotify.com${path}`,
             method,
             token,
@@ -93,10 +102,8 @@ export function useSpotify() {
         })
 
         if (status === 429 && retries > 0) {
-            const retryAfter = parseInt(headers?.['retry-after'] ?? '1', 10)
-            const wait = retryAfter * 1000
-            console.warn(`429 rate limited, retrying in ${wait}ms...`)
-            await new Promise(r => setTimeout(r, wait))
+            const retryAfter = parseInt('1', 10)
+            await new Promise(r => setTimeout(r, retryAfter * 1000))
             return spotifyFetch(path, method, body, retries - 1)
         }
 
@@ -104,19 +111,19 @@ export function useSpotify() {
             const data = text ? JSON.parse(text) : {}
             return { status, data }
         } catch {
-            console.warn('spotifyFetch non-JSON response:', status, text)
             return { status, data: {} }
         }
     }, [getToken])
 
-    const pollPlayback = useCallback(async () => {
+    // forcePoll — bypasses isPlaying guard, used right after play()
+    const forcePoll = useCallback(async () => {
         if (inFlightRef.current) return
-        if (!isPlayingRef.current) return
+
         inFlightRef.current = true
+
         try {
             const { status, data } = await spotifyFetch('/v1/me/player')
-            if (status === 204 || status === 202) return
-            if (!data || !data.item) return
+            if (status === 204 || status === 202 || !data?.item) return
             lastPollTimeRef.current = Date.now()
             setState(s => ({
                 ...s,
@@ -131,6 +138,43 @@ export function useSpotify() {
                     progressMs: data.progress_ms,
                 }
             }))
+            if (wasPlayingRef.current && !data.is_playing && !userPausedRef.current) {
+                onTrackEndRef.current?.()
+            }
+            wasPlayingRef.current = data.is_playing
+        } catch {
+            // swallow
+        } finally {
+            inFlightRef.current = false
+        }
+    }, [spotifyFetch])
+
+    const pollPlayback = useCallback(async () => {
+        if (inFlightRef.current) return
+        if (!isPlayingRef.current) return
+        inFlightRef.current = true
+        try {
+            const { status, data } = await spotifyFetch('/v1/me/player')
+            if (status === 204 || status === 202 || !data?.item) return
+            lastPollTimeRef.current = Date.now()
+            setState(s => ({
+                ...s,
+                connected: true,
+                isPlaying: data.is_playing,
+                deviceId: data.device?.id ?? s.deviceId,
+                currentTrack: {
+                    name: data.item.name,
+                    artist: data.item.artists.map((a: any) => a.name).join(', '),
+                    albumArt: data.item.album.images[0]?.url ?? '',
+                    durationMs: data.item.duration_ms,
+                    progressMs: data.progress_ms,
+                }
+            }))
+            // detect natural track end (not user pause)
+            if (wasPlayingRef.current && !data.is_playing && !userPausedRef.current) {
+                onTrackEndRef.current?.()
+            }
+            wasPlayingRef.current = data.is_playing
         } catch {
             // swallow
         } finally {
@@ -164,19 +208,17 @@ export function useSpotify() {
         try {
             await reauthorize({ provider: 'spotify' })
         } catch (e: any) {
-            console.error('connect error:', e)
             setState(s => ({ ...s, connecting: false, error: e.message }))
         }
     }, [reauthorize])
 
     const getDevices = useCallback(async () => {
         const { data } = await spotifyFetch('/v1/me/player/devices')
-        console.log('devices:', JSON.stringify(data))
         return (data.devices ?? []) as { id: string; name: string; is_active: boolean }[]
     }, [spotifyFetch])
 
     const play = useCallback(async (spotifyUri?: string) => {
-        // Use cached deviceId if we have one, otherwise fetch
+        userPausedRef.current = false
         let deviceId = state.deviceId
         if (!deviceId) {
             const devices = await getDevices()
@@ -188,18 +230,29 @@ export function useSpotify() {
             deviceId = activeDevice.id
         }
 
+        // transfer playback to device first
+        await spotifyFetch('/v1/me/player', 'PUT', {
+            device_ids: [deviceId],
+            play: false,
+        })
+
+        await new Promise(r => setTimeout(r, 500))
+
         const { status } = await spotifyFetch('/v1/me/player/play', 'PUT', {
             device_id: deviceId,
             ...(spotifyUri ? { uris: [spotifyUri] } : {})
         })
         console.log('play status:', status)
-        setTimeout(() => pollPlayback(), 500)
-    }, [spotifyFetch, getDevices, pollPlayback, state.deviceId])
+
+        // force poll bypasses isPlaying guard so PlayerBar appears immediately
+        setTimeout(() => forcePoll(), 600)
+    }, [spotifyFetch, getDevices, forcePoll, state.deviceId])
 
     const pause = useCallback(async () => {
+        userPausedRef.current = true  // ← mark as user-initiated
         await spotifyFetch('/v1/me/player/pause', 'PUT')
-        setTimeout(() => pollPlayback(), 500)
-    }, [spotifyFetch, pollPlayback])
+        setTimeout(() => forcePoll(), 500)
+    }, [spotifyFetch, forcePoll])
 
     const togglePlay = useCallback(async () => {
         if (state.isPlaying) await pause()
@@ -208,13 +261,13 @@ export function useSpotify() {
 
     const next = useCallback(async () => {
         await spotifyFetch('/v1/me/player/next', 'POST')
-        setTimeout(() => pollPlayback(), 500)
-    }, [spotifyFetch, pollPlayback])
+        setTimeout(() => forcePoll(), 500)
+    }, [spotifyFetch, forcePoll])
 
     const prev = useCallback(async () => {
         await spotifyFetch('/v1/me/player/previous', 'POST')
-        setTimeout(() => pollPlayback(), 500)
-    }, [spotifyFetch, pollPlayback])
+        setTimeout(() => forcePoll(), 500)
+    }, [spotifyFetch, forcePoll])
 
     const seek = useCallback(async (positionMs: number) => {
         await spotifyFetch(`/v1/me/player/seek?position_ms=${Math.round(positionMs)}`, 'PUT')
@@ -232,12 +285,12 @@ export function useSpotify() {
     }, [spotifyFetch])
 
     const searchAndPlay = useCallback(async (query: string) => {
-        console.log( 'searching')
+        const cleanQuery = query.replace(/\(.*?\)/g, '').trim()
+        console.log('searching:', cleanQuery)
         const { data } = await spotifyFetch(
-            `/v1/search?q=${encodeURIComponent(query)}&type=track&limit=1`
+            `/v1/search?q=${encodeURIComponent(cleanQuery)}&type=track&limit=1`
         )
-
-        console.log('search result ' + JSON.stringify(data))
+        console.log('search result', JSON.stringify(data))
         const item = data.tracks?.items?.[0]
         if (!item) return null
         await play(item.uri)

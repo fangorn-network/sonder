@@ -7,13 +7,14 @@ from chromadb.utils import embedding_functions
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+import os
 
 # ── config ────────────────────────────────────────────────────────────────────
 
 SUBGRAPH_URL = "https://api.studio.thegraph.com/query/1745244/fangorn-data-discovery/version/latest"
 IPFS_GATEWAY = "https://ipfs.io/ipfs"
 SCHEMA_ID    = "0x7ff75e67e1374fa653b3f0101bb8472caca236857d934ba767235cd3f3fad90f"
-CHROMA_PATH  = "./chroma_db"
+CHROMA_PATH = os.environ.get("CHROMA_PATH", "./vectordb/chroma_db")
 COLLECTION   = "fangorn"
 PAGE_SIZE    = 100
 IPFS_TIMEOUT = 20

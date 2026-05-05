@@ -29,6 +29,8 @@ interface BrowseViewProps {
   recommendLoading?: boolean
   onClearRecommendations?: () => void
   onCallAgent: (query?: string) => void
+  onFilteredChange?: (tracks: Track[]) => void
+  onPlayingIdChange?: (id: string) => void
 }
 
 async function fetchAlbumArt(title: string, artist: string): Promise<string | null> {
@@ -53,7 +55,8 @@ async function fetchAlbumArt(title: string, artist: string): Promise<string | nu
 
 export function BrowseView({
   tracks, loading, loadingMore, error, hasMore, loadMore, search, setSearch,
-  recommendedTracks, recommendLoading, onClearRecommendations, onCallAgent
+  recommendedTracks, recommendLoading, onClearRecommendations, onCallAgent,
+  onFilteredChange, onPlayingIdChange,
 }: BrowseViewProps) {
   const sentinelRef = useRef<HTMLDivElement>(null)
   const [genreFilter, setGenreFilter] = useState('all')
@@ -72,8 +75,10 @@ export function BrowseView({
     e.stopPropagation()
     if (!connected) { await connect(); return }
     setPlayingId(track.id)
+    onPlayingIdChange?.(track.id)  // ← add this
     try {
-      const result = await searchAndPlay(`${track.title} ${track.artist}`)
+      const cleanQuery = `${track.title} ${track.artist}`.replace(/\(.*?\)/g, '').trim()
+      const result = await searchAndPlay(cleanQuery)
       if (result?.albumArt) setPlayingArt(result.albumArt)
     } catch (err) {
       console.error('searchAndPlay failed:', err)
@@ -145,6 +150,10 @@ export function BrowseView({
   }, [filtered])
 
   useEffect(() => {
+    onFilteredChange?.(filtered)
+  }, [filtered])
+
+  useEffect(() => {
     const el = sentinelRef.current
     if (!el) return
     const observer = new IntersectionObserver(
@@ -186,10 +195,10 @@ export function BrowseView({
         <div className="tg-art">
           {albumArtCache[track.id]
             ? <img src={albumArtCache[track.id]} alt={track.title} style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', inset: 0, borderRadius: 4 }} />
-            : <span 
-                className="tg-art-initial" 
-                // style={{ color: primaryGenreColor }}
-              >
+            : <span
+              className="tg-art-initial"
+            // style={{ color: primaryGenreColor }}
+            >
               {track.title.slice(0, 1).toUpperCase()}
             </span>
           }

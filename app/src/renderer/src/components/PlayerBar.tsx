@@ -21,6 +21,8 @@ export function PlayerBar() {
     seek,
     next,
     prev,
+    onNext,
+    onPrev,
   } = useSpotifyContext()
 
   const [liveProgressMs, setLiveProgressMs] = useState(0)
@@ -29,17 +31,14 @@ export function PlayerBar() {
   useEffect(() => {
     if (rafRef.current) cancelAnimationFrame(rafRef.current)
     if (!currentTrack) return
-
     const base = currentTrack.progressMs
     const pollTime = lastPollTime ?? Date.now()
-
     const tick = () => {
       const elapsed = isPlaying ? Date.now() - pollTime : 0
       const clamped = Math.min(base + elapsed, currentTrack.durationMs)
       setLiveProgressMs(clamped)
       if (isPlaying) rafRef.current = requestAnimationFrame(tick)
     }
-
     rafRef.current = requestAnimationFrame(tick)
     return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current) }
   }, [currentTrack?.progressMs, currentTrack?.durationMs, isPlaying, lastPollTime])
@@ -54,6 +53,10 @@ export function PlayerBar() {
     const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
     seek(ratio * durationMs)
   }
+
+  // use app-level handlers if provided, fall back to raw Spotify skip
+  const handleNext = onNext ?? next
+  const handlePrev = onPrev ?? prev
 
   return (
     <div className="player-bar">
@@ -73,7 +76,7 @@ export function PlayerBar() {
       </div>
       <div className="player-center">
         <div className="player-controls">
-          <button className="player-btn player-btn--skip" onClick={prev} title="Previous">⏮</button>
+          <button className="player-btn player-btn--skip" onClick={handlePrev} title="Previous">⏮</button>
           <button
             className={`player-btn player-btn--play ${isPlaying ? 'player-btn--playing' : ''}`}
             onClick={togglePlay}
@@ -82,7 +85,7 @@ export function PlayerBar() {
           >
             {connecting ? <span className="upload-spinner" /> : isPlaying ? '▐▐' : '▶'}
           </button>
-          <button className="player-btn player-btn--skip" onClick={next} title="Next">⏭</button>
+          <button className="player-btn player-btn--skip" onClick={handleNext} title="Next">⏭</button>
         </div>
         <div className="player-progress-row">
           <span className="player-time">{fmtTime(liveProgressMs)}</span>

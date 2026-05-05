@@ -1,7 +1,10 @@
 import { createContext, useContext } from 'react'
 import { useSpotify } from '../hooks/useSpotify'
 
-type SpotifyContextValue = ReturnType<typeof useSpotify>
+type SpotifyContextValue = ReturnType<typeof useSpotify> & {
+  onNext?: () => void
+  onPrev?: () => void
+}
 
 const SpotifyContext = createContext<SpotifyContextValue | null>(null)
 

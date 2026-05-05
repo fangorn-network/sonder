@@ -19,10 +19,6 @@ const api = {
     ipcRenderer.invoke('spotify:api', args)
 }
 
-// console.log('*********************************')
-// console.log(window.api) 
-// console.log(window.api?.spotifyAuth)
-
 // Use `contextBridge` APIs to expose Electron APIs to
 // renderer only if context isolation is enabled, otherwise
 // just add to the DOM global.

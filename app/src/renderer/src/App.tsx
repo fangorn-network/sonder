@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { ConnectWallet } from './components/ConnectWallet'
 import { BrowseView } from './views/BrowseView'
-import type { RecommendedTracks, ViewName } from './types'
+import type { RecommendedTracks, Track, ViewName } from './types'
 import './App.css'
 import { PlayerBar } from './components/PlayerBar'
 import { createPortal } from 'react-dom'
@@ -22,7 +22,53 @@ export default function App() {
   const [recommendedTracks, setRecommendedTracks] = useState<RecommendedTracks | null>(null)
   const [recommendLoading, setRecommendLoading] = useState(false)
   const { sendMessage } = useFangornAgent()
-  const spotify = useSpotify()
+
+  type AutoplayMode = 'none' | 'sequential' | 'agent' | 'similar'
+  const [autoplayMode, setAutoplayMode] = useState<AutoplayMode>('sequential')
+  const filteredTracksRef = useRef<Track[]>([])
+  const playingIdRef = useRef<string | null>(null)
+  const spotifyRef = useRef<ReturnType<typeof useSpotify> | null>(null)
+
+  // const handleTrackEnd = useCallback(() => {
+  //   if (autoplayMode === 'none') return
+  //   if (autoplayMode === 'sequential') {
+  //     const tracks = filteredTracksRef.current
+  //     const idx = tracks.findIndex(t => t.id === playingIdRef.current)
+  //     const next = tracks[idx + 1]
+  //     if (next) spotifyRef.current?.searchAndPlay(`${next.title} ${next.artist}`)
+  //   }
+  // }, [autoplayMode])
+
+  const handleNext = useCallback(() => {
+    const tracks = filteredTracksRef.current
+    const idx = tracks.findIndex(t => t.id === playingIdRef.current)
+    const next = tracks[idx + 1]
+    if (next) {
+      playingIdRef.current = next.id
+      spotifyRef.current?.searchAndPlay(`${next.title} ${next.artist}`)
+    }
+  }, [])
+
+  const handlePrev = useCallback(() => {
+    const tracks = filteredTracksRef.current
+    const idx = tracks.findIndex(t => t.id === playingIdRef.current)
+    const prev = tracks[idx - 1]
+    if (prev) {
+      playingIdRef.current = prev.id
+      spotifyRef.current?.searchAndPlay(`${prev.title} ${prev.artist}`)
+    }
+  }, [])
+
+  // and update handleTrackEnd to also update playingIdRef:
+  const handleTrackEnd = useCallback(() => {
+    if (autoplayMode === 'none') return
+    if (autoplayMode === 'sequential') handleNext()
+  }, [autoplayMode, handleNext])
+
+  const spotify = useSpotify({ onTrackEnd: handleTrackEnd })
+
+  // keep ref in sync so handleTrackEnd can always access latest spotify
+  useEffect(() => { spotifyRef.current = spotify }, [spotify])
 
   const handleBooted = useCallback(() => {
     localStorage.setItem('booted', 'true')
@@ -79,7 +125,7 @@ export default function App() {
   if (!ready) return <BootSplash />
 
   return (
-    <SpotifyProvider value={spotify}>
+    <SpotifyProvider value={{ ...spotify, onNext: handleNext, onPrev: handlePrev }}>
       <PlayerProvider tracks={tracks}>
         <div className="app">
           <header className="header">
@@ -103,6 +149,8 @@ export default function App() {
                 recommendLoading={recommendLoading}
                 onClearRecommendations={clearRecommendations}
                 onCallAgent={handleFindSimilar}
+                onFilteredChange={f => { filteredTracksRef.current = f }}
+                onPlayingIdChange={id => { playingIdRef.current = id }}
               />
             )}
           </main>

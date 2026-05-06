@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { BrowseView } from './views/BrowseView'
+import { AgentView } from './views/AgentView'
 import type { RecommendedTracks, Track, ViewName } from './types'
 import './App.css'
 import { PlayerBar } from './components/PlayerBar'
@@ -153,7 +154,29 @@ export default function App() {
           <header className="header">
             <div className="header-brand">
               <span className="brand-name">SOND3R</span>
-            </div>
+              <nav style={{ display: 'flex', gap: '16px', marginLeft: '24px' }}>
+                {(['Discover', 'Agent'] as ViewName[]).map((v) => (
+                  <button
+                    key={v}
+                    onClick={() => setView(v)}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      fontFamily: '"DM Mono", "Courier New", monospace',
+                      fontSize: '10px',
+                      letterSpacing: '0.2em',
+                      textTransform: 'uppercase' as const,
+                      color: view === v ? 'var(--fg2)' : 'var(--fg4)',
+                      cursor: 'pointer',
+                      padding: '4px 0',
+                      borderBottom: view === v ? '1px solid var(--fg3)' : '1px solid transparent',
+                      transition: 'all 0.2s ease',
+                    }}
+                  >
+                    {v}
+                  </button>
+                ))}
+              </nav>
             <button
               onClick={() => setShowConfig(true)}
               title="Spotify settings"
@@ -165,6 +188,8 @@ export default function App() {
               onMouseEnter={e => (e.currentTarget.style.color = 'var(--fg2)')}
               onMouseLeave={e => (e.currentTarget.style.color = 'var(--fg4)')}
             >⚙</button>
+            </div>
+
           </header>
 
           <main className="main">
@@ -194,6 +219,7 @@ export default function App() {
                 onContextFilter={setContextFilter}
               />
             )}
+            {view === 'Agent' && (<AgentView/>)}
           </main>
 
           <PlayerBar

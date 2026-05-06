@@ -68,6 +68,7 @@ export interface TasteProfile {
   // meta
   seededFromSpotify: boolean
   lastUpdated: number
+  entropy: number
 }
 
 export type SignalType = 'play' | 'skip' | 'like' | 'filter' | 'similar'

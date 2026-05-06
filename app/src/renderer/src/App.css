@@ -2578,9 +2578,9 @@ textarea {
   border: 1px solid transparent;
   border-radius: var(--r-sm);
   cursor: pointer;
-  box-shadow:
+  /* box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.25),
-    0 8px 24px -8px rgba(167, 139, 250, 0.6);
+    0 8px 24px -8px rgba(167, 139, 250, 0.6); */
   transition: opacity var(--t1), transform var(--t1);
 }
 

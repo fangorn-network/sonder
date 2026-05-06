@@ -63,7 +63,16 @@ export function TrackDetails({ track, color, onClose, onCallAgent, onFilter }: T
   const [albumArt, setAlbumArt] = useState<string | null>(null)
   const [artistTracks, setArtistTracks] = useState<Track[]>([])
   const [artistTracksLoading, setArtistTracksLoading] = useState(true)
-  const { searchAndPlay, connected, connect } = useSpotifyContext()
+  const [playLoading, setPlayLoading] = useState(false)
+
+  const {
+    searchAndPlay, connected, connect,
+    isPlaying, currentTrack, togglePlay,
+  } = useSpotifyContext()
+
+  // Is this specific track the one currently loaded in the player?
+  const isThisTrack =
+    currentTrack?.name === track.title && currentTrack?.artist === track.artist
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
@@ -91,6 +100,36 @@ export function TrackDetails({ track, color, onClose, onCallAgent, onFilter }: T
     onClose()
   }
 
+  const handlePlayPause = async () => {
+    if (!connected) { await connect(); return }
+    if (isThisTrack) {
+      // Same track — just toggle pause/play
+      await togglePlay()
+    } else {
+      // Different track — search and start playing it
+      setPlayLoading(true)
+      try {
+        const query = `${track.title} ${track.artist}`.replace(/\(.*?\)/g, '').trim()
+        await searchAndPlay(query)
+      } finally {
+        setPlayLoading(false)
+      }
+    }
+  }
+
+  const showPause = isThisTrack && isPlaying
+  const PlayIcon = () => (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">
+      <path d="M8 5.14v14l11-7-11-7z"/>
+    </svg>
+  )
+  const PauseIcon = () => (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">
+      <rect x="5" y="4" width="4" height="16" rx="1"/>
+      <rect x="15" y="4" width="4" height="16" rx="1"/>
+    </svg>
+  )
+
   return (
     <div className="td-backdrop" onClick={onClose}>
       <div className="td-panel" onClick={e => e.stopPropagation()}>
@@ -108,19 +147,27 @@ export function TrackDetails({ track, color, onClose, onCallAgent, onFilter }: T
         </div>
 
         <div className="td-info">
-          <h2 className="td-title">{track.title}</h2>
-          <p className="td-artist">
-            {track.artist}
-            {track.year !== null && <span className="td-year"> · {track.year}</span>}
-          </p>
-
-          {/* <div>
-            <button className="find-similar-btn" onClick={() => onCallAgent(
-              `Find one to five tracks whose moods are semantically similar to ${track.moods}`
-            )}>
-              ✦ Find Similar
-            </button> 
-          </div> */}
+          <div className="td-title-row">
+            <div className="td-title-group">
+              <h2 className="td-title">{track.title}</h2>
+              <p className="td-artist">
+                {track.artist}
+                {track.year !== null && <span className="td-year"> · {track.year}</span>}
+              </p>
+            </div>
+            <button
+              className={`td-play-btn${showPause ? ' td-play-btn--playing' : ''}`}
+              onClick={handlePlayPause}
+              disabled={playLoading}
+              aria-label={showPause ? 'Pause' : 'Play'}
+              style={{ '--td-play-color': color } as React.CSSProperties}
+            >
+              {playLoading
+                ? <span className="upload-spinner" style={{ width: 14, height: 14, borderWidth: 1.5 }} />
+                : showPause ? <PauseIcon /> : <PlayIcon />
+              }
+            </button>
+          </div>
 
           {track.genres.length > 0 && (
             <div className="td-tags">

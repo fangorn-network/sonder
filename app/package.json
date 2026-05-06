@@ -23,6 +23,8 @@
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
+    "@fangorn-network/agent": "^0.0.2",
+    "@fangorn-network/agent-types": "0.0.2",
     "@fangorn-network/fetch": "2026.04.27",
     "@fangorn-network/sdk": "2026.04.23",
     "@privy-io/react-auth": "^3.16.0",
@@ -73,5 +75,6 @@
       "electron",
       "esbuild"
     ]
-  }
+  },
+  "packageManager": "pnpm@10.27.0+sha512.72d699da16b1179c14ba9e64dc71c9a40988cbdc65c264cb0e489db7de917f20dcf4d64d8723625f2969ba52d4b7e2a1170682d9ac2a5dcaeaab732b7e16f04a"
 }

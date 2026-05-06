@@ -3,7 +3,10 @@ import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { spawn } from 'child_process'
 import path from 'path'
-import { URL } from 'url'
+import { AgentProviderManager } from "./agent-provider-manager";
+import { AgentBridge } from "./agent-bridge";
+import { registerAgentIpcHandlers } from "./ipc-handlers";
+import { FangornAgentToolConfig, DataContext } from "@fangorn-network/agent-types";
 
 let pyProcess: ReturnType<typeof spawn> | null = null
 
@@ -178,3 +181,95 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   pyProcess?.kill()
 })
+
+/**
+ * Example main process bootstrap.
+ *
+ * Integrate these snippets into your existing main.ts / main entry file.
+ * This is NOT a complete Electron main file — it only shows the
+ * agent-related wiring you need to add.
+ */
+
+const providerManager = new AgentProviderManager();
+
+// ── Configure these for your app ──────────────────────────────────────
+// This is the tool config your Express server was supplying.
+// Fill in the fields relevant to your setup; disable the rest.
+const toolConfig: FangornAgentToolConfig = {
+  gmailConfig: { enabled: false, gmailClientId: "", gmailClientSecret: "", gmailRefreshToken: "", agentSignoff: "" },
+  mcpServerConfig: { enabled: false, mcpServerUrls: [] },
+  agent0SdkToolConfig: { enabled: false, pinataJwt: "", chainConfig: null, key: "0x" as any },
+  fangornToolConfig: {
+    enabled: false,
+    walletClient: null,
+    config: null,
+    usdcContractAddress: "0x" as any,
+    usdcDomainName: "",
+    facilitatorAddress: "0x" as any,
+    resourceServerUrl: "",
+    domain: "",
+  },
+  useTasteTools: false,
+};
+
+// Replace this with your actual DataContext provider
+const dataContextProvider = (): DataContext => {
+  // Return whatever your renderer / app state currently holds
+  return {} as DataContext;
+};
+// ───────────────────────────────────────────────────────────────────────
+
+const bridge = new AgentBridge(providerManager, toolConfig, dataContextProvider);
+
+async function bootstrap() {
+  // 1. Load any previously-saved provider config
+  const existingConfig = await providerManager.loadConfig();
+
+  // 2. Register IPC handlers (before creating any windows so the
+  //    renderer can call them immediately after load)
+  registerAgentIpcHandlers(providerManager, bridge);
+
+  // 3. If the user already chose a provider, initialise everything
+  if (existingConfig) {
+    const status = await providerManager.initialise();
+    console.log("[agent] Provider status on startup:", status);
+
+    if (status.ready && existingConfig.provider !== "none") {
+      try {
+        await bridge.initialise();
+        await bridge.warmupOllama();
+        console.log("[agent] Agent bridge initialised successfully.");
+      } catch (err) {
+        console.error("[agent] Agent bridge failed to initialise:", err);
+      }
+    }
+  }  else {
+    console.log("[agent] No provider configured — using Ollama as default for now.");
+    const defaultConfig = {
+      provider: "ollama" as const,
+      defaultModel: "gemma4:e4b",
+    };
+    await providerManager.saveConfig(defaultConfig);
+    const status = await providerManager.initialise();
+    console.log("[agent] Provider status:", status);
+
+    if (status.ready) {
+      try {
+        await bridge.initialise();
+        await bridge.warmupOllama();
+        console.log("[agent] Agent bridge initialised successfully.");
+      } catch (err) {
+        console.error("[agent] Agent bridge failed to initialise:", err);
+      }
+    }
+}
+
+}
+
+// ── App lifecycle hooks ───────────────────────────────────────────────
+
+app.whenReady().then(bootstrap);
+
+app.on("before-quit", async () => {
+  await providerManager.shutdown();
+});

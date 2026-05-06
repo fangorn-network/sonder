@@ -13,12 +13,16 @@ import { useChroma } from './hooks/useChroma'
 import { StartupView } from './views/StartupView'
 import { useSpotify } from './hooks/useSpotify'
 import { SpotifyProvider } from './providers/SpotifyProvider'
+import { useTasteProfile } from './hooks/useTasteProfile'
 
 export default function App() {
+
   const { ready, authenticated, login } = usePrivy()
+  const { profile, applySignal, seedFromSpotify, toChromaQuery } = useTasteProfile()
+
   const [booted, setBooted] = useState(() => localStorage.getItem('booted') === 'true')
   const [view, setView] = useState<ViewName>('Discover')
-  const { tracks, loading, loadingMore, error, hasMore, loadMore, search, setSearch } = useChroma()
+  const { tracks, loading, loadingMore, error, hasMore, loadMore, search, setSearch } = useChroma({ initialQuery: toChromaQuery() })
   const [recommendedTracks, setRecommendedTracks] = useState<RecommendedTracks | null>(null)
   const [recommendLoading, setRecommendLoading] = useState(false)
   const { sendMessage } = useFangornAgent()
@@ -28,16 +32,6 @@ export default function App() {
   const filteredTracksRef = useRef<Track[]>([])
   const playingIdRef = useRef<string | null>(null)
   const spotifyRef = useRef<ReturnType<typeof useSpotify> | null>(null)
-
-  // const handleTrackEnd = useCallback(() => {
-  //   if (autoplayMode === 'none') return
-  //   if (autoplayMode === 'sequential') {
-  //     const tracks = filteredTracksRef.current
-  //     const idx = tracks.findIndex(t => t.id === playingIdRef.current)
-  //     const next = tracks[idx + 1]
-  //     if (next) spotifyRef.current?.searchAndPlay(`${next.title} ${next.artist}`)
-  //   }
-  // }, [autoplayMode])
 
   const handleNext = useCallback(() => {
     const tracks = filteredTracksRef.current
@@ -69,6 +63,16 @@ export default function App() {
 
   // keep ref in sync so handleTrackEnd can always access latest spotify
   useEffect(() => { spotifyRef.current = spotify }, [spotify])
+
+
+  // seed once when spotify connects
+  const prevConnected = useRef(false)
+  useEffect(() => {
+    if (spotify.connected && !prevConnected.current && !profile.seededFromSpotify) {
+      seedFromSpotify(spotify.spotifyFetch)  // need to expose spotifyFetch from useSpotify
+    }
+    prevConnected.current = spotify.connected
+  }, [spotify.connected])
 
   const handleBooted = useCallback(() => {
     localStorage.setItem('booted', 'true')
@@ -125,7 +129,7 @@ export default function App() {
   if (!ready) return <BootSplash />
 
   return (
-    <SpotifyProvider value={{ ...spotify, onNext: handleNext, onPrev: handlePrev }}>
+    <SpotifyProvider value={{ ...spotify, onNext: handleNext, onPrev: handlePrev, onSignal: applySignal }}>
       <PlayerProvider tracks={tracks}>
         <div className="app">
           <header className="header">
@@ -151,6 +155,7 @@ export default function App() {
                 onCallAgent={handleFindSimilar}
                 onFilteredChange={f => { filteredTracksRef.current = f }}
                 onPlayingIdChange={id => { playingIdRef.current = id }}
+                onSignal={applySignal}
               />
             )}
           </main>

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useMemo } from 'react'
-import type { RecommendedTracks, Track } from '../types'
+import type { RecommendedTracks, TasteSignal, Track } from '../types'
 import { TrackDetails } from './TrackDetails'
 import './mobile.css'
 import './Browse-Filters.css'
@@ -14,6 +14,12 @@ function hashColor(str: string): string {
   let h = 0
   for (let i = 0; i < str.length; i++) h = (Math.imul(31, h) + str.charCodeAt(i)) | 0
   return GENRE_PALETTE[Math.abs(h) % GENRE_PALETTE.length]
+}
+
+const EMPTY_TRACK: Track = {
+  id: '', title: '', artist: '', year: null, energy: null,
+  genres: [], moods: [], contexts: [], themes: [],
+  owner: '', manifestStateId: '', datasourceName: '', mbid: null, name: '',
 }
 
 interface BrowseViewProps {
@@ -31,6 +37,7 @@ interface BrowseViewProps {
   onCallAgent: (query?: string) => void
   onFilteredChange?: (tracks: Track[]) => void
   onPlayingIdChange?: (id: string) => void
+  onSignal?: (signal: TasteSignal) => void
 }
 
 async function fetchAlbumArt(title: string, artist: string): Promise<string | null> {
@@ -56,7 +63,7 @@ async function fetchAlbumArt(title: string, artist: string): Promise<string | nu
 export function BrowseView({
   tracks, loading, loadingMore, error, hasMore, loadMore, search, setSearch,
   recommendedTracks, recommendLoading, onClearRecommendations, onCallAgent,
-  onFilteredChange, onPlayingIdChange,
+  onFilteredChange, onPlayingIdChange, onSignal
 }: BrowseViewProps) {
   const sentinelRef = useRef<HTMLDivElement>(null)
   const [genreFilter, setGenreFilter] = useState('all')
@@ -69,17 +76,16 @@ export function BrowseView({
   const fetchingRef = useRef<Set<string>>(new Set())
 
   const { searchAndPlay, connect, connected } = useSpotifyContext()
-  const [playingArt, setPlayingArt] = useState<string | null>(null)
 
   const handlePlay = async (e: React.MouseEvent, track: Track) => {
     e.stopPropagation()
     if (!connected) { await connect(); return }
     setPlayingId(track.id)
-    onPlayingIdChange?.(track.id)  // ← add this
+    onPlayingIdChange?.(track.id)
+    onSignal?.({ type: 'play', track, weight: 1.0 })
     try {
-      const cleanQuery = `${track.title} ${track.artist}`.replace(/\(.*?\)/g, '').trim()
-      const result = await searchAndPlay(cleanQuery)
-      if (result?.albumArt) setPlayingArt(result.albumArt)
+      const query = `${track.title} ${track.artist}`.replace(/\(.*?\)/g, '').trim()
+      await searchAndPlay(query)
     } catch (err) {
       console.error('searchAndPlay failed:', err)
       setPlayingId(null)
@@ -132,12 +138,32 @@ export function BrowseView({
     setContextFilter('all')
   }
 
+  // ── taste signals from filter changes ────────────────────────────────
+  useEffect(() => {
+    if (genreFilter === 'all') return
+    onSignal?.({ type: 'filter', weight: 0.5, track: { ...EMPTY_TRACK, genres: [genreFilter] } })
+  }, [genreFilter])
+
+  useEffect(() => {
+    if (moodFilter === 'all') return
+    onSignal?.({ type: 'filter', weight: 0.5, track: { ...EMPTY_TRACK, moods: [moodFilter] } })
+  }, [moodFilter])
+
+  useEffect(() => {
+    if (contextFilter === 'all') return
+    onSignal?.({ type: 'filter', weight: 0.5, track: { ...EMPTY_TRACK, contexts: [contextFilter] } })
+  }, [contextFilter])
+
+  // ── sync filtered tracks to parent ───────────────────────────────────
+  useEffect(() => {
+    onFilteredChange?.(filtered)
+  }, [filtered])
+
   // ── album art fetching ───────────────────────────────────────────────
   useEffect(() => {
     if (filtered.length === 0) return
     const missing = filtered.filter(t => !albumArtCache[t.id] && !fetchingRef.current.has(t.id))
     if (missing.length === 0) return
-
     const batch = missing.slice(0, 20)
     batch.forEach((track, i) => {
       fetchingRef.current.add(track.id)
@@ -149,28 +175,24 @@ export function BrowseView({
     })
   }, [filtered])
 
-  useEffect(() => {
-    onFilteredChange?.(filtered)
-  }, [filtered])
-
+  // ── infinite scroll sentinel ─────────────────────────────────────────
   useEffect(() => {
     const el = sentinelRef.current
     if (!el) return
     const observer = new IntersectionObserver(
       entries => { if (entries[0].isIntersecting) loadMore() },
-      { rootMargin: '300px' }
+      { rootMargin: '-100px' }
     )
     observer.observe(el)
     return () => observer.disconnect()
   }, [loadMore])
 
+  // ── filter sheet keyboard/scroll lock ────────────────────────────────
   useEffect(() => {
     if (!filterOpen) return
     const prev = document.body.style.overflow
     document.body.style.overflow = 'hidden'
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setFilterOpen(false)
-    }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setFilterOpen(false) }
     window.addEventListener('keydown', onKey)
     return () => {
       document.body.style.overflow = prev
@@ -189,18 +211,12 @@ export function BrowseView({
       <div
         key={track.id}
         className="tg-card"
-        // style={{ borderTop: `2px solid ${primaryGenreColor}` }}
         onClick={() => setDetailsTrack(track)}
       >
         <div className="tg-art">
           {albumArtCache[track.id]
             ? <img src={albumArtCache[track.id]} alt={track.title} style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', inset: 0, borderRadius: 4 }} />
-            : <span
-              className="tg-art-initial"
-            // style={{ color: primaryGenreColor }}
-            >
-              {track.title.slice(0, 1).toUpperCase()}
-            </span>
+            : <span className="tg-art-initial">{track.title.slice(0, 1).toUpperCase()}</span>
           }
           <button
             className={`tg-play-btn${isThisPlaying ? ' tg-play-btn--active' : ''}`}
@@ -218,7 +234,6 @@ export function BrowseView({
               )
             }
           </button>
-
           {track.energy !== null && (
             <div
               className="tg-energy-bar"
@@ -239,9 +254,7 @@ export function BrowseView({
           <div className="tg-title">{track.title}</div>
           <div className="tg-artist">
             {track.artist}
-            {track.year !== null && (
-              <span className="tg-year"> · {track.year}</span>
-            )}
+            {track.year !== null && <span className="tg-year"> · {track.year}</span>}
           </div>
 
           {track.genres.length > 0 && (
@@ -256,9 +269,7 @@ export function BrowseView({
                     borderColor: `${genreColor[g] ?? accentColor}30`,
                   }}
                   onClick={e => { e.stopPropagation(); setGenreFilter(g) }}
-                >
-                  {g}
-                </span>
+                >{g}</span>
               ))}
             </div>
           )}
@@ -270,9 +281,7 @@ export function BrowseView({
                   key={m}
                   className="tg-genre"
                   onClick={e => { e.stopPropagation(); setMoodFilter(m) }}
-                >
-                  {m}
-                </span>
+                >{m}</span>
               ))}
             </div>
           )}
@@ -284,9 +293,7 @@ export function BrowseView({
                   key={c}
                   className="tg-genre"
                   onClick={e => { e.stopPropagation(); setContextFilter(c) }}
-                >
-                  {c}
-                </span>
+                >{c}</span>
               ))}
             </div>
           )}
@@ -297,10 +304,7 @@ export function BrowseView({
               <div className="tg-energy-track">
                 <div
                   className="tg-energy-fill"
-                  style={{
-                    width: `${Math.round(track.energy * 100)}%`,
-                    background: primaryGenreColor,
-                  }}
+                  style={{ width: `${Math.round(track.energy * 100)}%`, background: primaryGenreColor }}
                 />
               </div>
               <span className="tg-energy-val">{Math.round(track.energy * 100)}</span>
@@ -336,11 +340,7 @@ export function BrowseView({
               key={v}
               className={`bf-pill ${active ? 'bf-pill--active' : ''}`}
               onClick={() => setCurrent(v)}
-              style={active && c ? {
-                background: c + '22',
-                borderColor: c + '88',
-                color: c,
-              } : undefined}
+              style={active && c ? { background: c + '22', borderColor: c + '88', color: c } : undefined}
             >{v}</button>
           )
         })}
@@ -468,6 +468,7 @@ export function BrowseView({
         </div>
       )}
 
+      <div style={{ height: 200 }} />
       <div ref={sentinelRef} style={{ height: 1 }} />
 
       {loadingMore && (

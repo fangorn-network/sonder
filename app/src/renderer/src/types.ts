@@ -54,3 +54,26 @@ export interface RecommendedTracks {
   sourceId: string
   sourceTitle: string
 }
+
+export interface TasteProfile {
+  // weighted tag preferences, value = -1.0 to 1.0
+  genres: Record<string, number>
+  moods: Record<string, number>
+  contexts: Record<string, number>
+  // energy preference: null = no preference
+  energyRange: [number, number] | null
+  // raw spotify seed data
+  topArtists: string[]
+  topTracks: { title: string; artist: string; genres: string[] }[]
+  // meta
+  seededFromSpotify: boolean
+  lastUpdated: number
+}
+
+export type SignalType = 'play' | 'skip' | 'like' | 'filter' | 'similar'
+
+export interface TasteSignal {
+  type: SignalType
+  track: Track
+  weight: number  // play=1, skip=-1, filter=0.5, like=1.5, similar=0.75
+}

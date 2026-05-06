@@ -329,5 +329,6 @@ export function useSpotify({ onTrackEnd }: UseSpotifyOptions = {}) {
         seek,
         setVolume,
         searchAndPlay,
+        spotifyFetch
     }
 }

@@ -237,6 +237,26 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/browse")
+async def browse(
+    limit:  int = Query(20),
+    offset: int = Query(0),
+):
+    loop = asyncio.get_event_loop()
+    results = await loop.run_in_executor(
+        None,
+        lambda: collection.get(
+            limit=limit,
+            offset=offset,
+            include=["documents", "metadatas"],
+        )
+    )
+    hits = [
+        {"id": results["ids"][i], "document": results["documents"][i], **results["metadatas"][i]}
+        for i in range(len(results["ids"]))
+    ]
+    return {"results": hits, "total": collection.count()}
+
 @app.get("/search")
 async def search(
     q:         str        = Query(..., description="Natural language search query"),

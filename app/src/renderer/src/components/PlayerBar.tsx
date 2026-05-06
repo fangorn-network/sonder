@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useSpotifyContext } from '../providers/SpotifyProvider'
+import type { TasteSignal } from '../types'
 import './PlayerBar.css'
 
 function fmtTime(ms: number) {
@@ -23,10 +24,13 @@ export function PlayerBar() {
     prev,
     onNext,
     onPrev,
+    onSignal,
   } = useSpotifyContext()
 
   const [liveProgressMs, setLiveProgressMs] = useState(0)
   const rafRef = useRef<number | null>(null)
+  const currentTrackRef = useRef(currentTrack)
+  useEffect(() => { currentTrackRef.current = currentTrack }, [currentTrack])
 
   useEffect(() => {
     if (rafRef.current) cancelAnimationFrame(rafRef.current)
@@ -54,9 +58,26 @@ export function PlayerBar() {
     seek(ratio * durationMs)
   }
 
-  // use app-level handlers if provided, fall back to raw Spotify skip
-  const handleNext = onNext ?? next
-  const handlePrev = onPrev ?? prev
+  const handleNext = () => {
+    // skip = negative signal on current track
+    if (currentTrackRef.current && onSignal) {
+      const t = currentTrackRef.current
+      onSignal({
+        type: 'skip',
+        weight: -1.0,
+        track: {
+          id: '', title: t.name, artist: t.artist, year: null, energy: null,
+          genres: [], moods: [], contexts: [], themes: [],
+          owner: '', manifestStateId: '', datasourceName: '', mbid: null, name: t.name,
+        }
+      })
+    }
+    ;(onNext ?? next)?.()
+  }
+
+  const handlePrev = () => {
+    ;(onPrev ?? prev)?.()
+  }
 
   return (
     <div className="player-bar">
@@ -82,7 +103,7 @@ export function PlayerBar() {
             onClick={togglePlay}
             disabled={connecting}
             title={isPlaying ? 'Pause' : 'Play'}
-          >
+          > 
             {connecting ? <span className="upload-spinner" /> : isPlaying ? '▐▐' : '▶'}
           </button>
           <button className="player-btn player-btn--skip" onClick={handleNext} title="Next">⏭</button>

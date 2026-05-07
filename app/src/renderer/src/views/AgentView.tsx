@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import "./AgentView.css"
 
+type Provider = 'ollama' | 'claude' | 'none'
+
 interface OllamaStatus {
   installed: boolean
   running: boolean
@@ -9,12 +11,25 @@ interface OllamaStatus {
 }
 
 interface ProviderStatus {
-  provider: 'ollama' | 'claude' | 'none'
+  provider: Provider
   ready: boolean
   ollamaStatus?: OllamaStatus
   models?: string[]
   error?: string
 }
+
+interface AgentConfig {
+  provider: Provider
+  ollamaBaseUrl?: string
+  claudeApiKey?: string
+  defaultModel?: string
+}
+
+const PROVIDERS: { key: Provider; label: string; desc: string }[] = [
+  { key: 'ollama', label: 'Ollama', desc: 'Local inference — runs on your machine' },
+  { key: 'claude', label: 'Claude', desc: 'Anthropic API — requires an API key' },
+  { key: 'none', label: 'None', desc: 'Disable the agent entirely' },
+]
 
 export function AgentView() {
   const [providerStatus, setProviderStatus] = useState<ProviderStatus | null>(null)
@@ -22,19 +37,46 @@ export function AgentView() {
   const [models, setModels] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
 
+  // edit state
+  const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null)
+  const [claudeKey, setClaudeKey] = useState('')
+  const [selectedModel, setSelectedModel] = useState('')
+  const [ollamaStatus, setOllamaStatus] = useState<OllamaStatus | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [dirty, setDirty] = useState(false)
+
   const refresh = useCallback(async () => {
     setLoading(true)
     try {
-      const [status, toolboxResult, modelList] = await Promise.all([
+      const [status, config, toolboxResult, modelList] = await Promise.all([
         window.agentAPI.getStatus(),
+        window.agentAPI.getConfig(),
         window.agentAPI.listToolboxes().catch(() => null),
         window.agentAPI.ollamaListModels().catch(() => []),
       ])
       setProviderStatus(status)
+      setModels(modelList)
+
+      // sync edit state with current config
+      if (config) {
+        setSelectedProvider(config.provider)
+        setClaudeKey(config.claudeApiKey ?? '')
+        setSelectedModel(config.defaultModel ?? '')
+      } else {
+        setSelectedProvider(null)
+      }
+
       if (toolboxResult?.success && toolboxResult.toolboxes) {
         setToolboxes(toolboxResult.toolboxes)
       }
-      setModels(modelList)
+
+      // check ollama regardless of current provider
+      const ollStatus = await window.agentAPI.ollamaStatus().catch(() => null)
+      setOllamaStatus(ollStatus)
+
+      setDirty(false)
+      setSaveError(null)
     } catch (err) {
       console.error('Failed to fetch agent info:', err)
     } finally {
@@ -42,9 +84,57 @@ export function AgentView() {
     }
   }, [])
 
-  useEffect(() => {
-    refresh()
-  }, [refresh])
+  useEffect(() => { refresh() }, [refresh])
+
+  const handleProviderSelect = (p: Provider) => {
+    setSelectedProvider(p)
+    setDirty(true)
+    setSaveError(null)
+  }
+
+  const handleSave = useCallback(async () => {
+    if (!selectedProvider) return
+
+    setSaving(true)
+    setSaveError(null)
+
+    try {
+      const config: AgentConfig = { provider: selectedProvider }
+
+      if (selectedProvider === 'claude') {
+        if (!claudeKey.trim()) {
+          setSaveError('API key is required for Claude.')
+          setSaving(false)
+          return
+        }
+        config.claudeApiKey = claudeKey.trim()
+      }
+
+      if (selectedProvider === 'ollama' && selectedModel) {
+        config.defaultModel = selectedModel
+      }
+
+      const status = await window.agentAPI.setProvider(config)
+      setProviderStatus(status)
+
+      if (!status.ready && status.error) {
+        setSaveError(status.error)
+      } else {
+        setDirty(false)
+        // refresh models list in case provider changed
+        const modelList = await window.agentAPI.ollamaListModels().catch(() => [])
+        setModels(modelList)
+      }
+    } catch (err: any) {
+      setSaveError(err.message ?? 'Failed to save.')
+    } finally {
+      setSaving(false)
+    }
+  }, [selectedProvider, claudeKey, selectedModel])
+
+  const handleInstallOllama = useCallback(async () => {
+    await window.agentAPI.ollamaInstall()
+  }, [])
 
   if (loading) {
     return (
@@ -56,6 +146,8 @@ export function AgentView() {
     )
   }
 
+  const currentProvider = providerStatus?.provider
+
   return (
     <div className="agent-view">
       <div className="agent-view-header">
@@ -64,60 +156,132 @@ export function AgentView() {
       </div>
 
       <div className="agent-view-grid">
-        {/* Provider Status */}
-        <section className="agent-card">
+        {/* Provider Selection */}
+        <section className="agent-card agent-card-wide">
           <h3 className="agent-card-label">provider</h3>
-          <div className="agent-card-body">
-            <div className="agent-row">
-              <span className="agent-key">type</span>
-              <span className="agent-val">{providerStatus?.provider ?? '—'}</span>
-            </div>
-            <div className="agent-row">
-              <span className="agent-key">status</span>
-              <span className={`agent-dot ${providerStatus?.ready ? 'on' : 'off'}`}>
-                {providerStatus?.ready ? 'connected' : 'disconnected'}
-              </span>
-            </div>
-            {providerStatus?.error && (
-              <div className="agent-row">
-                <span className="agent-key">error</span>
-                <span className="agent-val agent-err">{providerStatus.error}</span>
-              </div>
-            )}
+          <div className="agent-provider-options">
+            {PROVIDERS.map(({ key, label, desc }) => {
+              const active = selectedProvider === key
+              const isCurrent = currentProvider === key
+              return (
+                <button
+                  key={key}
+                  className={`agent-provider-btn ${active ? 'selected' : ''}`}
+                  onClick={() => handleProviderSelect(key)}
+                >
+                  <div className="agent-provider-btn-top">
+                    <span className="agent-provider-name">{label}</span>
+                    {isCurrent && providerStatus?.ready && (
+                      <span className="agent-dot on" style={{ fontSize: '9px' }}>active</span>
+                    )}
+                  </div>
+                  <span className="agent-provider-desc">{desc}</span>
+                </button>
+              )
+            })}
           </div>
-        </section>
 
-        {/* Ollama Details */}
-        {providerStatus?.provider === 'ollama' && providerStatus.ollamaStatus && (
-          <section className="agent-card">
-            <h3 className="agent-card-label">ollama</h3>
-            <div className="agent-card-body">
-              <div className="agent-row">
-                <span className="agent-key">installed</span>
-                <span className="agent-val">
-                  {providerStatus.ollamaStatus.installed ? 'yes' : 'no'}
-                </span>
-              </div>
-              <div className="agent-row">
-                <span className="agent-key">running</span>
-                <span className={`agent-dot ${providerStatus.ollamaStatus.running ? 'on' : 'off'}`}>
-                  {providerStatus.ollamaStatus.running ? 'yes' : 'no'}
-                </span>
-              </div>
-              {providerStatus.ollamaStatus.version && (
-                <div className="agent-row">
-                  <span className="agent-key">version</span>
-                  <span className="agent-val">{providerStatus.ollamaStatus.version}</span>
+          {/* Ollama sub-options */}
+          {selectedProvider === 'ollama' && (
+            <div className="agent-provider-config">
+              {ollamaStatus && !ollamaStatus.installed && (
+                <div className="agent-provider-notice">
+                  <span className="agent-val">Ollama is not installed.</span>
+                  <button className="agent-link-btn" onClick={handleInstallOllama}>
+                    download ollama
+                  </button>
                 </div>
               )}
+
+              {ollamaStatus?.installed && (
+                <>
+                  <div className="agent-row">
+                    <span className="agent-key">status</span>
+                    <span className={`agent-dot ${ollamaStatus.running ? 'on' : 'off'}`}>
+                      {ollamaStatus.running ? 'running' : 'stopped'}
+                    </span>
+                  </div>
+                  {ollamaStatus.version && (
+                    <div className="agent-row">
+                      <span className="agent-key">version</span>
+                      <span className="agent-val">{ollamaStatus.version}</span>
+                    </div>
+                  )}
+                  {models.length > 0 && (
+                    <div className="agent-model-select">
+                      <span className="agent-key">model</span>
+                      <select
+                        className="agent-select"
+                        value={selectedModel}
+                        onChange={(e) => { setSelectedModel(e.target.value); setDirty(true) }}
+                      >
+                        <option value="">default</option>
+                        {models.map((m) => (
+                          <option key={m} value={m}>{m}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Claude sub-options */}
+          {selectedProvider === 'claude' && (
+            <div className="agent-provider-config">
+              <div className="agent-input-group">
+                <label className="agent-key" htmlFor="claude-key">api key</label>
+                <input
+                  id="claude-key"
+                  type="password"
+                  className="agent-input"
+                  value={claudeKey}
+                  onChange={(e) => { setClaudeKey(e.target.value); setDirty(true) }}
+                  placeholder="sk-ant-..."
+                  autoComplete="off"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Save / Error */}
+          {saveError && (
+            <div className="agent-save-error">{saveError}</div>
+          )}
+
+          {dirty && (
+            <button
+              className="agent-save-btn"
+              onClick={handleSave}
+              disabled={saving}
+            >
+              {saving ? 'saving...' : 'apply'}
+            </button>
+          )}
+        </section>
+
+        {/* Status card — only show when a provider is active */}
+        {providerStatus?.ready && currentProvider !== 'none' && (
+          <section className="agent-card">
+            <h3 className="agent-card-label">status</h3>
+            <div className="agent-card-body">
+              <div className="agent-row">
+                <span className="agent-key">provider</span>
+                <span className="agent-val">{currentProvider}</span>
+              </div>
+              <div className="agent-row">
+                <span className="agent-key">connection</span>
+                <span className="agent-dot on">connected</span>
+              </div>
             </div>
           </section>
         )}
 
-        {/* Models */}
-        {models.length > 0 && (
+        {/* Models — only when ollama is active */}
+        {currentProvider === 'ollama' && models.length > 0 && (
           <section className="agent-card">
-            <h3 className="agent-card-label">models</h3>
+            <h3 className="agent-card-label">available models</h3>
             <div className="agent-card-body">
               {models.map((model) => (
                 <div className="agent-row" key={model}>

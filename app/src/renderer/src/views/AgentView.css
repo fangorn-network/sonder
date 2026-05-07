@@ -160,6 +160,187 @@
     background: rgba(232, 179, 179, 0.5);
   }
 
+  /* Provider selection */
+  .agent-provider-options {
+    display: flex;
+    gap: 10px;
+  }
+
+  @media (max-width: 560px) {
+    .agent-provider-options {
+      flex-direction: column;
+    }
+  }
+
+  .agent-provider-btn {
+    flex: 1;
+    background: rgba(163, 201, 168, 0.02);
+    border: 1px solid rgba(163, 201, 168, 0.1);
+    border-radius: 4px;
+    padding: 12px;
+    cursor: pointer;
+    text-align: left;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    transition: all 0.2s ease;
+  }
+
+  .agent-provider-btn:hover {
+    border-color: rgba(163, 201, 168, 0.25);
+    background: rgba(163, 201, 168, 0.04);
+  }
+
+  .agent-provider-btn.selected {
+    border-color: rgba(163, 201, 168, 0.4);
+    background: rgba(163, 201, 168, 0.06);
+  }
+
+  .agent-provider-btn-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .agent-provider-name {
+    font-family: "DM Mono", "Courier New", monospace;
+    font-size: 11px;
+    color: rgba(163, 201, 168, 0.8);
+    letter-spacing: 0.1em;
+  }
+
+  .agent-provider-desc {
+    font-family: "DM Mono", "Courier New", monospace;
+    font-size: 9px;
+    color: rgba(163, 201, 168, 0.35);
+    line-height: 1.4;
+  }
+
+  /* Provider config sub-sections */
+  .agent-provider-config {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px;
+    background: rgba(163, 201, 168, 0.02);
+    border: 1px solid rgba(163, 201, 168, 0.06);
+    border-radius: 3px;
+  }
+
+  .agent-provider-notice {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .agent-link-btn {
+    font-family: "DM Mono", "Courier New", monospace;
+    font-size: 10px;
+    color: rgba(163, 201, 168, 0.6);
+    background: none;
+    border: none;
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    padding: 0;
+    transition: color 0.2s ease;
+  }
+
+  .agent-link-btn:hover {
+    color: rgba(163, 201, 168, 0.9);
+  }
+
+  .agent-model-select {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .agent-select {
+    font-family: "DM Mono", "Courier New", monospace;
+    font-size: 11px;
+    color: rgba(163, 201, 168, 0.75);
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(163, 201, 168, 0.12);
+    border-radius: 3px;
+    padding: 5px 8px;
+    outline: none;
+    cursor: pointer;
+    transition: border-color 0.2s ease;
+  }
+
+  .agent-select:focus {
+    border-color: rgba(163, 201, 168, 0.3);
+  }
+
+  .agent-select option {
+    background: #0d120d;
+    color: rgba(163, 201, 168, 0.75);
+  }
+
+  .agent-input-group {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .agent-input {
+    flex: 1;
+    font-family: "DM Mono", "Courier New", monospace;
+    font-size: 11px;
+    color: rgba(163, 201, 168, 0.75);
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(163, 201, 168, 0.12);
+    border-radius: 3px;
+    padding: 6px 10px;
+    outline: none;
+    transition: border-color 0.2s ease;
+  }
+
+  .agent-input::placeholder {
+    color: rgba(163, 201, 168, 0.2);
+  }
+
+  .agent-input:focus {
+    border-color: rgba(163, 201, 168, 0.3);
+  }
+
+  /* Save */
+  .agent-save-btn {
+    align-self: flex-end;
+    font-family: "DM Mono", "Courier New", monospace;
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: rgba(163, 201, 168, 0.85);
+    background: rgba(163, 201, 168, 0.08);
+    border: 1px solid rgba(163, 201, 168, 0.25);
+    border-radius: 3px;
+    padding: 7px 20px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .agent-save-btn:hover:not(:disabled) {
+    background: rgba(163, 201, 168, 0.14);
+    border-color: rgba(163, 201, 168, 0.4);
+  }
+
+  .agent-save-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  .agent-save-error {
+    font-family: "DM Mono", "Courier New", monospace;
+    font-size: 10px;
+    color: rgba(232, 179, 179, 0.75);
+    padding: 4px 0;
+  }
+
   .agent-model {
     font-family: "DM Mono", "Courier New", monospace;
     font-size: 11px;

@@ -3,9 +3,9 @@ import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { spawn } from 'child_process'
 import path from 'path'
-import { AgentProviderManager } from "./agent-provider-manager";
-import { AgentBridge } from "./agent-bridge";
-import { registerAgentIpcHandlers } from "./ipc-handlers";
+import { AgentProviderManager } from "./agent/agent-provider-manager";
+import { AgentBridge } from "./agent/agent-bridge";
+import { registerAgentIpcHandlers } from "./agent/ipc-handlers";
 import { FangornAgentToolConfig, DataContext } from "@fangorn-network/agent-types";
 
 let pyProcess: ReturnType<typeof spawn> | null = null

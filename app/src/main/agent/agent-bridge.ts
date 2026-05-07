@@ -1,12 +1,12 @@
 import { FangornAgent, FangornAgentResponse } from "@fangorn-network/agent";
 import {
   FangornAgentConfig,
-  FangornAgentToolConfig,
   DataContext,
   LLMProvider,
+  AgenticConfig,
 } from "@fangorn-network/agent-types";
 import { AgentProviderManager } from "./agent-provider-manager";
-import { ToolboxConfigManager, ToolboxConfigEntry } from "./toolbox-config-manager";
+import { ToolboxConfigManager } from "./toolbox-config-manager";
 
 export class AgentBridge {
   private agent: FangornAgent | null = null;
@@ -16,6 +16,7 @@ export class AgentBridge {
   private dataContextProvider: () => DataContext;
   private llmProvider = LLMProvider.Ollama;
   private llmModel = "qwen3.5:0.8b"
+  private apiKey = ""
 
   constructor(
     providerManager: AgentProviderManager,
@@ -30,58 +31,11 @@ export class AgentBridge {
   }
 
   /**
-   * Build a FangornAgentToolConfig from the persisted toolbox configs.
-   * Maps the UI-saved fields back into the shape the agent expects.
+   * Get the toolbox entries from persisted config.
    */
-  private buildToolConfig(): FangornAgentToolConfig {
+  private getToolboxEntries(): { id: string; enabled: boolean; fields: Record<string, any> }[] {
     const cfg = this.toolboxConfigManager.getConfig();
-    const entries = new Map<string, ToolboxConfigEntry>();
-
-    if (cfg) {
-      for (const entry of cfg.toolboxes) {
-        entries.set(entry.id, entry);
-      }
-    }
-
-    const get = (id: string): ToolboxConfigEntry =>
-      entries.get(id) ?? { id, enabled: false, fields: {} };
-
-    const fangorn = get("fangornToolbox");
-    const mcp = get("mcpToolbox");
-    const agent0 = get("agent0SdkToolbox");
-    const gmail = get("gmailToolbox");
-    const taste = get("tasteToolbox");
-
-    return {
-      gmailConfig: {
-        enabled: gmail.enabled,
-        gmailClientId: (gmail.fields.gmailClientId as string) ?? "",
-        gmailClientSecret: (gmail.fields.gmailClientSecret as string) ?? "",
-        gmailRefreshToken: (gmail.fields.gmailRefreshToken as string) ?? "",
-        agentSignoff: (gmail.fields.agentSignoff as string) ?? "",
-      },
-      mcpServerConfig: {
-        enabled: mcp.enabled,
-        mcpServerUrls: (mcp.fields.mcpServerUrls as string[]) ?? [],
-      },
-      agent0SdkToolConfig: {
-        enabled: agent0.enabled,
-        pinataJwt: (agent0.fields.pinataJwt as string) ?? "",
-        chainConfig: null, // app-provided
-        key: ((agent0.fields.key as string) ?? "0x") as any,
-      },
-      fangornToolConfig: {
-        enabled: fangorn.enabled,
-        walletClient: null, // app-provided
-        config: null, // app-provided
-        usdcContractAddress: ((fangorn.fields.usdcContractAddress as string) ?? "0x") as any,
-        usdcDomainName: (fangorn.fields.usdcDomainName as string) ?? "",
-        facilitatorAddress: ((fangorn.fields.facilitatorAddress as string) ?? "0x") as any,
-        resourceServerUrl: (fangorn.fields.resourceServerUrl as string) ?? "",
-        domain: (fangorn.fields.domain as string) ?? "",
-      },
-      useTasteTools: taste.enabled,
-    };
+    return cfg?.toolboxes ?? [];
   }
 
   /**
@@ -123,14 +77,18 @@ export class AgentBridge {
       }
     }
 
-    // Set the toolbox directory so activateToolboxPlugins knows where to scan
-    process.env.TOOLBOX_DIR = this.toolboxDir;
+    const agenticConfig: AgenticConfig = {
+        llmModel: this.llmModel,
+        llmProvider: this.llmProvider,
+        apiKey: this.apiKey,
+        url: "http://localhost:11434"
+      }
 
     const agentConfig: FangornAgentConfig = {
-      llmProvider: this.llmProvider,
-      llmModel: this.llmModel,
       useMemory: true,
-      fangornAgentToolConfig: this.buildToolConfig(),
+      agenticConfig,
+      toolboxDir: this.toolboxDir,
+      toolboxEntries: this.getToolboxEntries(),
     };
 
     this.agent = await FangornAgent.create(agentConfig, this.dataContextProvider);

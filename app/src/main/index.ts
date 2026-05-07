@@ -6,7 +6,7 @@ import path from 'path'
 import { AgentProviderManager } from "./agent/agent-provider-manager";
 import { AgentBridge } from "./agent/agent-bridge";
 import { registerAgentIpcHandlers } from "./agent/ipc-handlers";
-import { FangornAgentToolConfig, DataContext } from "@fangorn-network/agent-types";
+import { DataContext } from "@fangorn-network/agent-types";
 import { existsSync } from "fs";
 import { ToolboxConfigManager } from './agent/toolbox-config-manager'
 
@@ -202,7 +202,7 @@ function getToolboxDir(): string {
     "node_modules",
     "@fangorn-network",
     "agent-tools",
-    "dist",
+    "build",
     "toolboxes"
   );
 }
@@ -221,8 +221,10 @@ const bridge = new AgentBridge(
 );
  
 async function bootstrap() {
-  // 1. Load persisted configs
+  // 1. Discover toolbox plugins and load persisted configs
   const existingConfig = await providerManager.loadConfig();
+  const toolboxDir = getToolboxDir();
+  toolboxConfigManager.discoverRegistry(toolboxDir);
   await toolboxConfigManager.load();
  
   // 2. Register IPC handlers (before creating any windows so the
@@ -246,9 +248,6 @@ async function bootstrap() {
   } else {
     console.log("[agent] No provider configured — setup wizard will appear.");
   }
- 
-  // 4. Create your BrowserWindow as usual...
-  //    (your existing window creation code goes here)
 }
  
 // ── App lifecycle hooks ───────────────────────────────────────────────

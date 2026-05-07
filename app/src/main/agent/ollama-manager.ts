@@ -291,6 +291,18 @@ export class OllamaManager {
     }
   }
 
+  async deleteModel(model: string): Promise<void> {
+  const res = await fetch(`${this.baseUrl}/api/delete`, {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: model }),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Failed to delete model ${model}: ${res.statusText}`);
+  }
+}
+
   /**
    * Gracefully shut down the Ollama process *only* if we started it.
    * Never kills an externally-managed instance.

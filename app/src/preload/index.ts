@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
-import type { AgentProviderConfig, ProviderStatus } from "../main/agent-provider-manager";
-import type { OllamaStatus } from "../main/ollama-manager";
+import type { AgentProviderConfig, ProviderStatus } from "../main/agent/agent-provider-manager";
+import type { OllamaStatus } from "../main/agent/ollama-manager";
 import type { FangornAgentResponse } from "@fangorn-network/agent";
 
 // Custom APIs for renderer
@@ -39,80 +39,94 @@ if (process.contextIsolated) {
   window.api = api
 }
 
+
 interface AgentResult {
   success: boolean;
   response?: FangornAgentResponse;
   error?: string;
 }
-
+ 
 export const agentAPI = {
   // ── Provider setup ──────────────────────────────────────────────
   getConfig: (): Promise<AgentProviderConfig | null> =>
     ipcRenderer.invoke("agent:get-config"),
-
+ 
   setProvider: (config: AgentProviderConfig): Promise<ProviderStatus> =>
     ipcRenderer.invoke("agent:set-provider", config),
-
+ 
   resetConfig: (): Promise<{ success: boolean }> =>
     ipcRenderer.invoke("agent:reset-config"),
-
+ 
   getStatus: (): Promise<ProviderStatus> =>
     ipcRenderer.invoke("agent:get-status"),
-
+ 
   isReady: (): Promise<boolean> =>
     ipcRenderer.invoke("agent:is-ready"),
-
+ 
   // ── Ollama-specific ─────────────────────────────────────────────
   ollamaStatus: (): Promise<OllamaStatus> =>
     ipcRenderer.invoke("agent:ollama-status"),
-
+ 
   ollamaInstall: (): Promise<{ opened: boolean }> =>
     ipcRenderer.invoke("agent:ollama-install"),
-
+ 
   ollamaListModels: (): Promise<string[]> =>
     ipcRenderer.invoke("agent:ollama-list-models"),
-
+ 
   ollamaPullModel: (model: string): Promise<{ success: boolean; model: string }> =>
     ipcRenderer.invoke("agent:ollama-pull-model", model),
-
+ 
+  ollamaDeleteModel: (model: string): Promise<{ success: boolean; model?: string; error?: string }> =>
+    ipcRenderer.invoke("agent:ollama-delete-model", model),
+ 
   onPullProgress: (
     callback: (data: { model: string; status: string; completed?: number; total?: number }) => void
   ) => {
     const handler = (_event: Electron.IpcRendererEvent, data: any) => callback(data);
     ipcRenderer.on("agent:ollama-pull-progress", handler);
-
+ 
     return () => {
       ipcRenderer.removeListener("agent:ollama-pull-progress", handler);
     };
   },
-
+ 
   // ── Agent chat ────────────────────────────────────────────────────
   chat: (query: string): Promise<AgentResult> =>
     ipcRenderer.invoke("agent:chat", query),
-
+ 
   chatScoped: (query: string, toolNames: string[]): Promise<AgentResult> =>
     ipcRenderer.invoke("agent:chat-scoped", query, toolNames),
-
+ 
   findSimilar: (data: any): Promise<AgentResult> =>
     ipcRenderer.invoke("agent:find-similar", data),
-
+ 
   returnFilters: (data: any): Promise<AgentResult> =>
     ipcRenderer.invoke("agent:return-filters", data),
-
+ 
   // ── Agent introspection ───────────────────────────────────────────
   listTools: (): Promise<{ success: boolean; tools?: string[]; error?: string }> =>
     ipcRenderer.invoke("agent:list-tools"),
-
+ 
   listToolboxes: (): Promise<{ success: boolean; toolboxes?: Record<string, string[]>; error?: string }> =>
     ipcRenderer.invoke("agent:list-toolboxes"),
-
+ 
   reset: (): Promise<{ success: boolean }> =>
     ipcRenderer.invoke("agent:reset"),
+ 
+  // ── Toolbox config ────────────────────────────────────────────────
+  toolboxRegistry: (): Promise<any[]> =>
+    ipcRenderer.invoke("agent:toolbox-registry"),
+ 
+  toolboxConfig: (): Promise<{ toolboxes: any[] }> =>
+    ipcRenderer.invoke("agent:toolbox-config"),
+ 
+  toolboxUpdate: (entry: { id: string; enabled: boolean; fields: Record<string, any> }): Promise<{ success: boolean; config?: any; error?: string }> =>
+    ipcRenderer.invoke("agent:toolbox-update", entry),
 };
-
+ 
 // Expose to renderer
 contextBridge.exposeInMainWorld("agentAPI", agentAPI);
-
+ 
 // Type augmentation so TS knows about window.agentAPI in the renderer
 declare global {
   interface Window {

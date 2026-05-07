@@ -1,6 +1,7 @@
 import { ipcMain, shell } from "electron";
 import { AgentProviderManager, AgentProviderConfig } from "./agent-provider-manager";
 import { AgentBridge } from "./agent-bridge";
+import { ToolboxConfigManager } from "./toolbox-config-manager";
 
 /**
  * Register all agent-related IPC handlers.
@@ -9,6 +10,7 @@ import { AgentBridge } from "./agent-bridge";
 export function registerAgentIpcHandlers(
   manager: AgentProviderManager,
   bridge: AgentBridge,
+  toolboxConfigManager: ToolboxConfigManager,
 ): void {
 
   // ── Provider setup ────────────────────────────────────────────────
@@ -79,6 +81,19 @@ export function registerAgentIpcHandlers(
     return { success: true, model };
   });
 
+  /**
+   * Delete a local model.
+   */
+  ipcMain.handle("agent:ollama-delete-model", async (_event, model: string) => {
+    const ollama = manager.getOllamaManager();
+    try {
+      await ollama.deleteModel(model);
+      return { success: true, model };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
+
   // ── Agent chat ────────────────────────────────────────────────────
 
   ipcMain.handle("agent:chat", async (_event, query: string) => {
@@ -140,5 +155,33 @@ export function registerAgentIpcHandlers(
   ipcMain.handle("agent:reset", () => {
     bridge.reset();
     return { success: true };
+  });
+
+  // ── Toolbox config ──────────────────────────────────────────────
+
+  /**
+   * Get the toolbox registry (descriptors for all known toolboxes).
+   */
+  ipcMain.handle("agent:toolbox-registry", () => {
+    return toolboxConfigManager.getRegistry();
+  });
+
+  /**
+   * Get all saved toolbox configurations.
+   */
+  ipcMain.handle("agent:toolbox-config", async () => {
+    return toolboxConfigManager.load();
+  });
+
+  /**
+   * Update a single toolbox's config (enable/disable + fields).
+   */
+  ipcMain.handle("agent:toolbox-update", async (_event, entry) => {
+    try {
+      const config = await toolboxConfigManager.updateToolbox(entry);
+      return { success: true, config };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
   });
 }

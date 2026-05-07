@@ -7,6 +7,8 @@ import { AgentProviderManager } from "./agent/agent-provider-manager";
 import { AgentBridge } from "./agent/agent-bridge";
 import { registerAgentIpcHandlers } from "./agent/ipc-handlers";
 import { FangornAgentToolConfig, DataContext } from "@fangorn-network/agent-types";
+import { existsSync } from "fs";
+import { ToolboxConfigManager } from './agent/toolbox-config-manager'
 
 let pyProcess: ReturnType<typeof spawn> | null = null
 
@@ -181,90 +183,81 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   pyProcess?.kill()
 })
-
-/**
- * Example main process bootstrap.
- *
- * Integrate these snippets into your existing main.ts / main entry file.
- * This is NOT a complete Electron main file — it only shows the
- * agent-related wiring you need to add.
- */
-
+ 
 const providerManager = new AgentProviderManager();
-
-// ── Configure these for your app ──────────────────────────────────────
-// This is the tool config your Express server was supplying.
-// Fill in the fields relevant to your setup; disable the rest.
-const toolConfig: FangornAgentToolConfig = {
-  gmailConfig: { enabled: false, gmailClientId: "", gmailClientSecret: "", gmailRefreshToken: "", agentSignoff: "" },
-  mcpServerConfig: { enabled: false, mcpServerUrls: [] },
-  agent0SdkToolConfig: { enabled: false, pinataJwt: "", chainConfig: null, key: "0x" as any },
-  fangornToolConfig: {
-    enabled: false,
-    walletClient: null,
-    config: null,
-    usdcContractAddress: "0x" as any,
-    usdcDomainName: "",
-    facilitatorAddress: "0x" as any,
-    resourceServerUrl: "",
-    domain: "",
-  },
-  useTasteTools: false,
-};
-
+const toolboxConfigManager = new ToolboxConfigManager();
+ 
+/**
+ * Resolve the toolbox plugin directory.
+ * In production: bundled via extraResources into resources/toolboxes.
+ * In dev: falls back to node_modules.
+ */
+function getToolboxDir(): string {
+  const bundled = path.join(process.resourcesPath, "toolboxes");
+  if (existsSync(bundled)) return bundled;
+ 
+  // Dev fallback — resolve from node_modules
+  return path.join(
+    app.getAppPath(),
+    "node_modules",
+    "@fangorn-network",
+    "agent-tools",
+    "dist",
+    "toolboxes"
+  );
+}
+ 
 // Replace this with your actual DataContext provider
 const dataContextProvider = (): DataContext => {
   // Return whatever your renderer / app state currently holds
   return {} as DataContext;
 };
-// ───────────────────────────────────────────────────────────────────────
-
-const bridge = new AgentBridge(providerManager, toolConfig, dataContextProvider);
-
+ 
+const bridge = new AgentBridge(
+  providerManager,
+  toolboxConfigManager,
+  getToolboxDir(),
+  dataContextProvider,
+);
+ 
 async function bootstrap() {
-  // 1. Load any previously-saved provider config
+  // 1. Load persisted configs
   const existingConfig = await providerManager.loadConfig();
-
+  await toolboxConfigManager.load();
+ 
   // 2. Register IPC handlers (before creating any windows so the
   //    renderer can call them immediately after load)
-  registerAgentIpcHandlers(providerManager, bridge);
-
+  registerAgentIpcHandlers(providerManager, bridge, toolboxConfigManager);
+ 
   // 3. If the user already chose a provider, initialise everything
   if (existingConfig) {
     const status = await providerManager.initialise();
     console.log("[agent] Provider status on startup:", status);
-
+    console.log("[agent] Toolbox dir:", getToolboxDir());
+ 
     if (status.ready && existingConfig.provider !== "none") {
       try {
         await bridge.initialise();
-        await bridge.warmupOllama();
         console.log("[agent] Agent bridge initialised successfully.");
       } catch (err) {
         console.error("[agent] Agent bridge failed to initialise:", err);
       }
     }
-  }  else {
-    console.log("[agent] No provider configured — using Ollama as default for now.");
-    const defaultConfig = {
-      provider: "ollama" as const,
-      defaultModel: "gemma4:e4b",
-    };
-    await providerManager.saveConfig(defaultConfig);
-    const status = await providerManager.initialise();
-    console.log("[agent] Provider status:", status);
-
-    if (status.ready) {
-      try {
-        await bridge.initialise();
-        await bridge.warmupOllama();
-        console.log("[agent] Agent bridge initialised successfully.");
-      } catch (err) {
-        console.error("[agent] Agent bridge failed to initialise:", err);
-      }
-    }
+  } else {
+    console.log("[agent] No provider configured — setup wizard will appear.");
+  }
+ 
+  // 4. Create your BrowserWindow as usual...
+  //    (your existing window creation code goes here)
 }
-
-}
+ 
+// ── App lifecycle hooks ───────────────────────────────────────────────
+ 
+app.whenReady().then(bootstrap);
+ 
+app.on("before-quit", async () => {
+  await providerManager.shutdown();
+});
 
 // ── App lifecycle hooks ───────────────────────────────────────────────
 

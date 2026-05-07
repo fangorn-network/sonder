@@ -9,6 +9,7 @@ export interface AgentProviderConfig {
   provider: AgentProvider;
   ollamaBaseUrl?: string;
   claudeApiKey?: string;
+  claudeModel?: string;
   defaultModel?: string;
 }
 

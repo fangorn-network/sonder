@@ -25,6 +25,7 @@
     "@electron-toolkit/utils": "^4.0.0",
     "@fangorn-network/agent": "^0.0.2",
     "@fangorn-network/agent-types": "0.0.2",
+    "@fangorn-network/agent-tools": "0.0.1",
     "@fangorn-network/fetch": "2026.04.27",
     "@fangorn-network/sdk": "2026.04.23",
     "@privy-io/react-auth": "^3.16.0",

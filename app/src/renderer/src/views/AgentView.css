@@ -381,3 +381,624 @@
     border-radius: 3px;
     padding: 3px 8px;
   }
+
+  /* ── Pull progress ─────────────────────────────────────────── */
+
+.agent-pull-status {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  background: rgba(163, 201, 168, 0.03);
+  border: 1px solid rgba(163, 201, 168, 0.1);
+  border-radius: 3px;
+}
+
+.agent-pull-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.agent-pull-bar-track {
+  width: 100%;
+  height: 3px;
+  background: rgba(163, 201, 168, 0.08);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.agent-pull-bar-fill {
+  height: 100%;
+  background: rgba(90, 158, 95, 0.6);
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+/* ── Delete confirmation ───────────────────────────────────── */
+
+.agent-delete-confirm {
+  display: flex;
+  gap: 10px;
+}
+
+.agent-delete-btn {
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.agent-row:hover .agent-delete-btn {
+  opacity: 1;
+}
+
+.agent-delete-yes {
+  color: rgba(232, 179, 179, 0.75) !important;
+}
+
+.agent-delete-yes:hover {
+  color: rgba(232, 179, 179, 1) !important;
+}
+
+/* ── Curated model list ────────────────────────────────────── */
+
+.agent-curated-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.agent-curated-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 3px;
+  transition: background 0.15s ease;
+}
+
+.agent-curated-item:hover {
+  background: rgba(163, 201, 168, 0.03);
+}
+
+.agent-curated-header {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.agent-curated-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.agent-curated-name {
+  font-family: "DM Mono", "Courier New", monospace;
+  font-size: 11px;
+  color: rgba(163, 201, 168, 0.75);
+  letter-spacing: 0.05em;
+}
+
+.agent-curated-badge {
+  font-family: "DM Mono", "Courier New", monospace;
+  font-size: 8px;
+  color: rgba(90, 158, 95, 0.7);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.agent-curated-desc {
+  font-family: "DM Mono", "Courier New", monospace;
+  font-size: 9px;
+  color: rgba(163, 201, 168, 0.3);
+  line-height: 1.3;
+}
+
+.agent-curated-sizes {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.agent-size-btn {
+  font-family: "DM Mono", "Courier New", monospace;
+  font-size: 9px;
+  color: rgba(163, 201, 168, 0.55);
+  background: rgba(163, 201, 168, 0.04);
+  border: 1px solid rgba(163, 201, 168, 0.12);
+  border-radius: 3px;
+  padding: 3px 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.agent-size-btn:hover:not(:disabled) {
+  color: rgba(163, 201, 168, 0.85);
+  border-color: rgba(163, 201, 168, 0.35);
+  background: rgba(163, 201, 168, 0.08);
+}
+
+.agent-size-btn.pulled {
+  color: rgba(90, 158, 95, 0.5);
+  border-color: rgba(90, 158, 95, 0.2);
+  cursor: default;
+}
+
+.agent-size-btn:disabled:not(.pulled) {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* ── Pull progress ─────────────────────────────────────────── */
+
+.agent-pull-status {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  background: rgba(163, 201, 168, 0.03);
+  border: 1px solid rgba(163, 201, 168, 0.1);
+  border-radius: 3px;
+}
+
+.agent-pull-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.agent-pull-bar-track {
+  width: 100%;
+  height: 3px;
+  background: rgba(163, 201, 168, 0.08);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.agent-pull-bar-fill {
+  height: 100%;
+  background: rgba(90, 158, 95, 0.6);
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+/* ── Delete confirmation ───────────────────────────────────── */
+
+.agent-delete-confirm {
+  display: flex;
+  gap: 10px;
+}
+
+.agent-delete-btn {
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.agent-row:hover .agent-delete-btn {
+  opacity: 1;
+}
+
+.agent-delete-yes {
+  color: rgba(232, 179, 179, 0.75) !important;
+}
+
+.agent-delete-yes:hover {
+  color: rgba(232, 179, 179, 1) !important;
+}
+
+/* ── Curated model list ────────────────────────────────────── */
+
+.agent-curated-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.agent-curated-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 3px;
+  transition: background 0.15s ease;
+}
+
+.agent-curated-item:hover {
+  background: rgba(163, 201, 168, 0.03);
+}
+
+.agent-curated-header {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.agent-curated-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.agent-curated-name {
+  font-family: "DM Mono", "Courier New", monospace;
+  font-size: 11px;
+  color: rgba(163, 201, 168, 0.75);
+  letter-spacing: 0.05em;
+}
+
+.agent-curated-badge {
+  font-family: "DM Mono", "Courier New", monospace;
+  font-size: 8px;
+  color: rgba(90, 158, 95, 0.7);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.agent-curated-desc {
+  font-family: "DM Mono", "Courier New", monospace;
+  font-size: 9px;
+  color: rgba(163, 201, 168, 0.3);
+  line-height: 1.3;
+}
+
+.agent-curated-sizes {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.agent-size-btn {
+  font-family: "DM Mono", "Courier New", monospace;
+  font-size: 9px;
+  color: rgba(163, 201, 168, 0.55);
+  background: rgba(163, 201, 168, 0.04);
+  border: 1px solid rgba(163, 201, 168, 0.12);
+  border-radius: 3px;
+  padding: 3px 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.agent-size-btn:hover:not(:disabled) {
+  color: rgba(163, 201, 168, 0.85);
+  border-color: rgba(163, 201, 168, 0.35);
+  background: rgba(163, 201, 168, 0.08);
+}
+
+.agent-size-btn.pulled {
+  color: rgba(90, 158, 95, 0.5);
+  border-color: rgba(90, 158, 95, 0.2);
+  cursor: default;
+}
+
+.agent-size-btn:disabled:not(.pulled) {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* ── Claude model selector ─────────────────────────────────── */
+
+.agent-claude-models {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.agent-claude-model-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.agent-claude-model-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  background: rgba(163, 201, 168, 0.02);
+  border: 1px solid rgba(163, 201, 168, 0.08);
+  border-radius: 4px;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s ease;
+}
+
+.agent-claude-model-btn:hover {
+  border-color: rgba(163, 201, 168, 0.2);
+  background: rgba(163, 201, 168, 0.04);
+}
+
+.agent-claude-model-btn.selected {
+  border-color: rgba(163, 201, 168, 0.35);
+  background: rgba(163, 201, 168, 0.06);
+}
+
+.agent-claude-model-name {
+  font-family: "DM Mono", "Courier New", monospace;
+  font-size: 11px;
+  color: rgba(163, 201, 168, 0.75);
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+.agent-claude-model-btn.selected .agent-claude-model-name {
+  color: rgba(163, 201, 168, 0.9);
+}
+
+.agent-claude-model-desc {
+  font-family: "DM Mono", "Courier New", monospace;
+  font-size: 9px;
+  color: rgba(163, 201, 168, 0.3);
+  text-align: right;
+  line-height: 1.3;
+}
+
+.agent-status-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 24px;
+}
+
+.agent-status-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+@media (max-width: 560px) {
+  .agent-status-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── Pull progress ─────────────────────────────────────────── */
+
+.agent-pull-status {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  background: rgba(163, 201, 168, 0.03);
+  border: 1px solid rgba(163, 201, 168, 0.1);
+  border-radius: 3px;
+}
+
+.agent-pull-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.agent-pull-bar-track {
+  width: 100%;
+  height: 3px;
+  background: rgba(163, 201, 168, 0.08);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.agent-pull-bar-fill {
+  height: 100%;
+  background: rgba(90, 158, 95, 0.6);
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+/* ── Delete confirmation ───────────────────────────────────── */
+
+.agent-delete-confirm {
+  display: flex;
+  gap: 10px;
+}
+
+.agent-delete-btn {
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.agent-row:hover .agent-delete-btn {
+  opacity: 1;
+}
+
+.agent-delete-yes {
+  color: rgba(232, 179, 179, 0.75) !important;
+}
+
+.agent-delete-yes:hover {
+  color: rgba(232, 179, 179, 1) !important;
+}
+
+/* ── Curated model list ────────────────────────────────────── */
+
+.agent-curated-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.agent-curated-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 3px;
+  transition: background 0.15s ease;
+}
+
+.agent-curated-item:hover {
+  background: rgba(163, 201, 168, 0.03);
+}
+
+.agent-curated-header {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.agent-curated-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.agent-curated-name {
+  font-family: "DM Mono", "Courier New", monospace;
+  font-size: 11px;
+  color: rgba(163, 201, 168, 0.75);
+  letter-spacing: 0.05em;
+}
+
+.agent-curated-badge {
+  font-family: "DM Mono", "Courier New", monospace;
+  font-size: 8px;
+  color: rgba(90, 158, 95, 0.7);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.agent-curated-desc {
+  font-family: "DM Mono", "Courier New", monospace;
+  font-size: 9px;
+  color: rgba(163, 201, 168, 0.3);
+  line-height: 1.3;
+}
+
+.agent-curated-sizes {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.agent-size-btn {
+  font-family: "DM Mono", "Courier New", monospace;
+  font-size: 9px;
+  color: rgba(163, 201, 168, 0.55);
+  background: rgba(163, 201, 168, 0.04);
+  border: 1px solid rgba(163, 201, 168, 0.12);
+  border-radius: 3px;
+  padding: 3px 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.agent-size-btn:hover:not(:disabled) {
+  color: rgba(163, 201, 168, 0.85);
+  border-color: rgba(163, 201, 168, 0.35);
+  background: rgba(163, 201, 168, 0.08);
+}
+
+.agent-size-btn.pulled {
+  color: rgba(90, 158, 95, 0.5);
+  border-color: rgba(90, 158, 95, 0.2);
+  cursor: default;
+}
+
+.agent-size-btn:disabled:not(.pulled) {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* ── Claude model selector ─────────────────────────────────── */
+
+.agent-claude-models {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.agent-claude-model-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.agent-claude-model-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  background: rgba(163, 201, 168, 0.02);
+  border: 1px solid rgba(163, 201, 168, 0.08);
+  border-radius: 4px;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s ease;
+}
+
+.agent-claude-model-btn:hover {
+  border-color: rgba(163, 201, 168, 0.2);
+  background: rgba(163, 201, 168, 0.04);
+}
+
+.agent-claude-model-btn.selected {
+  border-color: rgba(163, 201, 168, 0.35);
+  background: rgba(163, 201, 168, 0.06);
+}
+
+.agent-claude-model-name {
+  font-family: "DM Mono", "Courier New", monospace;
+  font-size: 11px;
+  color: rgba(163, 201, 168, 0.75);
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+.agent-claude-model-btn.selected .agent-claude-model-name {
+  color: rgba(163, 201, 168, 0.9);
+}
+
+.agent-claude-model-desc {
+  font-family: "DM Mono", "Courier New", monospace;
+  font-size: 9px;
+  color: rgba(163, 201, 168, 0.3);
+  text-align: right;
+  line-height: 1.3;
+}
+
+/* ── Agent view sub-nav tabs ───────────────────────────────── */
+
+.agent-view-header-left {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.agent-view-tabs {
+  display: flex;
+  gap: 12px;
+}
+
+.agent-view-tab {
+  font-family: "DM Mono", "Courier New", monospace;
+  font-size: 10px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: rgba(163, 201, 168, 0.3);
+  background: none;
+  border: none;
+  border-bottom: 1px solid transparent;
+  padding: 4px 0;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.agent-view-tab:hover {
+  color: rgba(163, 201, 168, 0.55);
+}
+
+.agent-view-tab.active {
+  color: rgba(163, 201, 168, 0.7);
+  border-bottom-color: rgba(163, 201, 168, 0.35);
+}

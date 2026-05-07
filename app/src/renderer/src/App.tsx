@@ -77,9 +77,15 @@ export default function App() {
   useEffect(() => { spotifyRef.current = spotify }, [spotify])
 
   const prevConnected = useRef(false)
+
   useEffect(() => {
-    if (spotify.connected && !prevConnected.current && !profile.seededFromSpotify) {
+    // if (spotify.connected && !prevConnected.current && !profile.seededFromSpotify) {
+    // TODO: experiment - reseed on each connection (they may have listened to music outside of fangorn between visits)
+    if (spotify.connected) {
+      console.log('seeding from spotify ')
       seedFromSpotify(spotify.spotifyFetch)
+    } else {
+      console.log('NOT seeding anything')
     }
     prevConnected.current = spotify.connected
   }, [spotify.connected])

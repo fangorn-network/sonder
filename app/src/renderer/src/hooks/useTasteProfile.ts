@@ -131,11 +131,15 @@ export function useTasteProfile() {
   }, [save])
 
   const seedFromSpotify = useCallback(async (spotifyFetch: Function) => {
+    console.log('seeding ')
     try {
       const [tracksRes, artistsRes] = await Promise.all([
         spotifyFetch('/v1/me/top/tracks?limit=50&time_range=medium_term'),
         spotifyFetch('/v1/me/top/artists?limit=50&time_range=medium_term'),
       ])
+
+      console.log('******************* in seed from spotify')
+      console.log(JSON.stringify(tracksRes))
 
       const topTracks = (tracksRes.data?.items ?? []).map((t: any) => ({
         title:   t.name,

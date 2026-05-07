@@ -13,7 +13,7 @@ export class AgentBridge {
   private toolConfig: FangornAgentToolConfig;
   private dataContextProvider: () => DataContext;
   private llmProvider = LLMProvider.Ollama;
-  private llmModel = "gemma4:e4b"
+  private llmModel = "qwen3.5:0.8b"
 
   constructor(
     providerManager: AgentProviderManager,

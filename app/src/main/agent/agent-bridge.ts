@@ -164,6 +164,21 @@ disableToolbox(name: string): void {
   getToolboxDir(): string {
     return this.toolboxDir;
   }
+  
+  async changeProvider(provider: string, model: string, apiKey?: string, url?: string): Promise<void> {
+    this.ensureReady();
+    this.agent!.changeProvider({ llmProvider: provider as any, llmModel: model, apiKey, url });
+  }
+
+  async changeModel(model: string): Promise<void> {
+    this.ensureReady();
+    const config = this.providerManager.getConfig();
+    this.agent!.changeModel({
+      llmProvider: (config?.provider === "claude" ? "anthropic" : config?.provider ?? "ollama") as any,
+      llmModel: model,
+      apiKey: config?.claudeApiKey,
+    });
+  }
 
   private ensureReady(): void {
     if (!this.agent) {

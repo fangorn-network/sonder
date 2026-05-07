@@ -202,4 +202,22 @@ export function registerAgentIpcHandlers(
       return { success: false, error: err.message };
     }
   });
+
+  ipcMain.handle("agent:change-provider", async (_event, provider: string, model: string, apiKey?: string, url?: string) => {
+    try {
+      await bridge.changeProvider(provider, model, apiKey, url);
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle("agent:change-model", async (_event, model: string) => {
+    try {
+      await bridge.changeModel(model);
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
 }

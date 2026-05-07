@@ -45,8 +45,49 @@ interface AgentResult {
   response?: FangornAgentResponse;
   error?: string;
 }
+
+export interface FangornAgentApi {
+  // ── Provider setup ──────────────────────────────────────────────
+  getConfig(): Promise<AgentProviderConfig | null>;
+  setProvider(config: AgentProviderConfig): Promise<ProviderStatus>;
+  resetConfig(): Promise<{ success: boolean }>;
+  getStatus(): Promise<ProviderStatus>;
+  isReady(): Promise<boolean>;
+
+  // ── Ollama-specific ─────────────────────────────────────────────
+  ollamaStatus(): Promise<OllamaStatus>;
+  ollamaInstall(): Promise<{ opened: boolean }>;
+  ollamaListModels(): Promise<string[]>;
+  ollamaPullModel(model: string): Promise<{ success: boolean; model: string }>;
+  ollamaDeleteModel(model: string): Promise<{ success: boolean; model?: string; error?: string }>;
+  onPullProgress(
+    callback: (data: { model: string; status: string; completed?: number; total?: number }) => void
+  ): () => void;
+
+  // ── Agent chat ────────────────────────────────────────────────────
+  chat(query: string): Promise<AgentResult>;
+  chatScoped(query: string, toolNames: string[]): Promise<AgentResult>;
+  findSimilar(data: any): Promise<AgentResult>;
+  returnFilters(data: any): Promise<AgentResult>;
+
+  // ── Agent introspection ───────────────────────────────────────────
+  listTools(): Promise<{ success: boolean; tools?: string[]; error?: string }>;
+  listToolboxes(): Promise<{ success: boolean; toolboxes?: Record<string, string[]>; error?: string }>;
+  reset(): Promise<{ success: boolean }>;
+
+  // ── Toolbox config ────────────────────────────────────────────────
+  toolboxRegistry(): Promise<any[]>;
+  toolboxConfig(): Promise<{ toolboxes: any[] }>;
+  toolboxUpdate(entry: { id: string; enabled: boolean; fields: Record<string, any> }): Promise<{ success: boolean; config?: any; error?: string }>;
+  toolboxEnable(id: string): Promise<{ success: boolean; error?: string }>;
+  toolboxDisable(name: string): Promise<{ success: boolean; error?: string }>;
+
+  // ── Provider/model switching ──────────────────────────────────────
+  changeProvider(provider: string, model: string, apiKey?: string, url?: string): Promise<{ success: boolean; error?: string }>;
+  changeModel(model: string): Promise<{ success: boolean; error?: string }>;
+}
  
-export const agentAPI = {
+export const agentAPI: FangornAgentApi = {
   // ── Provider setup ──────────────────────────────────────────────
   getConfig: (): Promise<AgentProviderConfig | null> =>
     ipcRenderer.invoke("agent:get-config"),
@@ -128,14 +169,13 @@ export const agentAPI = {
 
   toolboxDisable: (name: string): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke("agent:toolbox-disable", name),
+
+  changeProvider: (provider: string, model: string, apiKey?: string, url?: string): Promise<{ success: boolean; error?: string }> =>
+  ipcRenderer.invoke("agent:change-provider", provider, model, apiKey, url),
+
+  changeModel: (model: string): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke("agent:change-model", model),
   };
  
 // Expose to renderer
 contextBridge.exposeInMainWorld("agentAPI", agentAPI);
- 
-// Type augmentation so TS knows about window.agentAPI in the renderer
-declare global {
-  interface Window {
-    agentAPI: typeof agentAPI;
-  }
-}

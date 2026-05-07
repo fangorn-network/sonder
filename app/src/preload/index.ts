@@ -122,7 +122,13 @@ export const agentAPI = {
  
   toolboxUpdate: (entry: { id: string; enabled: boolean; fields: Record<string, any> }): Promise<{ success: boolean; config?: any; error?: string }> =>
     ipcRenderer.invoke("agent:toolbox-update", entry),
-};
+
+  toolboxEnable: (id: string): Promise<{ success: boolean; error?: string }> =>
+  ipcRenderer.invoke("agent:toolbox-enable", id),
+
+  toolboxDisable: (name: string): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke("agent:toolbox-disable", name),
+  };
  
 // Expose to renderer
 contextBridge.exposeInMainWorld("agentAPI", agentAPI);

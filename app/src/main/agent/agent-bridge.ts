@@ -142,6 +142,21 @@ export class AgentBridge {
     return Object.fromEntries(map);
   }
 
+  async enableToolbox(id: string): Promise<void> {
+  this.ensureReady();
+  const entries = this.getToolboxEntries();
+  const entry = entries.find((e) => e.id === id);
+  if (!entry) throw new Error(`Toolbox ${id} not found in config`);
+
+  entry.enabled = true;
+  await this.agent!.loadToolbox(entry);
+}
+
+disableToolbox(name: string): void {
+  this.ensureReady();
+  this.agent!.unloadToolbox(name);
+}
+
   reset(): void {
     this.agent?.reset();
   }

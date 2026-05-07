@@ -184,4 +184,22 @@ export function registerAgentIpcHandlers(
       return { success: false, error: err.message };
     }
   });
+
+  ipcMain.handle("agent:toolbox-enable", async (_event, id: string) => {
+    try {
+      await bridge.enableToolbox(id);
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle("agent:toolbox-disable", async (_event, name: string) => {
+    try {
+      bridge.disableToolbox(name);
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
 }

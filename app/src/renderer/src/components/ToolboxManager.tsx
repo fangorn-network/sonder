@@ -63,12 +63,19 @@ export function ToolboxManager() {
   }
 
   const handleToggle = useCallback(async (id: string) => {
-    const current = getConfig(id)
+    const current = configs.get(id) ?? { id, enabled: false, fields: {} }
     const updated = { ...current, enabled: !current.enabled }
     setSaving(id)
     try {
+      // Persist the config change
       const result = await window.agentAPI.toolboxUpdate(updated)
       if (result.success) {
+        // Hot-swap on the running agent
+        if (updated.enabled) {
+          await window.agentAPI.toolboxEnable(id)
+        } else {
+          await window.agentAPI.toolboxDisable(id)
+        }
         setConfigs((prev) => new Map(prev).set(id, updated))
         setDirty((prev) => {
           const next = new Set(prev)
@@ -89,7 +96,7 @@ export function ToolboxManager() {
   }
 
   const handleSave = useCallback(async (id: string) => {
-    const entry = getConfig(id)
+    const entry = configs.get(id) ?? { id, enabled: false, fields: {} }
     setSaving(id)
     try {
       const result = await window.agentAPI.toolboxUpdate(entry)

@@ -275,6 +275,38 @@ export function AgentView() {
         )}
       </div>
 
+      {providerStatus?.ready && currentProvider !== 'none' && (
+        <section className="agent-card agent-card-wide">
+          <h3 className="agent-card-label">status</h3>
+          <div className="agent-status-grid">
+            <div className="agent-status-item">
+              <span className="agent-key">provider</span>
+              <span className="agent-val">{currentProvider}</span>
+            </div>
+            <div className="agent-status-item">
+              <span className="agent-key">connection</span>
+              <span className="agent-dot on">connected</span>
+            </div>
+            <div className="agent-status-item">
+              <span className="agent-key">model</span>
+              <span className="agent-val">
+                {currentProvider === 'ollama'
+                  ? (selectedModel || 'default')
+                  : (claudeModel ? CLAUDE_MODELS.find(m => m.id === claudeModel)?.label ?? claudeModel : '—')}
+              </span>
+            </div>
+            {toolboxes && (
+              <div className="agent-status-item">
+                <span className="agent-key">tools</span>
+                <span className="agent-val">
+                  {Object.values(toolboxes).reduce((sum, t) => sum + t.length, 0)} across {Object.keys(toolboxes).length} toolboxes
+                </span>
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+
       {tab === 'overview' && (
       <div className="agent-view-grid">
         {/* Provider Selection */}
@@ -389,26 +421,9 @@ export function AgentView() {
           )}
         </section>
 
-        {/* Status card */}
-        {providerStatus?.ready && currentProvider !== 'none' && (
-          <section className="agent-card">
-            <h3 className="agent-card-label">status</h3>
-            <div className="agent-card-body">
-              <div className="agent-row">
-                <span className="agent-key">provider</span>
-                <span className="agent-val">{currentProvider}</span>
-              </div>
-              <div className="agent-row">
-                <span className="agent-key">connection</span>
-                <span className="agent-dot on">connected</span>
-              </div>
-            </div>
-          </section>
-        )}
-
         {/* Local Models */}
-        {currentProvider === 'ollama' && models.length > 0 && (
-          <section className="agent-card">
+        {currentProvider === 'ollama' && models.length > 0 && selectedProvider === 'ollama' && (
+          <section className="agent-card agent-card-wide">
             <h3 className="agent-card-label">installed models</h3>
             <div className="agent-card-body">
               {models.map((model) => (

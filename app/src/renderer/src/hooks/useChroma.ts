@@ -24,7 +24,6 @@ function normalizeHit(hit: any): Track | null {
     const v = parseFloat(f[key] ?? '')
     return isNaN(v) ? null : v
   }
-  // values are comma-separated strings: "pop, electropop, dance pop"
   const arr = (key: string): string[] =>
     f[key] ? f[key].split(',').map((s: string) => s.trim()).filter(Boolean) : []
 
@@ -121,8 +120,6 @@ export function useChroma({
   const [offset, setOffset] = useState(0)
   const [hasMore, setHasMore] = useState(true)
 
-  // Stable accumulated tag sets — only grow, never shrink.
-  // Built from search results so pills stay populated across filter changes.
   const [allGenres, setAllGenres] = useState<string[]>([])
   const [allMoods, setAllMoods] = useState<string[]>([])
   const [allContexts, setAllContexts] = useState<string[]>([])
@@ -132,6 +129,13 @@ export function useChroma({
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const activeQuery = useRef('')
+
+  // When true, kernel results are showing — block fetchPage from overwriting
+  // until the user explicitly searches or applies a filter.
+  const kernelActiveRef = useRef(false)
+
+  // Track whether the initial load has happened so we don't double-fetch.
+  const initialLoadDoneRef = useRef(false)
 
   const accumulateTags = useCallback((newTracks: Track[]) => {
     let gd = false, md = false, cd = false
@@ -145,9 +149,6 @@ export function useChroma({
     if (cd) setAllContexts(Array.from(knownContexts.current).sort())
   }, [])
 
-  // Build the effective search query from text search + active filters.
-  // Filters are appended to the query so Chroma's embedding search
-  // incorporates them — same mechanism that was working originally.
   const buildQuery = useCallback((text: string) => {
     const parts: string[] = []
     if (text.trim()) parts.push(text.trim())
@@ -158,6 +159,10 @@ export function useChroma({
   }, [genreFilter, moodFilter, contextFilter])
 
   const fetchPage = useCallback(async (query: string, pageOffset: number, replace: boolean) => {
+    // Don't overwrite kernel results unless the user has explicitly triggered
+    // a search or filter change (kernelActiveRef is cleared by those paths).
+    if (kernelActiveRef.current && replace) return
+
     activeQuery.current = query
     replace ? setLoading(true) : setLoadingMore(true)
     try {
@@ -174,30 +179,41 @@ export function useChroma({
     }
   }, [accumulateTags])
 
-  // Initial load
+  // Initial load — runs once on mount
   useEffect(() => {
+    if (initialLoadDoneRef.current) return
+    initialLoadDoneRef.current = true
     fetchPage(buildQuery(''), 0, true)
-  }, [fetchPage, buildQuery])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Search debounce — also re-runs when filters change via buildQuery
+  // Search debounce — fires when the user types or changes filters.
+  // Clears kernelActiveRef so kernel results are replaced by explicit intent.
   useEffect(() => {
+    // Skip on initial mount — initial load effect handles that
+    if (!initialLoadDoneRef.current) return
+
     if (debounceRef.current) clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => {
+      kernelActiveRef.current = false  // user is searching/filtering, yield kernel
       setOffset(0)
       setHasMore(true)
       fetchPage(buildQuery(search), 0, true)
     }, 350)
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
-  }, [search, fetchPage, buildQuery])
+  }, [search, buildQuery, fetchPage])
 
   const loadMore = useCallback(() => {
     if (loadingMore || !hasMore) return
+    // loadMore always works — kernel results + browse pages can coexist
+    kernelActiveRef.current = false
     const next = offset + PAGE_SIZE
     setOffset(next)
     fetchPage(buildQuery(search), next, false)
   }, [loadingMore, hasMore, offset, search, fetchPage, buildQuery])
 
   const applyKernelQuery = useCallback(async (embedding: number[]) => {
+    console.log('[kernel] applyKernelQuery called, embedding:', embedding.length)
+    kernelActiveRef.current = true
     setLoading(true)
     setError(null)
     try {
@@ -209,6 +225,7 @@ export function useChroma({
       setOffset(0)
     } catch (e: any) {
       setError(e instanceof Error ? e.message : String(e))
+      kernelActiveRef.current = false
     } finally {
       setLoading(false)
     }

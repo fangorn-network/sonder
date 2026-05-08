@@ -486,7 +486,7 @@ export function NowPlaying({
                                     onClick={() => setActiveTab('similar')}
                                     style={activeTab === 'similar' ? { color: accentColor, borderBottomColor: accentColor } : undefined}
                                 >
-                                    Similar
+                                    You might also like
                                 </button>
                                 <button
                                     className={`np-tab${activeTab === 'artist' ? ' np-tab--active' : ''}`}

@@ -108,14 +108,16 @@ button.np-collapse {
   align-items: center;
   justify-content: center;
   /* width: 36px; */
-  height: 36px;
-  margin-top: 42px;
+  height: 30px;
+  margin-top: 12px;
   background: var(--glass-3);
   border: 1px solid var(--glass-edge-hi);
   color: var(--fg2);
   cursor: pointer;
   flex-shrink: 0;
   transition: color var(--t1), background var(--t1), border-color var(--t1), transform var(--t1);
+  z-index: 10000;
+  width: 50px;
 }
 
 button.np-collapse:hover {

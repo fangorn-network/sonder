@@ -4,15 +4,15 @@ source venv/bin/activate
 
 pip install anthropic bs4
 
-export SPOTIFY_CLIENT_ID=
-export SPOTIFY_CLIENT_SECRET=
-export LASTFM_API_KEY=
+export SPOTIFY_CLIENT_ID=d27c634421754faa8f91e314db3d6132
+export SPOTIFY_CLIENT_SECRET=eb68d1f2706b45fda808ae3694cb7b67
+export LASTFM_API_KEY=81690959acb539a96ce569389c1b583a
 
 # Ranks 101-200
 python fetch.py --min-rank 101 --max-rank 200 --out raw_101_200.json
 
 # Ranks 501-1000
-python fetch.py --min-rank 149 --max-rank 500 --out raw_149_500.json
+python fetch.py --min-rank 1 --max-rank 500 --out raw_149_500.json
 
 ```
 

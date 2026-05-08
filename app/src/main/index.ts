@@ -97,7 +97,8 @@ app.whenReady().then(async () => {
   electronApp.setAppUserModelId('com.electron')
 
   startPython()
-  await waitForPython('http://0.0.0.0:8080/health')
+  // TODO: health check is slow sometimes, causing startup to failed, should be async instead
+  // await waitForPython('http://0.0.0.0:8080/health')
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)

@@ -7,6 +7,7 @@ from chromadb.utils import embedding_functions
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+from chromadb.config import Settings
 import os
 
 from pydantic import BaseModel
@@ -329,7 +330,10 @@ async def ingest():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global collection, ef_global
-    client = chromadb.PersistentClient(path=CHROMA_PATH)
+    client = chromadb.PersistentClient(path=CHROMA_PATH, settings=Settings(allow_reset=True))
+    # TODO: testing
+    print('resetting the client')
+    client.reset()
     ef_global = embedding_functions.DefaultEmbeddingFunction()
     collection = client.get_or_create_collection(COLLECTION, embedding_function=ef_global)
     asyncio.create_task(ingest())  # run ingestion in background, don't block startup

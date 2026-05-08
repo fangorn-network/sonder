@@ -19,6 +19,13 @@ import { useSpotifyConfig } from './hooks/useSpotifyConfig'
 import { SpotifyConfigView } from './views/SpotifyConfigView'
 import type { TasteSignal } from './types'
 
+const SCROLL_THRESHOLD = 10; // px — how far before it disappears
+
+window.addEventListener('scroll', () => {
+  document.querySelector('.header')!
+    .classList.toggle('scrolled', window.scrollY > SCROLL_THRESHOLD);
+}, { passive: true });
+
 export default function App() {
 
   const { ready, authenticated, login } = usePrivy()
@@ -44,7 +51,7 @@ export default function App() {
     applyKernelQuery, search, setSearch,
     allGenres, allMoods, allContexts,
   } = useChroma({
-    initialQuery: 'music',
+    // initialQuery: 'music',
     genreFilter,
     moodFilter,
     contextFilter,
@@ -90,11 +97,13 @@ export default function App() {
 
   useEffect(() => { spotifyRef.current = spotify }, [spotify])
 
+  // In App.tsx
   useEffect(() => {
     if (!spotify.connected || seededRef.current) return
     seededRef.current = true
-
+    console.log('[kernel] spotify connected, seeding...')
     kernel.seedFromSpotify(spotify.spotifyFetch).then((q) => {
+      console.log('[kernel] seed result:', q ? `vector length ${Array.from(q).length}` : 'null')
       if (!q) return
       applyKernelQuery(Array.from(q))
     })
@@ -185,13 +194,13 @@ export default function App() {
               <span className="brand-name">SOND3R</span>
               <nav style={{ display: 'flex', gap: '16px', marginLeft: '24px' }}>
                 {(['Discover', 'Agent'] as ViewName[]).map((v) => (
-                <button
-                  key={v}
-                  onClick={() => setView(v)}
-                  className={`app-nav-tab ${view === v ? 'active' : ''}`}
-                >
-                  {v}
-                </button>
+                  <button
+                    key={v}
+                    onClick={() => setView(v)}
+                    className={`app-nav-tab ${view === v ? 'active' : ''}`}
+                  >
+                    {v}
+                  </button>
                 ))}
               </nav>
               <button

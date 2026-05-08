@@ -49,8 +49,8 @@ LASTFM_BASE = "https://ws.audioscrobbler.com/2.0/"
 
 # Tags that are either troll votes or non-musical metadata — never map these
 LASTFM_BLOCKLIST = {
-    "black metal", "death metal", "brutal death metal", "thrash metal",
-    "heavy metal", "black", "metal", "seen live", "favorites", "favourite",
+    "Pop", "Hip-Hop", "Hiphop", "Country", "Folk", "Funk", "R&B", "Soul", "Dance", "Indie", "Alternative", "Dreamy",
+    "seen live", "favorites", "favourite", 
     "american", "canadian", "british", "australian", "female vocalists",
     "male vocalists", "singer-songwriter", "under 2000 listeners",
     "all", "good", "great", "love", "awesome", "cool", "best",

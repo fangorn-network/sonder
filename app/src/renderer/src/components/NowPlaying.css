@@ -102,15 +102,22 @@
   display: none;
 }
 
+.np-collapse {
+  /* margin: 45px; */
+  /* display: inline; */
+}
+
 /* ── X close button — override global button reset with element+class ── */
 button.np-collapse {
-  display: flex;
+  display: contents;
   align-items: center;
   justify-content: center;
+  margin: 10px;
   /* width: 36px; */
   height: 30px;
-  margin-top: 12px;
-  background: var(--glass-3);
+  /* padding: 20px; */
+  /* margin-top: 12px; */
+  /* background: var(--glass-3); */
   border: 1px solid var(--glass-edge-hi);
   color: var(--fg2);
   cursor: pointer;

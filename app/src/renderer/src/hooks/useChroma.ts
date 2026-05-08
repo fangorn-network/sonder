@@ -18,7 +18,6 @@ function parseDocument(doc: string): Record<string, string> {
 
 function normalizeHit(hit: any): Track | null {
   const f = parseDocument(hit.document ?? '')
-
   const str = (key: string): string | null => f[key] ?? null
   const num = (key: string): number | null => {
     const v = parseFloat(f[key] ?? '')
@@ -108,9 +107,9 @@ export interface UseChromaResult {
 }
 
 export function useChroma({
-  genreFilter,
-  moodFilter,
-  contextFilter,
+  genreFilter = 'all',
+  moodFilter = 'all',
+  contextFilter = 'all',
 }: UseChromaOptions = {}): UseChromaResult {
   const [tracks, setTracks] = useState<Track[]>([])
   const [loading, setLoading] = useState(true)
@@ -127,15 +126,21 @@ export function useChroma({
   const knownMoods = useRef<Set<string>>(new Set())
   const knownContexts = useRef<Set<string>>(new Set())
 
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const activeQuery = useRef('')
-
-  // When true, kernel results are showing — block fetchPage from overwriting
-  // until the user explicitly searches or applies a filter.
+  // Use refs for everything that drives queries so effects don't need
+  // them as dependencies — avoids stale closure and double-fetch issues.
+  const searchRef = useRef(search)
+  const genreRef = useRef(genreFilter)
+  const moodRef = useRef(moodFilter)
+  const contextRef = useRef(contextFilter)
+  const offsetRef = useRef(0)
+  const activeQueryRef = useRef('')
   const kernelActiveRef = useRef(false)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Track whether the initial load has happened so we don't double-fetch.
-  const initialLoadDoneRef = useRef(false)
+  useEffect(() => { searchRef.current = search }, [search])
+  useEffect(() => { genreRef.current = genreFilter }, [genreFilter])
+  useEffect(() => { moodRef.current = moodFilter }, [moodFilter])
+  useEffect(() => { contextRef.current = contextFilter }, [contextFilter])
 
   const accumulateTags = useCallback((newTracks: Track[]) => {
     let gd = false, md = false, cd = false
@@ -152,67 +157,62 @@ export function useChroma({
   const buildQuery = useCallback((text: string) => {
     const parts: string[] = []
     if (text.trim()) parts.push(text.trim())
-    if (genreFilter && genreFilter !== 'all') parts.push(genreFilter)
-    if (moodFilter && moodFilter !== 'all') parts.push(moodFilter)
-    if (contextFilter && contextFilter !== 'all') parts.push(contextFilter)
+    if (genreRef.current && genreRef.current !== 'all') parts.push(genreRef.current)
+    if (moodRef.current && moodRef.current !== 'all') parts.push(moodRef.current)
+    if (contextRef.current && contextRef.current !== 'all') parts.push(contextRef.current)
     return parts.join(' ') || 'music'
-  }, [genreFilter, moodFilter, contextFilter])
+  }, []) // stable — reads from refs, no deps needed
 
   const fetchPage = useCallback(async (query: string, pageOffset: number, replace: boolean) => {
-    // Don't overwrite kernel results unless the user has explicitly triggered
-    // a search or filter change (kernelActiveRef is cleared by those paths).
     if (kernelActiveRef.current && replace) return
 
-    activeQuery.current = query
+    activeQueryRef.current = query
     replace ? setLoading(true) : setLoadingMore(true)
     try {
       const hits = await chromaSearch(query, PAGE_SIZE, pageOffset)
-      if (activeQuery.current !== query) return
+      if (activeQueryRef.current !== query) return
       const normalized = dedup(hits.map(normalizeHit).filter(Boolean) as Track[])
       accumulateTags(normalized)
       setTracks(prev => dedup(replace ? normalized : [...prev, ...normalized]))
       setHasMore(hits.length === PAGE_SIZE)
+      offsetRef.current = pageOffset
     } catch (e: any) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
       replace ? setLoading(false) : setLoadingMore(false)
     }
-  }, [accumulateTags])
+  }, [accumulateTags, buildQuery])
 
-  // Initial load — runs once on mount
+  // Single effect — runs on mount for initial load, and whenever
+  // search/filters change. Uses a debounce so filter changes don't
+  // fire multiple rapid fetches.
   useEffect(() => {
-    if (initialLoadDoneRef.current) return
-    initialLoadDoneRef.current = true
-    fetchPage(buildQuery(''), 0, true)
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Search debounce — fires when the user types or changes filters.
-  // Clears kernelActiveRef so kernel results are replaced by explicit intent.
-  useEffect(() => {
-    // Skip on initial mount — initial load effect handles that
-    if (!initialLoadDoneRef.current) return
-
     if (debounceRef.current) clearTimeout(debounceRef.current)
+
+    const isMount = activeQueryRef.current === ''
+    const delay = isMount ? 0 : 350
+
     debounceRef.current = setTimeout(() => {
-      kernelActiveRef.current = false  // user is searching/filtering, yield kernel
+      kernelActiveRef.current = false
       setOffset(0)
+      offsetRef.current = 0
       setHasMore(true)
       fetchPage(buildQuery(search), 0, true)
-    }, 350)
+    }, delay)
+
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
-  }, [search, buildQuery, fetchPage])
+  }, [search, genreFilter, moodFilter, contextFilter]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadMore = useCallback(() => {
     if (loadingMore || !hasMore) return
-    // loadMore always works — kernel results + browse pages can coexist
     kernelActiveRef.current = false
-    const next = offset + PAGE_SIZE
+    const next = offsetRef.current + PAGE_SIZE
     setOffset(next)
-    fetchPage(buildQuery(search), next, false)
-  }, [loadingMore, hasMore, offset, search, fetchPage, buildQuery])
+    fetchPage(buildQuery(searchRef.current), next, false)
+  }, [loadingMore, hasMore, fetchPage, buildQuery])
 
   const applyKernelQuery = useCallback(async (embedding: number[]) => {
-    console.log('[kernel] applyKernelQuery called, embedding:', embedding.length)
+    console.log('[kernel] applyKernelQuery called, embedding length:', embedding.length)
     kernelActiveRef.current = true
     setLoading(true)
     setError(null)
@@ -223,6 +223,7 @@ export function useChroma({
       setTracks(normalized)
       setHasMore(true)
       setOffset(0)
+      offsetRef.current = 0
     } catch (e: any) {
       setError(e instanceof Error ? e.message : String(e))
       kernelActiveRef.current = false

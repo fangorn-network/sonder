@@ -95,9 +95,10 @@ export default function App() {
 
   const spotify = useSpotify({ onTrackEnd: handleTrackEnd })
 
+  // set spotify
   useEffect(() => { spotifyRef.current = spotify }, [spotify])
 
-  // In App.tsx
+  // seed taste profile from spotify
   useEffect(() => {
     if (!spotify.connected || seededRef.current) return
     seededRef.current = true
@@ -109,6 +110,7 @@ export default function App() {
     })
   }, [spotify.connected])
 
+  // handle kernel updates
   const handleSignal = useCallback(async (signal: TasteSignal) => {
     const { type, track } = signal
     if (type !== 'play' && type !== 'skip') return

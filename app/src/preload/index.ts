@@ -85,6 +85,7 @@ export interface FangornAgentApi {
   // ── Provider/model switching ──────────────────────────────────────
   changeProvider(provider: string, model: string, apiKey?: string, url?: string): Promise<{ success: boolean; error?: string }>;
   changeModel(model: string): Promise<{ success: boolean; error?: string }>;
+  ollamaStop(): Promise<{ success: boolean; error?: string }>;
 }
  
 export const agentAPI: FangornAgentApi = {
@@ -175,6 +176,8 @@ export const agentAPI: FangornAgentApi = {
 
   changeModel: (model: string): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke("agent:change-model", model),
+  ollamaStop: (): Promise<{ success: boolean; error?: string }> =>
+  ipcRenderer.invoke("agent:ollama-stop"),
   };
  
 // Expose to renderer

@@ -153,7 +153,7 @@ export function registerAgentIpcHandlers(
   });
 
   ipcMain.handle("agent:reset", () => {
-    bridge.reset();
+    bridge.destroy();
     return { success: true };
   });
 
@@ -215,6 +215,16 @@ export function registerAgentIpcHandlers(
   ipcMain.handle("agent:change-model", async (_event, model: string) => {
     try {
       await bridge.changeModel(model);
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
+  
+  ipcMain.handle("agent:ollama-stop", async () => {
+    try {
+      await manager.getOllamaManager().unloadAllModels();
+      await manager.getOllamaManager().stop();
       return { success: true };
     } catch (err: any) {
       return { success: false, error: err.message };

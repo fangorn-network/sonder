@@ -1,9 +1,11 @@
+import { LLMProvider } from '@fangorn-network/agent-types'
 import { useCallback, useEffect, useState } from 'react'
 import "./AgentView.css"
 import { AgentManager, AgentManagerState } from '../components/management/AgentManager'
 import { ToolboxManager } from '../components/management/ToolboxManager'
+import { CLAUDE_MODELS } from '../constants/models'
 
-type Provider = 'ollama' | 'claude' | 'none'
+type Provider = LLMProvider | 'none'
 type AgentTab = 'overview' | 'toolboxes'
 
 interface ProviderStatus {
@@ -19,19 +21,11 @@ interface ProviderStatus {
   error?: string
 }
 
-const CLAUDE_MODELS: { id: string; label: string }[] = [
-  { id: 'claude-opus-4-7', label: 'Opus 4.7' },
-  { id: 'claude-opus-4-6', label: 'Opus 4.6' },
-  { id: 'claude-sonnet-4-6', label: 'Sonnet 4.6' },
-  { id: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5' },
-]
-
 export function AgentView() {
   const [providerStatus, setProviderStatus] = useState<ProviderStatus | null>(null)
   const [toolboxes, setToolboxes] = useState<Record<string, string[]> | null>(null)
   const [models, setModels] = useState<string[]>([])
   const [selectedModel, setSelectedModel] = useState('')
-  const [claudeModel, setClaudeModel] = useState('claude-sonnet-4-6')
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<AgentTab>('overview')
 
@@ -48,8 +42,11 @@ export function AgentView() {
       setModels(modelList)
 
       if (config) {
-        setClaudeModel(config.claudeModel ?? 'claude-sonnet-4-6')
-        setSelectedModel(config.defaultModel ?? '')
+        setSelectedModel(
+          config.provider === LLMProvider.Anthropic
+            ? (config.claudeModel ?? 'claude-sonnet-4-6')
+            : (config.defaultModel ?? '')
+        )
       }
 
       if (toolboxResult?.success && toolboxResult.toolboxes) {
@@ -68,7 +65,6 @@ export function AgentView() {
     if (state.providerStatus !== undefined) setProviderStatus(state.providerStatus)
     if (state.models !== undefined) setModels(state.models)
     if (state.selectedModel !== undefined) setSelectedModel(state.selectedModel)
-    if (state.claudeModel !== undefined) setClaudeModel(state.claudeModel)
   }, [])
 
   const currentProvider = providerStatus?.provider
@@ -105,7 +101,6 @@ export function AgentView() {
         )}
       </div>
 
-      {/* Status bar — always visible */}
       {providerStatus?.ready && currentProvider !== 'none' && (
         <section className="agent-card agent-card-wide">
           <h3 className="agent-card-label">status</h3>
@@ -121,9 +116,9 @@ export function AgentView() {
             <div className="agent-status-item">
               <span className="agent-key">model</span>
               <span className="agent-val">
-                {currentProvider === 'ollama'
-                  ? (selectedModel || 'default')
-                  : (CLAUDE_MODELS.find(m => m.id === claudeModel)?.label ?? claudeModel)}
+                {currentProvider === LLMProvider.Anthropic
+                  ? (CLAUDE_MODELS.find(m => m.id === selectedModel)?.label ?? selectedModel)
+                  : (selectedModel || 'default')}
               </span>
             </div>
             {toolboxes && (
@@ -143,7 +138,6 @@ export function AgentView() {
           providerStatus={providerStatus}
           models={models}
           selectedModel={selectedModel}
-          claudeModel={claudeModel}
           onStateChange={handleStateChange}
         />
       )}

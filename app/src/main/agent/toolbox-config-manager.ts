@@ -2,43 +2,13 @@ import { app } from "electron";
 import path from "path";
 import fs from "fs/promises";
 import { existsSync, readdirSync, readFileSync } from "fs";
-
-/**
- * Describes a single toolbox's UI-editable configuration.
- */
-export interface ToolboxConfigEntry {
-  id: string;
-  enabled: boolean;
-  fields: Record<string, string | string[] | boolean>;
-}
+import { ToolboxDescriptor, ToolboxEntry } from "@fangorn-network/agent-types";
 
 /**
  * The full persisted toolbox config file shape.
  */
 export interface ToolboxConfigFile {
-  toolboxes: ToolboxConfigEntry[];
-}
-
-/**
- * Describes a field the UI should render for a given toolbox.
- */
-export interface ToolboxFieldDescriptor {
-  key: string;
-  label: string;
-  type: "text" | "password" | "url" | "url-list" | "toggle";
-  placeholder?: string;
-  appProvided?: boolean;
-}
-
-/**
- * Metadata the UI needs to render a toolbox config card.
- * Discovered from each toolbox's config.json.
- */
-export interface ToolboxDescriptor {
-  id: string;
-  label: string;
-  description: string;
-  fields: ToolboxFieldDescriptor[];
+  toolboxes: ToolboxEntry[];
 }
 
 export class ToolboxConfigManager {
@@ -101,7 +71,7 @@ export class ToolboxConfigManager {
    * toolboxes are cleaned up.
    */
   async load(): Promise<ToolboxConfigFile> {
-    let persisted: ToolboxConfigEntry[] = [];
+    let persisted: ToolboxEntry[] = [];
 
     try {
       const raw = await fs.readFile(this.configPath, "utf-8");
@@ -115,7 +85,7 @@ export class ToolboxConfigManager {
     const persistedMap = new Map(persisted.map((e) => [e.id, e]));
 
     // Merge: use persisted values where they exist, create defaults for new toolboxes
-    const merged: ToolboxConfigEntry[] = this.registry.map((desc) => {
+    const merged: ToolboxEntry[] = this.registry.map((desc) => {
       const existing = persistedMap.get(desc.id);
       if (existing) return existing;
 
@@ -141,7 +111,7 @@ export class ToolboxConfigManager {
     await fs.writeFile(this.configPath, JSON.stringify(config, null, 2), "utf-8");
   }
 
-  async updateToolbox(entry: ToolboxConfigEntry): Promise<ToolboxConfigFile> {
+  async updateToolbox(entry: ToolboxEntry): Promise<ToolboxConfigFile> {
     if (!this.config) await this.load();
 
     const idx = this.config!.toolboxes.findIndex((t) => t.id === entry.id);

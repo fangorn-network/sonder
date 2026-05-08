@@ -2,8 +2,9 @@ import { app } from "electron";
 import path from "path";
 import fs from "fs/promises";
 import { OllamaManager, OllamaStatus } from "./ollama-manager";
+import { LLMProvider } from "@fangorn-network/agent-types";
 
-export type AgentProvider = "ollama" | "claude" | "none";
+export type AgentProvider = LLMProvider | "none";
 
 export interface AgentProviderConfig {
   provider: AgentProvider;
@@ -80,7 +81,7 @@ export class AgentProviderManager {
    * startup (after loadConfig) and after the user changes their selection.
    *
    * For Ollama: detects install → starts server → verifies readiness.
-   * For Claude: validates that an API key is present (a lightweight
+   * For Anthropic: validates that an API key is present (a lightweight
    *   /models call could be added for real key validation).
    * For none:   always succeeds.
    */
@@ -96,11 +97,11 @@ export class AgentProviderManager {
     switch (this.config.provider) {
       case "ollama":
         return this.initialiseOllama();
-      case "claude":
+      case "anthropic":
         return this.initialiseClaude();
-      case "none":
-        return { provider: "none", ready: true };
     }
+
+    return {provider: "none", ready: true}
   }
 
   // ── Ollama ──────────────────────────────────────────────────────────
@@ -114,7 +115,7 @@ export class AgentProviderManager {
 
     if (!status.running) {
       return {
-        provider: "ollama",
+        provider: LLMProvider.Ollama,
         ready: false,
         ollamaStatus: status,
         error: status.error ?? "Ollama is not running.",
@@ -124,7 +125,7 @@ export class AgentProviderManager {
     const models = await this.ollamaManager.listModels();
 
     return {
-      provider: "ollama",
+      provider: LLMProvider.Ollama,
       ready: true,
       ollamaStatus: status,
       models,
@@ -138,7 +139,7 @@ export class AgentProviderManager {
 
     if (!apiKey) {
       return {
-        provider: "claude",
+        provider: LLMProvider.Anthropic,
         ready: false,
         error: "Claude API key is missing.",
       };
@@ -162,17 +163,17 @@ export class AgentProviderManager {
 
       if (res.status === 401) {
         return {
-          provider: "claude",
+          provider: LLMProvider.Anthropic,
           ready: false,
-          error: "Invalid Claude API key.",
+          error: "Invalid Anthropic API key.",
         };
       }
 
-      return { provider: "claude", ready: true };
+      return { provider: LLMProvider.Anthropic, ready: true };
     } catch (err: any) {
       // Network errors shouldn't block startup — the key might be fine
       // but the user is offline. Mark as ready and let errors surface later.
-      return { provider: "claude", ready: true };
+      return { provider: LLMProvider.Anthropic, ready: true };
     }
   }
 

@@ -1,4 +1,4 @@
-import {FangornAgentApi} from "../../preload"
+import {FangornAgentApi} from "../preload"
 
 // src/renderer/src/env.d.ts or global.d.ts
 declare global {

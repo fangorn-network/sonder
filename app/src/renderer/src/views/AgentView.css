@@ -1201,3 +1201,15 @@
 .toolbox-card-body .agent-save-btn {
   align-self: flex-end;
 }
+
+.agent-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.agent-checkbox-row input[type="checkbox"] {
+  accent-color: rgba(90, 158, 95, 0.8);
+  cursor: pointer;
+}

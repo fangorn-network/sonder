@@ -7,6 +7,7 @@ import {
 } from "@fangorn-network/agent-types";
 import { AgentProviderManager } from "./agent-provider-manager";
 import { ToolboxConfigManager } from "./toolbox-config-manager";
+import { ToolboxEntry } from "@fangorn-network/agent-types";
 
 export class AgentBridge {
   private agent: FangornAgent | null = null;
@@ -33,7 +34,7 @@ export class AgentBridge {
   /**
    * Get the toolbox entries from persisted config.
    */
-  private getToolboxEntries(): { id: string; enabled: boolean; fields: Record<string, any> }[] {
+  private getToolboxEntries(): ToolboxEntry[] {
     const cfg = this.toolboxConfigManager.getConfig();
     return cfg?.toolboxes ?? [];
   }
@@ -50,6 +51,8 @@ export class AgentBridge {
       return;
     }
 
+    this.llmProvider = config.provider
+
     // Set env vars that @fangorn-network/agent reads
     if (config.provider === "ollama") {
       process.env.LLM = "ollama";
@@ -65,15 +68,14 @@ export class AgentBridge {
       if (config.defaultModel) {
         process.env.MODEL = config.defaultModel;
       }
-    } else if (config.provider === "claude") {
-      process.env.LLM = "anthropic";
+    } else if (config.provider === LLMProvider.Anthropic) {
 
       if (config.claudeApiKey) {
-        process.env.ANTHROPIC_API_KEY = config.claudeApiKey;
+        this.apiKey = config.claudeApiKey;
       }
 
       if (config.claudeModel) {
-        process.env.ANTHROPIC_MODEL = config.claudeModel;
+        this.llmModel = config.claudeModel;
       }
     }
 
@@ -174,7 +176,7 @@ disableToolbox(name: string): void {
     this.ensureReady();
     const config = this.providerManager.getConfig();
     this.agent!.changeModel({
-      llmProvider: (config?.provider === "claude" ? "anthropic" : config?.provider ?? "ollama") as any,
+      llmProvider: this.llmProvider,
       llmModel: model,
       apiKey: config?.claudeApiKey,
     });
@@ -187,5 +189,10 @@ disableToolbox(name: string): void {
         "or the selected provider failed to start.",
       );
     }
+  }
+
+  destroy(): void {
+    this.agent?.reset();
+    this.agent = null;
   }
 }

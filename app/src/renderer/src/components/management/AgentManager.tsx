@@ -1,6 +1,6 @@
+import { LLMProvider } from '@fangorn-network/agent-types'
 import { useCallback, useEffect, useRef, useState } from 'react'
-
-type Provider = 'ollama' | 'claude' | 'none'
+import { OLLAMA_MODELS, CLAUDE_MODELS, PROVIDERS, Provider } from '../../constants/models'
 
 interface OllamaStatus {
   installed: boolean
@@ -25,91 +25,46 @@ interface AgentConfig {
   defaultModel?: string
 }
 
-const PROVIDERS: { key: Provider; label: string; desc: string }[] = [
-  { key: 'ollama', label: 'Ollama', desc: 'Local inference — runs on your machine' },
-  { key: 'claude', label: 'Claude', desc: 'Anthropic API — requires an API key' },
-  { key: 'none', label: 'None', desc: 'Disable the agent entirely' },
-]
-
-interface CuratedModel {
-  name: string
-  desc: string
-  sizes: string[]
-}
-
-const CURATED_MODELS: CuratedModel[] = [
-  { name: 'qwen3.5', desc: 'Strong reasoning at small sizes', sizes: ['1.5b', '4b', '8b'] },
-  { name: 'gemma3', desc: 'Google\'s efficient open model', sizes: ['1b', '4b', '12b'] },
-  { name: 'llama3.1', desc: 'Meta\'s general-purpose model', sizes: ['8b', '70b'] },
-  { name: 'phi4-mini', desc: 'Microsoft\'s compact reasoner', sizes: ['3.8b'] },
-  { name: 'mistral', desc: 'Fast and capable 7B model', sizes: ['7b'] },
-  { name: 'deepseek-r1', desc: 'Strong reasoning and math', sizes: ['1.5b', '7b', '8b', '14b'] },
-  { name: 'qwen3', desc: 'Alibaba\'s versatile model', sizes: ['1.7b', '4b', '8b', '14b'] },
-]
-
-interface ClaudeModel {
-  id: string
-  label: string
-  desc: string
-}
-
-const CLAUDE_MODELS: ClaudeModel[] = [
-  { id: 'claude-opus-4-7', label: 'Opus 4.7', desc: 'Most capable — agentic coding, vision, self-verification' },
-  { id: 'claude-opus-4-6', label: 'Opus 4.6', desc: '1M context, multi-agent collaboration' },
-  { id: 'claude-sonnet-4-6', label: 'Sonnet 4.6', desc: 'Near-Opus quality at lower cost' },
-  { id: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5', desc: 'Fastest and most affordable' },
-]
-
 export interface AgentManagerState {
   providerStatus: ProviderStatus | null
   models: string[]
   selectedModel: string
-  claudeModel: string
 }
 
 interface AgentManagerProps {
   providerStatus: ProviderStatus | null
   models: string[]
   selectedModel: string
-  claudeModel: string
   onStateChange: (state: Partial<AgentManagerState>) => void
 }
 
-export function AgentManager({ providerStatus, models, selectedModel, claudeModel, onStateChange }: AgentManagerProps) {
+export function AgentManager({ providerStatus, models, selectedModel, onStateChange }: AgentManagerProps) {
   const [selectedProvider, setSelectedProvider] = useState<Provider | null>(providerStatus?.provider ?? null)
   const [claudeKey, setClaudeKey] = useState('')
-  const [localClaudeModel, setLocalClaudeModel] = useState(claudeModel)
-  const [localSelectedModel, setLocalSelectedModel] = useState(selectedModel)
+  const [localModel, setLocalModel] = useState(selectedModel)
   const [ollamaStatus, setOllamaStatus] = useState<OllamaStatus | null>(null)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [dirty, setDirty] = useState(false)
 
-  // model pull state
   const [pullTarget, setPullTarget] = useState<string | null>(null)
   const [pullProgress, setPullProgress] = useState<{ status: string; completed?: number; total?: number } | null>(null)
   const [pullError, setPullError] = useState<string | null>(null)
   const [customModelName, setCustomModelName] = useState('')
 
-  // delete state
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
+  const [stopOllama, setStopOllama] = useState(false)
 
   const unsubPullRef = useRef<(() => void) | null>(null)
 
-  // sync from parent when props change
   useEffect(() => {
     setSelectedProvider(providerStatus?.provider ?? null)
   }, [providerStatus?.provider])
 
   useEffect(() => {
-    setLocalSelectedModel(selectedModel)
+    setLocalModel(selectedModel)
   }, [selectedModel])
 
-  useEffect(() => {
-    setLocalClaudeModel(claudeModel)
-  }, [claudeModel])
-
-  // load initial state
   useEffect(() => {
     const init = async () => {
       const [config, ollStatus] = await Promise.all([
@@ -118,15 +73,17 @@ export function AgentManager({ providerStatus, models, selectedModel, claudeMode
       ])
       if (config) {
         setClaudeKey(config.claudeApiKey ?? '')
-        setLocalClaudeModel(config.claudeModel ?? 'claude-sonnet-4-6')
-        setLocalSelectedModel(config.defaultModel ?? '')
+        setLocalModel(
+          config.provider === LLMProvider.Anthropic
+            ? (config.claudeModel ?? 'claude-sonnet-4-6')
+            : (config.defaultModel ?? 'qwen3.5:4b')
+        )
       }
       setOllamaStatus(ollStatus)
     }
     init()
   }, [])
 
-  // clean up pull progress listener on unmount
   useEffect(() => {
     return () => { unsubPullRef.current?.() }
   }, [])
@@ -136,6 +93,9 @@ export function AgentManager({ providerStatus, models, selectedModel, claudeMode
 
   const handleProviderSelect = (p: Provider) => {
     setSelectedProvider(p)
+    if (p === LLMProvider.Anthropic) setLocalModel('claude-sonnet-4-6')
+    else if (p === LLMProvider.Ollama) setLocalModel(selectedModel || 'qwen3.5:4b')
+    else setLocalModel('')
     setDirty(true)
     setSaveError(null)
   }
@@ -149,21 +109,27 @@ export function AgentManager({ providerStatus, models, selectedModel, claudeMode
     try {
       const config: AgentConfig = { provider: selectedProvider }
 
-      if (selectedProvider === 'claude') {
+      if (selectedProvider === LLMProvider.Anthropic) {
         if (!claudeKey.trim()) {
           setSaveError('API key is required for Claude.')
           setSaving(false)
           return
         }
         config.claudeApiKey = claudeKey.trim()
-        config.claudeModel = localClaudeModel
-      }
-
-      if (selectedProvider === 'ollama' && localSelectedModel) {
-        config.defaultModel = localSelectedModel
+        config.claudeModel = localModel
+      } else if (selectedProvider === LLMProvider.Ollama && localModel) {
+        config.defaultModel = localModel
       }
 
       const status = await window.agentAPI.setProvider(config)
+
+      if (selectedProvider === 'none') {
+        await window.agentAPI.reset()
+        if (stopOllama) {
+          await window.agentAPI.ollamaStop()
+        }
+      }
+
       onStateChange({ providerStatus: status })
 
       if (!status.ready && status.error) {
@@ -172,21 +138,15 @@ export function AgentManager({ providerStatus, models, selectedModel, claudeMode
         const isReady = await window.agentAPI.isReady()
         if (isReady) {
           const providerChanged = currentProvider !== selectedProvider
-
           if (providerChanged) {
-            const llmProvider = selectedProvider === 'claude' ? 'anthropic' : 'ollama'
-            const model = selectedProvider === 'claude' ? localClaudeModel : (localSelectedModel || 'qwen3.5:4b')
-            await window.agentAPI.changeProvider(llmProvider, model, claudeKey || undefined)
-          } else {
-            const model = selectedProvider === 'claude' ? localClaudeModel : localSelectedModel
-            if (model) {
-              await window.agentAPI.changeModel(model)
-            }
+            await window.agentAPI.changeProvider(selectedProvider, localModel, claudeKey || undefined)
+          } else if (localModel) {
+            await window.agentAPI.changeModel(localModel)
           }
         }
 
         setDirty(false)
-        onStateChange({ selectedModel: localSelectedModel, claudeModel: localClaudeModel })
+        onStateChange({ selectedModel: localModel })
         const modelList = await window.agentAPI.ollamaListModels().catch(() => [])
         onStateChange({ models: modelList })
       }
@@ -195,7 +155,7 @@ export function AgentManager({ providerStatus, models, selectedModel, claudeMode
     } finally {
       setSaving(false)
     }
-  }, [selectedProvider, claudeKey, localClaudeModel, localSelectedModel, currentProvider, onStateChange])
+  }, [selectedProvider, claudeKey, localModel, currentProvider, stopOllama, onStateChange])
 
   const handleInstallOllama = useCallback(async () => {
     await window.agentAPI.ollamaInstall()
@@ -240,14 +200,14 @@ export function AgentManager({ providerStatus, models, selectedModel, claudeMode
       await window.agentAPI.ollamaDeleteModel(model)
       const modelList = await window.agentAPI.ollamaListModels().catch(() => [])
       onStateChange({ models: modelList })
-      if (localSelectedModel === model) {
-        setLocalSelectedModel('')
+      if (localModel === model) {
+        setLocalModel('')
         setDirty(true)
       }
     } catch (err: any) {
       console.error('Failed to delete model:', err)
     }
-  }, [localSelectedModel, onStateChange])
+  }, [localModel, onStateChange])
 
   const isModelPulled = (baseName: string): boolean => {
     return models.some((m) => m.startsWith(baseName))
@@ -259,7 +219,6 @@ export function AgentManager({ providerStatus, models, selectedModel, claudeMode
 
   return (
     <div className="agent-view-grid">
-      {/* Provider Selection */}
       <section className="agent-card agent-card-wide">
         <h3 className="agent-card-label">provider</h3>
         <div className="agent-provider-options">
@@ -284,8 +243,7 @@ export function AgentManager({ providerStatus, models, selectedModel, claudeMode
           })}
         </div>
 
-        {/* Ollama sub-options */}
-        {selectedProvider === 'ollama' && (
+        {selectedProvider === LLMProvider.Ollama && (
           <div className="agent-provider-config">
             {ollamaStatus && !ollamaStatus.installed && (
               <div className="agent-provider-notice">
@@ -299,7 +257,7 @@ export function AgentManager({ providerStatus, models, selectedModel, claudeMode
             {ollamaStatus?.installed && (
               <>
                 <div className="agent-row">
-                  <span className="agent-key">status</span>
+                  <span className="agent-key">Ollama status</span>
                   <span className={`agent-dot ${ollamaStatus.running ? 'on' : 'off'}`}>
                     {ollamaStatus.running ? 'running' : 'stopped'}
                   </span>
@@ -313,16 +271,15 @@ export function AgentManager({ providerStatus, models, selectedModel, claudeMode
                 {models.length > 0 && (
                   <div className="agent-model-select">
                     <span className="agent-key">model</span>
-                    <select
-                      className="agent-select"
-                      value={localSelectedModel}
-                      onChange={(e) => { setLocalSelectedModel(e.target.value); setDirty(true) }}
-                    >
-                      <option value="">default</option>
-                      {models.map((m) => (
-                        <option key={m} value={m}>{m}</option>
-                      ))}
-                    </select>
+                      <select
+                        className="agent-select"
+                        value={localModel}
+                        onChange={(e) => { setLocalModel(e.target.value); setDirty(true) }}
+                      >
+                        {models.map((m) => (
+                          <option key={m} value={m}>{m}</option>
+                        ))}
+                      </select>
                   </div>
                 )}
               </>
@@ -330,8 +287,7 @@ export function AgentManager({ providerStatus, models, selectedModel, claudeMode
           </div>
         )}
 
-        {/* Claude sub-options */}
-        {selectedProvider === 'claude' && (
+        {selectedProvider === LLMProvider.Anthropic && (
           <div className="agent-provider-config">
             <div className="agent-input-group">
               <label className="agent-key" htmlFor="claude-key">api key</label>
@@ -351,15 +307,28 @@ export function AgentManager({ providerStatus, models, selectedModel, claudeMode
                 {CLAUDE_MODELS.map(({ id, label, desc }) => (
                   <button
                     key={id}
-                    className={`agent-claude-model-btn ${localClaudeModel === id ? 'selected' : ''}`}
-                    onClick={() => { setLocalClaudeModel(id); setDirty(true) }}
+                    className={`agent-claude-model-btn ${localModel === id ? 'selected' : ''}`}
+                    onClick={() => { setLocalModel(id); setDirty(true) }}
                   >
-                    <span className="agent-claude-model-name">{label}</span>
+                    <span className="agent-claude-model-name">{label ?? id}</span>
                     <span className="agent-claude-model-desc">{desc}</span>
                   </button>
                 ))}
               </div>
             </div>
+          </div>
+        )}
+
+        {selectedProvider === 'none' && (
+          <div className="agent-provider-config">
+            <label className="agent-checkbox-row">
+              <input
+                type="checkbox"
+                checked={stopOllama}
+                onChange={(e) => { setStopOllama(e.target.checked); setDirty(true) }}
+              />
+              <span className="agent-key">Unload all models from memory</span>
+            </label>
           </div>
         )}
 
@@ -371,8 +340,7 @@ export function AgentManager({ providerStatus, models, selectedModel, claudeMode
         )}
       </section>
 
-      {/* Installed Models */}
-      {currentProvider === 'ollama' && models.length > 0 && selectedProvider === 'ollama' && (
+      {currentProvider === LLMProvider.Ollama && models.length > 0 && selectedProvider === LLMProvider.Ollama && (
         <section className="agent-card agent-card-wide">
           <h3 className="agent-card-label">installed models</h3>
           <div className="agent-card-body">
@@ -381,26 +349,11 @@ export function AgentManager({ providerStatus, models, selectedModel, claudeMode
                 <span className="agent-model">{model}</span>
                 {deleteConfirm === model ? (
                   <div className="agent-delete-confirm">
-                    <button
-                      className="agent-link-btn agent-delete-yes"
-                      onClick={() => handleDeleteModel(model)}
-                    >
-                      confirm
-                    </button>
-                    <button
-                      className="agent-link-btn"
-                      onClick={() => setDeleteConfirm(null)}
-                    >
-                      cancel
-                    </button>
+                    <button className="agent-link-btn agent-delete-yes" onClick={() => handleDeleteModel(model)}>confirm</button>
+                    <button className="agent-link-btn" onClick={() => setDeleteConfirm(null)}>cancel</button>
                   </div>
                 ) : (
-                  <button
-                    className="agent-link-btn agent-delete-btn"
-                    onClick={() => setDeleteConfirm(model)}
-                  >
-                    remove
-                  </button>
+                  <button className="agent-link-btn agent-delete-btn" onClick={() => setDeleteConfirm(model)}>remove</button>
                 )}
               </div>
             ))}
@@ -408,8 +361,7 @@ export function AgentManager({ providerStatus, models, selectedModel, claudeMode
         </section>
       )}
 
-      {/* Model Discovery */}
-      {selectedProvider === 'ollama' && ollamaStatus?.running && (
+      {selectedProvider === LLMProvider.Ollama && ollamaStatus?.running && (
         <section className="agent-card agent-card-wide">
           <h3 className="agent-card-label">discover models</h3>
 
@@ -452,20 +404,20 @@ export function AgentManager({ providerStatus, models, selectedModel, claudeMode
           </div>
 
           <div className="agent-curated-list">
-            {CURATED_MODELS.map(({ name, desc, sizes }) => {
-              const pulled = isModelPulled(name)
+            {OLLAMA_MODELS.map(({ id, desc, sizes }) => {
+              const pulled = isModelPulled(id)
               return (
-                <div className="agent-curated-item" key={name}>
+                <div className="agent-curated-item" key={id}>
                   <div className="agent-curated-header">
                     <div className="agent-curated-info">
-                      <span className="agent-curated-name">{name}</span>
+                      <span className="agent-curated-name">{id}</span>
                       {pulled && <span className="agent-curated-badge">installed</span>}
                     </div>
                     <span className="agent-curated-desc">{desc}</span>
                   </div>
                   <div className="agent-curated-sizes">
-                    {sizes.map((size) => {
-                      const fullName = getModelFullName(name, size)
+                    {sizes?.map((size) => {
+                      const fullName = getModelFullName(id, size)
                       const alreadyPulled = models.includes(fullName)
                       return (
                         <button

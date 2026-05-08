@@ -344,6 +344,21 @@ export class OllamaManager {
     });
   }
 
+  async unloadAllModels(): Promise<void> {
+    const models = await this.listModels();
+    for (const model of models) {
+      try {
+        await fetch(`${this.baseUrl}/api/generate`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ model, prompt: "", keep_alive: 0 }),
+        });
+      } catch {
+        // model may already be unloaded
+      }
+    }
+  }
+
   getBaseUrl(): string {
     return this.baseUrl;
   }

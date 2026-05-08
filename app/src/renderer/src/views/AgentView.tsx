@@ -4,9 +4,12 @@ import "./AgentView.css"
 import { AgentManager, AgentManagerState } from '../components/management/AgentManager'
 import { ToolboxManager } from '../components/management/ToolboxManager'
 import { CLAUDE_MODELS } from '../constants/models'
+import { PromptManager } from '../components/management/PromptManager'
+
 
 type Provider = LLMProvider | 'none'
-type AgentTab = 'overview' | 'toolboxes'
+
+type AgentTab = 'overview' | 'toolboxes' | 'prompts'
 
 interface ProviderStatus {
   provider: Provider
@@ -85,7 +88,7 @@ export function AgentView() {
         <div className="agent-view-header-left">
           <h2 className="agent-view-title">agent</h2>
           <nav className="agent-view-tabs">
-            {(['overview', 'toolboxes'] as AgentTab[]).map((t) => (
+            {(['overview', 'toolboxes', 'prompts'] as AgentTab[]).map((t) => (
               <button
                 key={t}
                 className={`agent-view-tab ${tab === t ? 'active' : ''}`}
@@ -143,6 +146,8 @@ export function AgentView() {
       )}
 
       {tab === 'toolboxes' && <ToolboxManager />}
+
+      {tab === 'prompts' && <PromptManager />}
     </div>
   )
 }

@@ -118,22 +118,6 @@ export function registerAgentIpcHandlers(
     }
   );
 
-  ipcMain.handle("agent:find-similar", async (_event, data: any) => {
-    try {
-      return { success: true, response: await bridge.findSimilar(data) };
-    } catch (err: any) {
-      return { success: false, error: err.message };
-    }
-  });
-
-  ipcMain.handle("agent:return-filters", async (_event, data: any) => {
-    try {
-      return { success: true, response: await bridge.returnFilters(data) };
-    } catch (err: any) {
-      return { success: false, error: err.message };
-    }
-  });
-
   // ── Agent introspection ───────────────────────────────────────────
 
   ipcMain.handle("agent:list-tools", () => {
@@ -220,6 +204,22 @@ export function registerAgentIpcHandlers(
       return { success: false, error: err.message };
     }
   });
+
+ipcMain.handle("agent:set-system-prompt", async (_event, prompt: string) => {
+  try {
+    const config = manager.getConfig();
+    if (config) {
+      config.systemPrompt = prompt;
+      await manager.saveConfig(config);
+    }
+    if (bridge.isReady()) {
+      bridge.setSystemPrompt(prompt);
+    }
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+});
 
   ipcMain.handle("agent:ollama-loaded-models", async () => {
     return manager.getOllamaManager().getLoadedModels();

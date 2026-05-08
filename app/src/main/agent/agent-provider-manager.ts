@@ -13,6 +13,7 @@ export interface AgentProviderConfig {
   claudeModel?: string;
   defaultModel?: string;
   unloadModelsOnNone?: boolean;
+  systemPrompt?: string;
 }
 
 export interface ProviderStatus {

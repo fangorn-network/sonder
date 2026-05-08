@@ -8,6 +8,7 @@ import {
 import { AgentProviderManager } from "./agent-provider-manager";
 import { ToolboxConfigManager } from "./toolbox-config-manager";
 import { ToolboxEntry } from "@fangorn-network/agent-types";
+import { DEFAULT_SYSTEM_PROMPT } from "../../renderer/src/constants/prompts"
 
 export class AgentBridge {
   private agent: FangornAgent | null = null;
@@ -16,7 +17,7 @@ export class AgentBridge {
   private toolboxDir: string;
   private dataContextProvider: () => DataContext;
   private llmProvider = LLMProvider.Ollama;
-  private llmModel = "qwen3.5:0.8b"
+  private llmModel = ""
   private apiKey = ""
 
   constructor(
@@ -66,7 +67,7 @@ export class AgentBridge {
       }
 
       if (config.defaultModel) {
-        process.env.MODEL = config.defaultModel;
+        this.llmModel= config.defaultModel;
       }
     } else if (config.provider === LLMProvider.Anthropic) {
 
@@ -86,8 +87,11 @@ export class AgentBridge {
         url: "http://localhost:11434"
       }
 
+    const systemPrompt = config.systemPrompt ?? DEFAULT_SYSTEM_PROMPT
+
     const agentConfig: FangornAgentConfig = {
-      useMemory: true,
+      useMemory: false,
+      systemPrompt,
       agenticConfig,
       toolboxDir: this.toolboxDir,
       toolboxEntries: this.getToolboxEntries(),
@@ -123,16 +127,6 @@ export class AgentBridge {
     return this.agent!.toolScopedAgenticChat(query, toolNames);
   }
 
-  async findSimilar(data: any): Promise<FangornAgentResponse> {
-    this.ensureReady();
-    return this.agent!.findSimilar(data);
-  }
-
-  async returnFilters(data: any): Promise<FangornAgentResponse> {
-    this.ensureReady();
-    return this.agent!.returnFilters(data);
-  }
-
   getAllToolNames(): string[] {
     this.ensureReady();
     return this.agent!.getAllToolNames();
@@ -166,6 +160,11 @@ disableToolbox(name: string): void {
   getToolboxDir(): string {
     return this.toolboxDir;
   }
+
+  setSystemPrompt(prompt: string): void {
+  this.ensureReady();
+  this.agent!.setSystemPrompt(prompt);
+}
   
   async changeProvider(provider: string, model: string, apiKey?: string, url?: string): Promise<void> {
     this.ensureReady();

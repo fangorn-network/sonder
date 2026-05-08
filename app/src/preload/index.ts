@@ -69,8 +69,6 @@ export interface FangornAgentApi {
   // ── Agent chat ────────────────────────────────────────────────────
   chat(query: string): Promise<AgentResult>;
   chatScoped(query: string, toolNames: string[]): Promise<AgentResult>;
-  findSimilar(data: any): Promise<AgentResult>;
-  returnFilters(data: any): Promise<AgentResult>;
 
   // ── Agent introspection ───────────────────────────────────────────
   listTools(): Promise<{ success: boolean; tools?: string[]; error?: string }>;
@@ -87,6 +85,7 @@ export interface FangornAgentApi {
   // ── Provider/model switching ──────────────────────────────────────
   changeProvider(provider: string, model: string, apiKey?: string, url?: string): Promise<{ success: boolean; error?: string }>;
   changeModel(model: string): Promise<{ success: boolean; error?: string }>;
+  setSystemPrompt(prompt: string): Promise<{ success: boolean; error?: string }>;
 }
  
 export const agentAPI: FangornAgentApi = {
@@ -140,12 +139,6 @@ export const agentAPI: FangornAgentApi = {
   chatScoped: (query: string, toolNames: string[]): Promise<AgentResult> =>
     ipcRenderer.invoke("agent:chat-scoped", query, toolNames),
  
-  findSimilar: (data: any): Promise<AgentResult> =>
-    ipcRenderer.invoke("agent:find-similar", data),
- 
-  returnFilters: (data: any): Promise<AgentResult> =>
-    ipcRenderer.invoke("agent:return-filters", data),
- 
   // ── Agent introspection ───────────────────────────────────────────
   listTools: (): Promise<{ success: boolean; tools?: string[]; error?: string }> =>
     ipcRenderer.invoke("agent:list-tools"),
@@ -177,11 +170,16 @@ export const agentAPI: FangornAgentApi = {
 
   changeModel: (model: string): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke("agent:change-model", model),
+
   ollamaStop: (): Promise<{ success: boolean; error?: string }> =>
   ipcRenderer.invoke("agent:ollama-stop"),
+
   ollamaLoadedModels: (): Promise<string[]> =>
   ipcRenderer.invoke("agent:ollama-loaded-models"),
-  };
+
+  setSystemPrompt: (prompt: string): Promise<{ success: boolean; error?: string }> =>
+  ipcRenderer.invoke("agent:set-system-prompt", prompt),
+};
  
 // Expose to renderer
 contextBridge.exposeInMainWorld("agentAPI", agentAPI);

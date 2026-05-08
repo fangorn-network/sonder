@@ -1221,4 +1221,59 @@
 .agent-dot.idle::before {
   background: rgba(210, 180, 60, 0.7);
   box-shadow: 0 0 6px rgba(210, 180, 60, 0.4);
+
+}.prompt-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 120px;
+}
+
+.prompt-manager {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.prompt-desc {
+  font-family: "DM Mono", "Courier New", monospace;
+  font-size: 10px;
+  color: rgba(163, 201, 168, 0.3);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.prompt-textarea {
+  width: 100%;
+  font-family: "DM Mono", "Courier New", monospace;
+  font-size: 11px;
+  color: rgba(163, 201, 168, 0.75);
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(163, 201, 168, 0.12);
+  border-radius: 3px;
+  padding: 12px;
+  outline: none;
+  resize: vertical;
+  min-height: 200px;
+  line-height: 1.6;
+  transition: border-color 0.2s ease;
+  box-sizing: border-box;
+}
+
+.prompt-textarea::placeholder {
+  color: rgba(163, 201, 168, 0.2);
+}
+
+.prompt-textarea:focus {
+  border-color: rgba(163, 201, 168, 0.3);
+}
+
+.prompt-manager .agent-save-btn {
+  align-self: flex-end;
+}
+
+.prompt-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }

@@ -1,6 +1,7 @@
 import { LLMProvider } from '@fangorn-network/agent-types'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { OLLAMA_MODELS, CLAUDE_MODELS, PROVIDERS, Provider } from '../../constants/models'
+import { AgentProviderConfig } from '../../../../main/agent/agent-provider-manager'
 
 interface OllamaStatus {
   installed: boolean
@@ -15,14 +16,6 @@ interface ProviderStatus {
   ollamaStatus?: OllamaStatus
   models?: string[]
   error?: string
-}
-
-interface AgentConfig {
-  provider: Provider
-  ollamaBaseUrl?: string
-  claudeApiKey?: string
-  claudeModel?: string
-  defaultModel?: string
 }
 
 export interface AgentManagerState {
@@ -112,7 +105,7 @@ export function AgentManager({ providerStatus, models, selectedModel, onStateCha
     setSaveError(null)
 
     try {
-      const config: AgentConfig = { provider: selectedProvider }
+      const config: AgentProviderConfig = { provider: selectedProvider }
 
       if (selectedProvider === LLMProvider.Anthropic) {
         if (!claudeKey.trim()) {

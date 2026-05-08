@@ -541,7 +541,6 @@ def enrich_artist(
         title = track.get("name", "")
         year_str = (track.get("album", {}).get("release_date") or "")[:4]
         year  = int(year_str) if year_str.isdigit() else 0
-        preview_url = track.get("preview_url")  # 30s mp3, may be None
         duration_ms = track.get("duration_ms")
 
         # --- Last.fm: track-level tags ---
@@ -574,7 +573,6 @@ def enrich_artist(
                 "year":        year,
                 "rank":        rank,
                 "duration_ms": duration_ms,
-                "preview_url": preview_url,
                 "genres":      genres,
                 "moods":       moods,
                 "themes":      themes,

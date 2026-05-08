@@ -738,9 +738,9 @@ button.np-collapse:hover {
   border: none;
   padding: 6px;
   cursor: pointer;
-  opacity: 0.3;
+  /* opacity: ; */
   transition: opacity 0.15s;
-  display: flex;
+  /* display: flex; */
   align-items: center;
   justify-content: center;
 }

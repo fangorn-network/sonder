@@ -24,22 +24,32 @@ export default function App() {
   const { ready, authenticated, login } = usePrivy()
   const { config, hasConfig, saveConfig } = useSpotifyConfig()
 
-  // Entropy lives here now — single source of truth, no taste profile needed.
-  // 0.2 = comfort-forward default. Expose setEntropy to UI when you want a dial.
   const [entropy, setEntropy] = useState(0.2)
-
   const kernel = useSessionKernel({ entropy })
 
   const [booted, setBooted] = useState(() => localStorage.getItem('booted') === 'true')
   const [showConfig, setShowConfig] = useState(false)
   const [view, setView] = useState<ViewName>('Discover')
 
-  // NowPlaying overlay state — null = closed, 'player' = from player bar, Track = from card
   const [nowPlaying, setNowPlaying] = useState<null | 'player' | { track: Track; color: string }>(null)
 
-  // 'music' is the cold start query — generic enough to populate browse immediately.
-  // The kernel takes over recommendation after Spotify seeds μ₀.
-  const { tracks, loading, loadingMore, error, hasMore, loadMore, applyKernelQuery, search, setSearch } = useChroma({ initialQuery: 'music' })
+  // active genre filters — lifted so NowPlaying can close and filter,
+  // and so useChroma can route filtered queries to /search
+  const [genreFilter, setGenreFilter] = useState('all')
+  const [moodFilter, setMoodFilter] = useState('all')
+  const [contextFilter, setContextFilter] = useState('all')
+
+  const {
+    tracks, loading, loadingMore, error, hasMore, loadMore,
+    applyKernelQuery, search, setSearch,
+    allGenres, allMoods, allContexts,
+  } = useChroma({
+    initialQuery: 'music',
+    genreFilter,
+    moodFilter,
+    contextFilter,
+  })
+
   const [recommendedTracks, setRecommendedTracks] = useState<RecommendedTracks | null>(null)
   const [recommendLoading, setRecommendLoading] = useState(false)
   const { sendMessage } = useFangornAgent()
@@ -50,11 +60,6 @@ export default function App() {
   const playingIdRef = useRef<string | null>(null)
   const spotifyRef = useRef<ReturnType<typeof useSpotify> | null>(null)
   const seededRef = useRef(false)
-
-  // active genre filters — lifted so NowPlaying can close and filter
-  const [genreFilter, setGenreFilter] = useState('all')
-  const [moodFilter, setMoodFilter] = useState('all')
-  const [contextFilter, setContextFilter] = useState('all')
 
   const handleNext = useCallback(() => {
     const tracks = filteredTracksRef.current
@@ -91,31 +96,17 @@ export default function App() {
 
     kernel.seedFromSpotify(spotify.spotifyFetch).then((q) => {
       if (!q) return
-      // q is the kernel's lookahead vector μ₀ (v=0 on cold start, so q=μ₀)
-      // Replace generic 'music' browse results with kernel-personalized ones.
-      // loadMore continues with paginated browse after these.
       applyKernelQuery(Array.from(q))
     })
   }, [spotify.connected])
 
-
-
-  // ── Signal handler ────────────────────────────────────────────────────────
-  // play/skip drive kernel dynamics. like/filter/similar are no-ops at the
-  // kernel level for now — the tag layer is gone, these are available for
-  // future instrumentation (e.g. like could anchor μ more aggressively).
   const handleSignal = useCallback(async (signal: TasteSignal) => {
     const { type, track } = signal
-
     if (type !== 'play' && type !== 'skip') return
-
     try {
-      // Prefer embedding already on the track (kernel recommendation path).
-      // Fall back to on-demand embed for browse/search picks.
       const embedding = (track as any).embedding
         ? new Float32Array((track as any).embedding)
         : await kernel.embedText(`${track.artist} - ${track.title}`)
-
       if (type === 'play') kernel.onTrackPlay(embedding)
       if (type === 'skip') kernel.onTrackSkip(embedding)
     } catch (e) {
@@ -158,7 +149,6 @@ export default function App() {
     if (type === 'context') setContextFilter(value)
   }, [])
 
-  // ── Config gate ──────────────────────────────────────────────────────
   if ((booted && !hasConfig) || showConfig) {
     return (
       <SpotifyConfigView
@@ -255,6 +245,9 @@ export default function App() {
                 onGenreFilter={setGenreFilter}
                 onMoodFilter={setMoodFilter}
                 onContextFilter={setContextFilter}
+                allGenres={allGenres}
+                allMoods={allMoods}
+                allContexts={allContexts}
               />
             )}
             {view === 'Agent' && (<AgentView />)}

@@ -12,7 +12,8 @@ pip install aiohttp asyncio chromadb fastapi pydantic
 python main.py
 ```
 
-```
+## Interact with the DB
+``` sh
 curl "http://localhost:8080/search?q=tracks+for+a+car+chase+schene+in+action+movie&n_results=1"
 curl "http://localhost:8080/health"
 # re-pull from subgraph+IPFS on demand

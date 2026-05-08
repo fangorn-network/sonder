@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useMemo } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { RecommendedTracks, TasteSignal, Track } from '../types'
 import './mobile.css'
 import './Browse-Filters.css'
@@ -14,14 +14,6 @@ function hashColor(str: string): string {
   for (let i = 0; i < str.length; i++) h = (Math.imul(31, h) + str.charCodeAt(i)) | 0
   return GENRE_PALETTE[Math.abs(h) % GENRE_PALETTE.length]
 }
-
-// const EMPTY_TRACK: Track = {
-//   id: '', title: '', artist: '', year: null,
-//   genres: [], moods: [], contexts: [], themes: [],
-//   owner: '', manifestStateId: '', datasourceName: '', name: '',
-//   spotify_track_id: '', spotify_artist_id: null,
-//   rank: null, duration_ms: null, preview_url: null, embedding: null,
-// }
 
 interface BrowseViewProps {
   tracks: Track[]
@@ -40,13 +32,15 @@ interface BrowseViewProps {
   onPlayingIdChange?: (id: string) => void
   onSignal?: (signal: TasteSignal) => void
   onTrackClick: (track: Track, color: string) => void
-  // filter state lifted to App so NowPlaying can close + filter
   genreFilter: string
   moodFilter: string
   contextFilter: string
   onGenreFilter: (v: string) => void
   onMoodFilter: (v: string) => void
   onContextFilter: (v: string) => void
+  allGenres: string[]
+  allMoods: string[]
+  allContexts: string[]
 }
 
 async function fetchAlbumArt(title: string, artist: string): Promise<string | null> {
@@ -72,6 +66,7 @@ export function BrowseView({
   recommendedTracks, recommendLoading, onClearRecommendations, onCallAgent,
   onFilteredChange, onPlayingIdChange, onSignal, onTrackClick,
   genreFilter, moodFilter, contextFilter, onGenreFilter, onMoodFilter, onContextFilter,
+  allGenres, allMoods, allContexts,
 }: BrowseViewProps) {
   const sentinelRef = useRef<HTMLDivElement>(null)
   const [filterOpen, setFilterOpen] = useState(false)
@@ -79,7 +74,7 @@ export function BrowseView({
   const [albumArtCache, setAlbumArtCache] = useState<Record<string, string>>({})
   const fetchingRef = useRef<Set<string>>(new Set())
 
-  const { searchAndPlay, connect, connected } = useSpotifyContext()
+  const { play, searchAndPlay, connect, connected } = useSpotifyContext()
 
   const handlePlay = async (e: React.MouseEvent, track: Track) => {
     e.stopPropagation()
@@ -88,47 +83,24 @@ export function BrowseView({
     onPlayingIdChange?.(track.id)
     onSignal?.({ type: 'play', track, weight: 1.0 })
     try {
-      const query = `${track.title} ${track.artist}`.replace(/\(.*?\)/g, '').trim()
-      await searchAndPlay(query)
+      if (track.spotify_track_id) {
+        await play(`spotify:track:${track.spotify_track_id}`)
+      } else {
+        const query = `${track.title} ${track.artist}`.replace(/\(.*?\)/g, '').trim()
+        await searchAndPlay(query)
+      }
     } catch (err) {
-      console.error('searchAndPlay failed:', err)
+      console.error('play failed:', err)
       setPlayingId(null)
     }
   }
 
-  // ── derived filter sets ──────────────────────────────────────────────
-  const genres = useMemo(() => {
-    const set = new Set<string>()
-    tracks.forEach(t => t.genres.forEach(g => set.add(g)))
-    return Array.from(set).sort()
-  }, [tracks])
-
-  const moods = useMemo(() => {
-    const set = new Set<string>()
-    tracks.forEach(t => t.moods.forEach(m => set.add(m)))
-    return Array.from(set).sort()
-  }, [tracks])
-
-  const contexts = useMemo(() => {
-    const set = new Set<string>()
-    tracks.forEach(t => t.contexts.forEach(c => set.add(c)))
-    return Array.from(set).sort()
-  }, [tracks])
-
-  const genreColor = useMemo(() => {
-    const map: Record<string, string> = {}
-    genres.forEach((g, i) => { map[g] = GENRE_PALETTE[i % GENRE_PALETTE.length] })
-    return map
-  }, [genres])
-
-  const filtered = useMemo(() => {
-    return tracks.filter(t => {
-      if (contextFilter !== 'all' && !t.contexts.includes(contextFilter)) return false
-      if (genreFilter !== 'all' && !t.genres.includes(genreFilter)) return false
-      if (moodFilter !== 'all' && !t.moods.includes(moodFilter)) return false
-      return true
-    })
-  }, [tracks, contextFilter, genreFilter, moodFilter])
+  // Built from allGenres (stable, never shrinks) so colors don't shift
+  // when a filter narrows the visible track set.
+  const genreColor: Record<string, string> = {}
+  ;(allGenres ?? []).forEach((g, i) => {
+    genreColor[g] = GENRE_PALETTE[i % GENRE_PALETTE.length]
+  })
 
   const activeCount =
     (genreFilter !== 'all' ? 1 : 0) +
@@ -136,7 +108,14 @@ export function BrowseView({
     (contextFilter !== 'all' ? 1 : 0)
   const hasActiveFilter = activeCount > 0
 
-  const clearAll = () => { onGenreFilter('all'); onMoodFilter('all'); onContextFilter('all') }
+  const clearAll = () => {
+    onGenreFilter('all')
+    onMoodFilter('all')
+    onContextFilter('all')
+  }
+
+  // tracks IS the filtered set — filtering handled upstream in useChroma
+  const filtered = tracks
 
   // ── sync filtered tracks to parent ───────────────────────────────────
   useEffect(() => { onFilteredChange?.(filtered) }, [filtered])
@@ -261,7 +240,11 @@ export function BrowseView({
   }
 
   const renderSheetSection = (
-    label: string, values: string[], current: string, setCurrent: (v: string) => void, colorize?: (v: string) => string,
+    label: string,
+    values: string[],
+    current: string,
+    setCurrent: (v: string) => void,
+    colorize?: (v: string) => string,
   ) => (
     <section className="bv-sheet-section">
       <div className="bv-sheet-section-head">
@@ -269,12 +252,18 @@ export function BrowseView({
         <span className="bv-sheet-section-count">{values.length}</span>
       </div>
       <div className="bv-sheet-pills">
-        <button className={`bf-pill ${current === 'all' ? 'bf-pill--active' : ''}`} onClick={() => setCurrent('all')}>All</button>
+        <button
+          className={`bf-pill ${current === 'all' ? 'bf-pill--active' : ''}`}
+          onClick={() => setCurrent('all')}
+        >All</button>
         {values.map(v => {
           const c = colorize?.(v)
           const active = current === v
           return (
-            <button key={v} className={`bf-pill ${active ? 'bf-pill--active' : ''}`} onClick={() => setCurrent(v)}
+            <button
+              key={v}
+              className={`bf-pill ${active ? 'bf-pill--active' : ''}`}
+              onClick={() => setCurrent(v)}
               style={active && c ? { background: c + '22', borderColor: c + '88', color: c } : undefined}
             >{v}</button>
           )
@@ -288,12 +277,24 @@ export function BrowseView({
       <div className="browse-toolbar">
         <div className="search-box">
           <span className="search-icon">⌕</span>
-          <input className="search-input" type="text" placeholder="Search title, artist, genre, mood…"
-            value={search} onChange={e => setSearch(e.target.value)} spellCheck={false} />
+          <input
+            className="search-input"
+            type="text"
+            placeholder="Search title, artist, genre, mood…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            spellCheck={false}
+          />
           {search && <button className="search-clear" onClick={() => setSearch('')}>✕</button>}
         </div>
-        <button className={`bv-filter-btn${hasActiveFilter ? ' bv-filter-btn--active' : ''}`} onClick={() => setFilterOpen(true)} aria-label="Open filters">
-          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M3 6h18M6 12h12M10 18h4"/></svg>
+        <button
+          className={`bv-filter-btn${hasActiveFilter ? ' bv-filter-btn--active' : ''}`}
+          onClick={() => setFilterOpen(true)}
+          aria-label="Open filters"
+        >
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+            <path d="M3 6h18M6 12h12M10 18h4"/>
+          </svg>
           <span>Filter</span>
           {hasActiveFilter && <span className="bv-filter-badge">{activeCount}</span>}
         </button>
@@ -302,23 +303,34 @@ export function BrowseView({
       {hasActiveFilter && (
         <div className="bv-active-chips">
           {genreFilter !== 'all' && (
-            <button className="bv-active-chip"
+            <button
+              className="bv-active-chip"
               style={{ color: genreColor[genreFilter], borderColor: `${genreColor[genreFilter] ?? '#888'}55`, background: `${genreColor[genreFilter] ?? '#888'}12` }}
-              onClick={() => onGenreFilter('all')} aria-label={`Remove genre: ${genreFilter}`}>
+              onClick={() => onGenreFilter('all')}
+              aria-label={`Remove genre: ${genreFilter}`}
+            >
               <span className="bv-active-chip-cat">genre</span>
               <span className="bv-active-chip-val">{genreFilter}</span>
               <span className="bv-active-chip-x" aria-hidden="true">✕</span>
             </button>
           )}
           {moodFilter !== 'all' && (
-            <button className="bv-active-chip" onClick={() => onMoodFilter('all')} aria-label={`Remove mood: ${moodFilter}`}>
+            <button
+              className="bv-active-chip"
+              onClick={() => onMoodFilter('all')}
+              aria-label={`Remove mood: ${moodFilter}`}
+            >
               <span className="bv-active-chip-cat">mood</span>
               <span className="bv-active-chip-val">{moodFilter}</span>
               <span className="bv-active-chip-x" aria-hidden="true">✕</span>
             </button>
           )}
           {contextFilter !== 'all' && (
-            <button className="bv-active-chip" onClick={() => onContextFilter('all')} aria-label={`Remove context: ${contextFilter}`}>
+            <button
+              className="bv-active-chip"
+              onClick={() => onContextFilter('all')}
+              aria-label={`Remove context: ${contextFilter}`}
+            >
               <span className="bv-active-chip-cat">context</span>
               <span className="bv-active-chip-val">{contextFilter}</span>
               <span className="bv-active-chip-x" aria-hidden="true">✕</span>
@@ -361,7 +373,10 @@ export function BrowseView({
                 <div className="tg-body">
                   <div className="tg-skel tg-skel--title" />
                   <div className="tg-skel tg-skel--sub" />
-                  <div className="tg-meta"><div className="tg-skel tg-skel--tag" /><div className="tg-skel tg-skel--tag" /></div>
+                  <div className="tg-meta">
+                    <div className="tg-skel tg-skel--tag" />
+                    <div className="tg-skel tg-skel--tag" />
+                  </div>
                 </div>
               </div>
             ))
@@ -392,9 +407,9 @@ export function BrowseView({
               <button className="bv-sheet-close" onClick={() => setFilterOpen(false)} aria-label="Close filters">✕</button>
             </header>
             <div className="bv-sheet-body">
-              {renderSheetSection('Genre', genres, genreFilter, onGenreFilter, g => genreColor[g])}
-              {renderSheetSection('Mood', moods, moodFilter, onMoodFilter)}
-              {renderSheetSection('Context', contexts, contextFilter, onContextFilter)}
+              {renderSheetSection('Genre', allGenres ?? [], genreFilter, onGenreFilter, g => genreColor[g])}
+              {renderSheetSection('Mood', allMoods ?? [], moodFilter, onMoodFilter)}
+              {renderSheetSection('Context', allContexts ?? [], contextFilter, onContextFilter)}
             </div>
             <footer className="bv-sheet-footer">
               <button className="bv-sheet-btn bv-sheet-btn--ghost" onClick={clearAll} disabled={!hasActiveFilter}>Clear all</button>

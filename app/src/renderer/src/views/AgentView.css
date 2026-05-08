@@ -964,3 +964,22 @@
 .prompt-manager .agent-save-btn {
   align-self: flex-end;
 }
+
+.agent-status-card {
+  margin-bottom: var(--sp-5);
+}
+
+.agent-status-card .agent-val {
+  color: var(--accent);
+}
+.agent-status-card .agent-dot {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.agent-status-card .agent-key {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--fg4);
+}

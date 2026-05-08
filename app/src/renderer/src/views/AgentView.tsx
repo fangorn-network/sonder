@@ -104,7 +104,7 @@ export function AgentView() {
       </div>
 
       {providerStatus?.ready && currentProvider !== 'none' && (
-        <section className="agent-card agent-card-wide">
+        <section className="agent-card agent-card-wide agent-status-card">
           <h3 className="agent-card-label">status</h3>
           <div className="agent-status-grid">
             <div className="agent-status-item">

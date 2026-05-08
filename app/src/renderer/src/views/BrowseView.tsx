@@ -15,11 +15,13 @@ function hashColor(str: string): string {
   return GENRE_PALETTE[Math.abs(h) % GENRE_PALETTE.length]
 }
 
-const EMPTY_TRACK: Track = {
-  id: '', title: '', artist: '', year: null, energy: null,
-  genres: [], moods: [], contexts: [], themes: [],
-  owner: '', manifestStateId: '', datasourceName: '', mbid: null, name: '',
-}
+// const EMPTY_TRACK: Track = {
+//   id: '', title: '', artist: '', year: null,
+//   genres: [], moods: [], contexts: [], themes: [],
+//   owner: '', manifestStateId: '', datasourceName: '', name: '',
+//   spotify_track_id: '', spotify_artist_id: null,
+//   rank: null, duration_ms: null, preview_url: null, embedding: null,
+// }
 
 interface BrowseViewProps {
   tracks: Track[]
@@ -136,22 +138,6 @@ export function BrowseView({
 
   const clearAll = () => { onGenreFilter('all'); onMoodFilter('all'); onContextFilter('all') }
 
-  // ── taste signals from filter changes ────────────────────────────────
-  useEffect(() => {
-    if (genreFilter === 'all') return
-    onSignal?.({ type: 'filter', weight: 0.5, track: { ...EMPTY_TRACK, genres: [genreFilter] } })
-  }, [genreFilter])
-
-  useEffect(() => {
-    if (moodFilter === 'all') return
-    onSignal?.({ type: 'filter', weight: 0.5, track: { ...EMPTY_TRACK, moods: [moodFilter] } })
-  }, [moodFilter])
-
-  useEffect(() => {
-    if (contextFilter === 'all') return
-    onSignal?.({ type: 'filter', weight: 0.5, track: { ...EMPTY_TRACK, contexts: [contextFilter] } })
-  }, [contextFilter])
-
   // ── sync filtered tracks to parent ───────────────────────────────────
   useEffect(() => { onFilteredChange?.(filtered) }, [filtered])
 
@@ -198,6 +184,9 @@ export function BrowseView({
     const primaryGenre = track.genres[0] ?? null
     const primaryGenreColor = primaryGenre ? (genreColor[primaryGenre] ?? accentColor) : accentColor
     const isThisPlaying = playingId === track.id
+    const durationStr = track.duration_ms
+      ? `${Math.floor(track.duration_ms / 60000)}:${String(Math.floor((track.duration_ms % 60000) / 1000)).padStart(2, '0')}`
+      : null
 
     return (
       <div
@@ -222,9 +211,6 @@ export function BrowseView({
               : <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
             }
           </button>
-          {track.energy !== null && (
-            <div className="tg-energy-bar" style={{ position: 'absolute', bottom: 0, left: 0, height: '3px', width: `${Math.round(track.energy * 100)}%`, background: primaryGenreColor, opacity: 0.8 }} />
-          )}
         </div>
 
         <div className="tg-body">
@@ -232,6 +218,7 @@ export function BrowseView({
           <div className="tg-artist">
             {track.artist}
             {track.year !== null && <span className="tg-year"> · {track.year}</span>}
+            {durationStr && <span className="tg-year"> · {durationStr}</span>}
           </div>
 
           {track.genres.length > 0 && (
@@ -261,13 +248,11 @@ export function BrowseView({
             </div>
           )}
 
-          {track.energy !== null && (
-            <div className="tg-energy">
-              <span className="tg-energy-label">energy</span>
-              <div className="tg-energy-track">
-                <div className="tg-energy-fill" style={{ width: `${Math.round(track.energy * 100)}%`, background: primaryGenreColor }} />
-              </div>
-              <span className="tg-energy-val">{Math.round(track.energy * 100)}</span>
+          {track.themes.length > 0 && (
+            <div className="tg-meta tg-meta--themes">
+              {track.themes.slice(0, 2).map(t => (
+                <span key={t} className="tg-genre tg-genre--theme">{t}</span>
+              ))}
             </div>
           )}
         </div>

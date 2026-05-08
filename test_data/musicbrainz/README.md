@@ -1,20 +1,26 @@
 ``` sh
 python3 -m venv ./venv
 source venv/bin/activate
-pip install anthropic
-export ANTHROPIC_API_KEY=sk-ant-api...
 
-python fetch.py > raw.json
-export ANTHROPIC_API_KEY=....
+pip install anthropic bs4
 
-python enrich.py raw.json > data.json
+export SPOTIFY_CLIENT_ID=d27c634421754faa8f91e314db3d6132
+export SPOTIFY_CLIENT_SECRET=eb68d1f2706b45fda808ae3694cb7b67
+export LASTFM_API_KEY=81690959acb539a96ce569389c1b583a
+
+# Ranks 101-200
+python fetch.py --min-rank 101 --max-rank 200 --out corpus_101_200.json
+
+# Ranks 501-1000
+python fetch.py --min-rank 501 --max-rank 1000 --out corpus_501_1000.json
+
 ```
 
 | Item     | Value                                                              |
 | -------- | ------------------------------------------------------------------ |
-| Schema   | `fangorn.music.tags.v2`                                            |
-| SchemaId | 0xd5033de283848b81aec6be7d9dde6ec878ec0b8ee7ad78321072e4b06877fa6d |
-| CID      | bafkreigeyoskza3rk54fdbh65runelcosxxno6gkcqjqigsxrypax6juya        |
+| Schema   | `fangorn.sptfy.music.test.v0`                                      |
+| SchemaId | 0xf4016713d644f9f7b622826269a53a05092f04b73db9dfe95bd6d2d246e38380 |
+| CID      | bafkreif6fxkfp47y4gp4wtdslvjr4y3ylq4kkrqfruaqd5rhrrz73mbofa        |
 
 
 test.tags.v5

@@ -26,3 +26,6 @@ https://chartmasters.org/most-streamed-artists-ever-on-spotify/
 
 There is a standardized genre-set available at
 https://eyed3.readthedocs.io/en/latest/plugins/genres_plugin.html
+
+
+fangorn.sptfy.music.test.v0

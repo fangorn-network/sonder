@@ -1,33 +1,36 @@
 import type { CSSProperties } from 'react'
 
 export interface Track {
-  id: string
+  // Fangorn manifest fields
+  id: string                  // manifestStateId / Chroma doc id
   manifestStateId: string
-  mbid: string | null
+  datasourceName: string
+  owner: string
+  name: string                // raw name field from manifest
+  embedding: any
+
+  // Corpus fields (from fetch.py output)
+  spotify_track_id: string
+  spotify_artist_id: string | null
   title: string
   artist: string
   year: number | null
-  energy: number | null
+  rank: number | null
+  duration_ms: number | null
+  preview_url: string | null
+
+  // Taxonomy
   genres: string[]
   moods: string[]
   themes: string[]
   contexts: string[]
-  owner: string
-  datasourceName: string
-  name: string
 }
 
-// export type FangornMiddleware = Awaited<ReturnType<typeof createFangornMiddleware>>
-
 export type PlayState = 'idle' | 'loading' | 'playing' | 'error'
-
 export type UploadStatus = 'idle' | 'uploading' | 'done' | 'error'
-
-export type ViewName = 'Discover' | 'Library' | 'Upload'
-
+export type ViewName = 'Discover' | 'Library' | 'Agent'
 export type UploadPanel = 'upload' | 'manage'
 
-// A track entry as stored in the vault manifest
 export interface ManifestEntry {
   name: string
   cid: string
@@ -37,14 +40,12 @@ export interface ManifestEntry {
   gadgetDescriptor: unknown
 }
 
-// A resolved album with its manifest entries
 export interface AlbumView {
-  name: string         // datasourceName
+  name: string
   manifestCid: string
   entries: ManifestEntry[]
 }
 
-// CSS custom property helper for hue-based track art colours
 export interface HueStyle extends CSSProperties {
   '--hue': number
 }
@@ -56,16 +57,12 @@ export interface RecommendedTracks {
 }
 
 export interface TasteProfile {
-  // weighted tag preferences, value = -1.0 to 1.0
   genres: Record<string, number>
   moods: Record<string, number>
   contexts: Record<string, number>
-  // energy preference: null = no preference
   energyRange: [number, number] | null
-  // raw spotify seed data
   topArtists: string[]
   topTracks: { title: string; artist: string; genres: string[] }[]
-  // meta
   seededFromSpotify: boolean
   lastUpdated: number
   entropy: number

@@ -5,13 +5,15 @@ import './NowPlaying.css'
 
 const CHROMA_URL = (import.meta as any).env.VITE_CHROMA_URL ?? 'http://localhost:8080'
 
+// ── utils ─────────────────────────────────────────────────────────────────────
+
 function fmtTime(ms: number) {
     if (!ms || !isFinite(ms)) return '0:00'
     const s = Math.floor(ms / 1000)
-    const m = Math.floor(s / 60)
-    const sec = s % 60
-    return `${m}:${sec.toString().padStart(2, '0')}`
+    return `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`
 }
+
+// ── api ───────────────────────────────────────────────────────────────────────
 
 async function fetchAlbumArt(title: string, artist: string): Promise<string | null> {
     try {
@@ -24,50 +26,107 @@ async function fetchAlbumArt(title: string, artist: string): Promise<string | nu
     return null
 }
 
-async function fetchArtistTracks(artist: string, excludeTitle: string): Promise<{ id: string; title: string; year: number | null; artist: string }[]> {
+async function embedTrack(artist: string, title: string): Promise<number[] | null> {
     try {
-        const params = new URLSearchParams({ q: artist, n_results: '20' })
-        const resp = await fetch(`${CHROMA_URL}/search?${params}`)
-        if (!resp.ok) return []
-        const data = await resp.json()
+        const res = await fetch(`${CHROMA_URL}/embed`, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ text: `${artist} - ${title}` }),
+        })
+        if (!res.ok) return null
+        const data = await res.json()
+        return data.embedding ?? null
+    } catch {
+        return null
+    }
+}
+
+async function fetchSimilarTracks(
+    embedding: number[],
+    excludeId: string,
+    n = 10,
+): Promise<SimilarTrack[]> {
+    try {
+        const res = await fetch(`${CHROMA_URL}/search/vector`, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ embedding, n_results: n + 2 }),
+        })
+        if (!res.ok) return []
+        const data = await res.json()
         return (data.results ?? [])
-            .map((h: any) => {
-                const fields: Record<string, string> = {}
-                for (const part of (h.document ?? '').split(' | ')) {
-                    const colon = part.indexOf(': ')
-                    if (colon === -1) continue
-                    fields[part.slice(0, colon).trim()] = part.slice(colon + 2).trim()
-                }
-                return {
-                    id: h.id,
-                    title: fields['title'] ?? fields['name'] ?? 'Unknown',
-                    artist: fields['artist'] ?? '',
-                    year: parseFloat(fields['year']) || null,
-                }
-            })
-            .filter((t: any) =>
-                t.artist.toLowerCase() === artist.toLowerCase() &&
-                t.title.toLowerCase() !== excludeTitle.toLowerCase()
-            )
-            .slice(0, 6)
+            .filter((h: any) => h.id !== excludeId)
+            .slice(0, n)
+            .map((h: any) => parseHit(h))
     } catch {
         return []
     }
 }
 
+async function fetchArtistTracks(artist: string, excludeId: string, n = 10): Promise<SimilarTrack[]> {
+    try {
+        const params = new URLSearchParams({ q: artist, n_results: String(n + 4) })
+        const res = await fetch(`${CHROMA_URL}/search?${params}`)
+        if (!res.ok) return []
+        const data = await res.json()
+        return (data.results ?? [])
+            .map((h: any) => parseHit(h))
+            .filter((t: SimilarTrack) =>
+                t.id !== excludeId &&
+                t.artist.toLowerCase() === artist.toLowerCase()
+            )
+            .slice(0, n)
+    } catch {
+        return []
+    }
+}
+
+function parseHit(h: any): SimilarTrack {
+    const fields: Record<string, string> = {}
+    for (const part of (h.document ?? '').split(' | ')) {
+        const colon = part.indexOf(': ')
+        if (colon === -1) continue
+        fields[part.slice(0, colon).trim()] = part.slice(colon + 2).trim()
+    }
+    const num = (k: string) => { const v = parseFloat(fields[k] ?? ''); return isNaN(v) ? null : v }
+    return {
+        id:        h.id,
+        title:     fields['title'] ?? fields['name'] ?? 'Unknown',
+        artist:    fields['artist'] ?? '',
+        year:      num('year'),
+        genre:     fields['genres']?.split(',')[0]?.trim() ?? null,
+        embedding: h.embedding ?? null,
+        score:     h.score ?? null,
+    }
+}
+
+interface SimilarTrack {
+    id:        string
+    title:     string
+    artist:    string
+    year:      number | null
+    genre:     string | null
+    embedding: number[] | null
+    score:     number | null
+}
+
+type RightTab = 'similar' | 'artist'
+
+// ── component ─────────────────────────────────────────────────────────────────
+
 interface NowPlayingProps {
-    onCollapse: () => void
+    onCollapse:   () => void
     lastPollTime: number
-    track?: Track
-    trackColor?: string
-    onFilter?: (type: 'genre' | 'mood' | 'context', value: string) => void
+    track?:       Track
+    trackColor?:  string
+    onFilter?:    (type: 'genre' | 'mood' | 'context', value: string) => void
     onCallAgent?: (query?: string) => void
 }
 
 export function NowPlaying({
     onCollapse,
     lastPollTime,
-    track: browseTrack,
+    track: propTrack,
     trackColor,
     onFilter,
 }: NowPlayingProps) {
@@ -77,62 +136,101 @@ export function NowPlaying({
         searchAndPlay, connected, connect,
     } = useSpotifyContext()
 
-    const focusTrack = browseTrack ?? (currentTrack ? {
-        id: '', title: currentTrack.name, artist: currentTrack.artist,
-        year: null, energy: null, genres: [] as string[], moods: [] as string[],
-        themes: [] as string[], contexts: [] as string[],
-        owner: '', manifestStateId: '', datasourceName: '', mbid: null, name: currentTrack.name,
-    } satisfies Track : null)
+    const focusTrack: Track | null = propTrack ?? (
+        currentTrack ? {
+            id: '',
+            title: currentTrack.name,
+            artist: currentTrack.artist,
+            year: null,
+            genres: [], moods: [], themes: [], contexts: [],
+            owner: '', manifestStateId: '', datasourceName: '',
+            name: currentTrack.name,
+            spotify_track_id: '',
+            spotify_artist_id: null,
+            rank: null,
+            duration_ms: null,
+            preview_url: null,
+            embedding: null,
+        } satisfies Track : null
+    )
 
-    const isThisTrackPlaying =
+    const isThisTrackActive =
         currentTrack && focusTrack &&
-        currentTrack.name.toLowerCase() === focusTrack.title.toLowerCase() &&
+        currentTrack.name.toLowerCase()   === focusTrack.title.toLowerCase() &&
         currentTrack.artist.toLowerCase() === focusTrack.artist.toLowerCase()
 
+    // ── state ─────────────────────────────────────────────────────────────────
     const [liveProgressMs, setLiveProgressMs] = useState(0)
-    const [albumArt, setAlbumArt] = useState<string | null>(
-        !browseTrack ? (currentTrack?.albumArt ?? null) : null
+    const [albumArt, setAlbumArt]             = useState<string | null>(
+        !propTrack ? (currentTrack?.albumArt ?? null) : null
     )
-    const [artistTracks, setArtistTracks] = useState<{ id: string; title: string; year: number | null; artist: string }[]>([])
-    const [artistLoading, setArtistLoading] = useState(false)
-    const [playLoading, setPlayLoading] = useState(false)
-    const rafRef = useRef<number | null>(null)
+    const [activeTab, setActiveTab]           = useState<RightTab>('similar')
+    const [similarTracks, setSimilarTracks]   = useState<SimilarTrack[]>([])
+    const [artistTracks, setArtistTracks]     = useState<SimilarTrack[]>([])
+    const [similarLoading, setSimilarLoading] = useState(false)
+    const [artistLoading, setArtistLoading]   = useState(false)
+    const [playLoading, setPlayLoading]       = useState(false)
+    const [playingId, setPlayingId]           = useState<string | null>(null)
+
+    const rafRef          = useRef<number | null>(null)
     const currentTrackRef = useRef(currentTrack)
     useEffect(() => { currentTrackRef.current = currentTrack }, [currentTrack])
 
+    // ── album art ─────────────────────────────────────────────────────────────
     useEffect(() => {
-        if (!browseTrack && currentTrack?.albumArt) setAlbumArt(currentTrack.albumArt)
-    }, [currentTrack?.albumArt, browseTrack])
+        if (!propTrack && currentTrack?.albumArt) setAlbumArt(currentTrack.albumArt)
+    }, [currentTrack?.albumArt, propTrack])
 
     useEffect(() => {
-        if (!browseTrack) return
-        fetchAlbumArt(browseTrack.title, browseTrack.artist).then(art => { if (art) setAlbumArt(art) })
-    }, [browseTrack?.title, browseTrack?.artist])
+        if (!focusTrack) return
+        fetchAlbumArt(focusTrack.title, focusTrack.artist).then(art => {
+            if (art) setAlbumArt(art)
+        })
+    }, [focusTrack?.title, focusTrack?.artist])
 
+    // ── progress ticker ───────────────────────────────────────────────────────
     useEffect(() => {
         if (rafRef.current) cancelAnimationFrame(rafRef.current)
         if (!currentTrack) return
-        const base = currentTrack.progressMs
+        const base     = currentTrack.progressMs
         const pollTime = lastPollTime ?? Date.now()
         const tick = () => {
             const elapsed = isPlaying ? Date.now() - pollTime : 0
-            const clamped = Math.min(base + elapsed, currentTrack.durationMs)
-            setLiveProgressMs(clamped)
+            setLiveProgressMs(Math.min(base + elapsed, currentTrack.durationMs))
             if (isPlaying) rafRef.current = requestAnimationFrame(tick)
         }
         rafRef.current = requestAnimationFrame(tick)
         return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current) }
     }, [currentTrack?.progressMs, currentTrack?.durationMs, isPlaying, lastPollTime])
 
+    // ── similar tracks ────────────────────────────────────────────────────────
     useEffect(() => {
         if (!focusTrack) return
+        setSimilarLoading(true)
+        setSimilarTracks([]);
+
+        (async () => {
+            const embedding: number[] | null =
+                (focusTrack as any).embedding
+                    ? Array.from((focusTrack as any).embedding as number[])
+                    : await embedTrack(focusTrack.artist, focusTrack.title)
+            if (!embedding) return
+            const similar = await fetchSimilarTracks(embedding, focusTrack.id || '__none__', 10)
+            setSimilarTracks(similar)
+        })().finally(() => setSimilarLoading(false))
+    }, [focusTrack?.id, focusTrack?.title])
+
+    // ── artist tracks ─────────────────────────────────────────────────────────
+    useEffect(() => {
+        if (!focusTrack?.artist) return
         setArtistLoading(true)
         setArtistTracks([])
-        fetchArtistTracks(focusTrack.artist, focusTrack.title)
+        fetchArtistTracks(focusTrack.artist, focusTrack.id || '__none__', 10)
             .then(setArtistTracks)
             .finally(() => setArtistLoading(false))
-    }, [focusTrack?.artist, focusTrack?.title])
+    }, [focusTrack?.artist, focusTrack?.id])
 
+    // ── keyboard + scroll lock ────────────────────────────────────────────────
     useEffect(() => {
         const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onCollapse() }
         window.addEventListener('keydown', onKey)
@@ -142,47 +240,62 @@ export function NowPlaying({
 
     if (!focusTrack) return null
 
-    const durationMs = currentTrack?.durationMs ?? 0
-    const progress = durationMs > 0 ? liveProgressMs / durationMs : 0
+    const durationMs  = currentTrack?.durationMs ?? 0
+    const progress    = durationMs > 0 ? liveProgressMs / durationMs : 0
+    const accentColor = trackColor ?? 'var(--accent)'
+    const hasMeta     = focusTrack.genres.length > 0 || focusTrack.moods.length > 0 ||
+                        focusTrack.contexts.length > 0 || focusTrack.themes.length > 0
 
     function scrubTo(e: React.MouseEvent<HTMLDivElement>) {
         const rect = e.currentTarget.getBoundingClientRect()
         seek(Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)) * durationMs)
     }
 
+    const handlePlayPause = async () => {
+        if (!connected) { await connect(); return }
+        if (isThisTrackActive) { await togglePlay() }
+        else {
+            setPlayLoading(true)
+            try { await searchAndPlay(`${focusTrack.title} ${focusTrack.artist}`.replace(/\(.*?\)/g, '').trim()) }
+            finally { setPlayLoading(false) }
+        }
+    }
+
     const handleNext = () => {
         if (currentTrackRef.current && onSignal) {
             const t = currentTrackRef.current
-            onSignal({ type: 'skip', weight: -1.0, track: { id: '', title: t.name, artist: t.artist, year: null, energy: null, genres: [], moods: [], contexts: [], themes: [], owner: '', manifestStateId: '', datasourceName: '', mbid: null, name: t.name } })
+            onSignal({
+                type: 'skip', weight: -1.0,
+                track: {
+                    id: '', title: t.name, artist: t.artist,
+                    year: null, genres: [], moods: [], contexts: [], themes: [],
+                    owner: '', manifestStateId: '', datasourceName: '', name: t.name,
+                    spotify_track_id: '', spotify_artist_id: null,
+                    rank: null, duration_ms: null, preview_url: null, embedding: null,
+                }
+            })
         }
         ;(onNext ?? next)?.()
     }
 
     const handlePrev = () => { ;(onPrev ?? prev)?.() }
 
-    const handlePlayPause = async () => {
-        if (!connected) { await connect(); return }
-        if (isThisTrackPlaying) {
-            await togglePlay()
-        } else {
-            setPlayLoading(true)
-            try { await searchAndPlay(`${focusTrack.title} ${focusTrack.artist}`) }
-            finally { setPlayLoading(false) }
-        }
-    }
-
     const handleFilterTag = (type: 'genre' | 'mood' | 'context', value: string) => {
-        onFilter?.(type, value)
-        onCollapse()
+        onFilter?.(type, value); onCollapse()
     }
 
-    const accentColor = trackColor ?? 'var(--accent)'
-    const hasMeta = browseTrack && (
-        browseTrack.genres.length > 0 || browseTrack.moods.length > 0 ||
-        browseTrack.contexts.length > 0 || browseTrack.themes.length > 0 ||
-        browseTrack.energy !== null || browseTrack.mbid || browseTrack.owner
-    )
+    const handlePlayRow = async (t: SimilarTrack) => {
+        if (!connected) { await connect(); return }
+        setPlayingId(t.id)
+        try { await searchAndPlay(`${t.title} ${t.artist}`.replace(/\(.*?\)/g, '').trim()) }
+        catch { setPlayingId(null) }
+    }
 
+    const showPause     = isThisTrackActive && isPlaying
+    const activeList    = activeTab === 'similar' ? similarTracks : artistTracks
+    const activeLoading = activeTab === 'similar' ? similarLoading : artistLoading
+
+    // ── render ────────────────────────────────────────────────────────────────
     return (
         <div className="np-overlay">
             {albumArt && <div className="np-bg" style={{ backgroundImage: `url(${albumArt})` }} />}
@@ -190,26 +303,19 @@ export function NowPlaying({
 
             <div className="np-layout">
 
-                {/* ════════════════ LEFT COL ════════════════ */}
+                {/* ══ LEFT COL ══ */}
                 <div className="np-col-left">
-
                     <button className="np-collapse" onClick={onCollapse} aria-label="Close">
                         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                             <path d="M18 6L6 18M6 6l12 12" />
                         </svg>
                     </button>
 
-                    {/* ── prominent artist nameplate ── */}
                     <div className="np-artist-hero">
-                        <div
-                            className="np-artist-hero-name"
-                            style={{ '--np-accent': accentColor } as React.CSSProperties}
-                        >
+                        <div className="np-artist-hero-name" style={{ '--np-accent': accentColor } as React.CSSProperties}>
                             {focusTrack.artist}
                         </div>
-                        {focusTrack.year && (
-                            <div className="np-artist-hero-year">{focusTrack.year}</div>
-                        )}
+                        {focusTrack.year && <div className="np-artist-hero-year">{focusTrack.year}</div>}
                     </div>
 
                     <div className="np-art-wrap">
@@ -218,17 +324,17 @@ export function NowPlaying({
                                 ? <img src={albumArt} alt={focusTrack.title} className="np-art-img" />
                                 : <span className="np-art-initial">{focusTrack.title.slice(0, 1).toUpperCase()}</span>
                             }
-                            {focusTrack.energy !== null && (
-                                <div className="np-art-energy" style={{ width: `${Math.round(focusTrack.energy * 100)}%`, background: accentColor }} />
-                            )}
                         </div>
                     </div>
 
                     <div className="np-info">
                         <div className="np-name">{focusTrack.title}</div>
+                        {focusTrack.duration_ms && (
+                            <div className="np-duration">{fmtTime(focusTrack.duration_ms)}</div>
+                        )}
                     </div>
 
-                    {isThisTrackPlaying && (
+                    {isThisTrackActive && (
                         <div className="np-scrubber-wrap">
                             <div className="np-progress" onClick={scrubTo}>
                                 <div className="np-progress-track">
@@ -244,132 +350,157 @@ export function NowPlaying({
                     )}
 
                     <div className="np-controls">
-                        <button className="np-btn np-btn--skip" onClick={handlePrev} aria-label="Previous"
-                            style={{ opacity: isThisTrackPlaying ? 1 : 0.2, pointerEvents: isThisTrackPlaying ? 'auto' : 'none' }}>
-                            <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
-                                <path d="M6 6h2v12H6zm3.5 6 8.5 6V6z" />
-                            </svg>
+                        <button className="np-btn np-btn--skip" onClick={handlePrev}
+                            style={{ opacity: isThisTrackActive ? 1 : 0.2, pointerEvents: isThisTrackActive ? 'auto' : 'none' }} aria-label="Previous">
+                            <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z" /></svg>
                         </button>
-
                         <button
-                            className={`np-btn np-btn--play${isThisTrackPlaying && isPlaying ? ' np-btn--playing' : ''}`}
-                            onClick={handlePlayPause}
-                            disabled={connecting || playLoading}
-                            aria-label={isThisTrackPlaying && isPlaying ? 'Pause' : 'Play'}
+                            className={`np-btn np-btn--play${showPause ? ' np-btn--playing' : ''}`}
+                            onClick={handlePlayPause} disabled={connecting || playLoading}
+                            aria-label={showPause ? 'Pause' : 'Play'}
                             style={{ background: accentColor } as React.CSSProperties}
                         >
                             {connecting || playLoading
                                 ? <span className="upload-spinner" style={{ width: 20, height: 20, borderWidth: 2, borderTopColor: 'var(--bg)' }} />
-                                : isThisTrackPlaying && isPlaying
-                                    ? <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><rect x="5" y="4" width="4" height="16" rx="1" /><rect x="15" y="4" width="4" height="16" rx="1" /></svg>
-                                    : <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M8 5.14v14l11-7-11-7z" /></svg>
+                                : showPause
+                                    ? <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><rect x="5" y="4" width="4" height="16" rx="1"/><rect x="15" y="4" width="4" height="16" rx="1"/></svg>
+                                    : <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M8 5.14v14l11-7-11-7z"/></svg>
                             }
                         </button>
-
-                        <button className="np-btn np-btn--skip" onClick={handleNext} aria-label="Next"
-                            style={{ opacity: isThisTrackPlaying ? 1 : 0.2, pointerEvents: isThisTrackPlaying ? 'auto' : 'none' }}>
-                            <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
-                                <path d="M16 6h2v12h-2zM6 18l8.5-6L6 6v12z" />
-                            </svg>
+                        <button className="np-btn np-btn--skip" onClick={handleNext}
+                            style={{ opacity: isThisTrackActive ? 1 : 0.2, pointerEvents: isThisTrackActive ? 'auto' : 'none' }} aria-label="Next">
+                            <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M16 6h2v12h-2zM6 18l8.5-6L6 6v12z" /></svg>
                         </button>
                     </div>
 
                     {error && <div className="np-error">{error}</div>}
                 </div>
 
-                {/* ════════════════ RIGHT COL ════════════════ */}
+                {/* ══ RIGHT COL ══ */}
                 <div className="np-col-right">
                     <div className="np-right-body">
 
+                        {/* Tags */}
                         {hasMeta && (
                             <div className="np-tags-section">
-                                {browseTrack!.genres.length > 0 && (
+                                {focusTrack.genres.length > 0 && (
                                     <div className="np-tags">
-                                        {browseTrack!.genres.map((g, i) => (
+                                        {focusTrack.genres.map((g, i) => (
                                             <button key={g} className="np-tag np-tag--genre"
                                                 style={{ opacity: i === 0 ? 1 : 0.75, color: accentColor, background: `${accentColor}15`, borderColor: `${accentColor}30` }}
                                                 onClick={() => handleFilterTag('genre', g)}>{g}</button>
                                         ))}
                                     </div>
                                 )}
-                                {browseTrack!.moods.length > 0 && (
+                                {focusTrack.moods.length > 0 && (
                                     <div className="np-tags">
-                                        {browseTrack!.moods.map(m => (
+                                        {focusTrack.moods.map(m => (
                                             <button key={m} className="np-tag np-tag--mood" onClick={() => handleFilterTag('mood', m)}>{m}</button>
                                         ))}
                                     </div>
                                 )}
-                                {browseTrack!.contexts.length > 0 && (
+                                {focusTrack.contexts.length > 0 && (
                                     <div className="np-tags">
-                                        {browseTrack!.contexts.map(c => (
+                                        {focusTrack.contexts.map(c => (
                                             <button key={c} className="np-tag np-tag--context" onClick={() => handleFilterTag('context', c)}>{c}</button>
                                         ))}
                                     </div>
                                 )}
-                                {browseTrack!.themes.length > 0 && (
+                                {focusTrack.themes.length > 0 && (
                                     <div className="np-tags">
-                                        {browseTrack!.themes.map(t => <span key={t} className="np-tag np-tag--theme">{t}</span>)}
-                                    </div>
-                                )}
-                                {browseTrack!.energy !== null && (
-                                    <div className="np-energy-row">
-                                        <span className="np-energy-label">energy</span>
-                                        <div className="np-energy-track">
-                                            <div className="np-energy-fill" style={{ width: `${Math.round(browseTrack!.energy * 100)}%`, background: accentColor }} />
-                                        </div>
-                                        <span className="np-energy-val">{Math.round(browseTrack!.energy * 100)}</span>
+                                        {focusTrack.themes.map(t => (
+                                            <span key={t} className="np-tag np-tag--theme">{t}</span>
+                                        ))}
                                     </div>
                                 )}
                             </div>
                         )}
 
-                        {browseTrack && (browseTrack.mbid || browseTrack.owner) && (
+                        {/* Onchain fields */}
+                        {(focusTrack.spotify_track_id || focusTrack.owner) && (
                             <div className="np-fields">
-                                {browseTrack.mbid && (
+                                {focusTrack.spotify_track_id && (
                                     <div className="np-field">
-                                        <span className="np-field-key">mbid</span>
-                                        <span className="np-field-val np-mono">{browseTrack.mbid}</span>
+                                        <span className="np-field-key">spotify id</span>
+                                        <span className="np-field-val np-mono">{focusTrack.spotify_track_id}</span>
                                     </div>
                                 )}
-                                {browseTrack.owner && (
+                                {focusTrack.owner && (
                                     <div className="np-field">
                                         <span className="np-field-key">artist address</span>
-                                        <span className="np-field-val np-mono">{browseTrack.owner.slice(0, 6)}…{browseTrack.owner.slice(-4)}</span>
+                                        <span className="np-field-val np-mono">{focusTrack.owner.slice(0, 6)}…{focusTrack.owner.slice(-4)}</span>
                                     </div>
                                 )}
                             </div>
                         )}
 
-                        <div className="np-artist-section">
-                            <div className="np-artist-section-label">more by {focusTrack.artist}</div>
-                            {artistLoading ? (
-                                <div className="np-artist-loading">
-                                    <span className="upload-spinner" style={{ width: 14, height: 14, borderWidth: 1.5 }} />
-                                </div>
-                            ) : artistTracks.length === 0 ? (
-                                <div className="np-artist-empty">No other tracks on the network</div>
-                            ) : (
-                                <div className="np-artist-list">
-                                    {artistTracks.map((t, i) => (
-                                        <button key={t.id || i} className="np-artist-row"
-                                            onClick={async () => { if (!connected) await connect(); await searchAndPlay(`${t.title} ${t.artist}`) }}>
-                                            <div className="np-artist-row-initial" style={{ color: accentColor }}>{t.title.slice(0, 1).toUpperCase()}</div>
-                                            <div className="np-artist-row-info">
-                                                <span className="np-artist-row-title">{t.title}</span>
-                                                {t.year && <span className="np-artist-row-year">{t.year}</span>}
-                                            </div>
-                                            <svg className="np-artist-row-play" viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
-                                                <path d="M8 5.14v14l11-7-11-7z" />
-                                            </svg>
-                                        </button>
-                                    ))}
-                                </div>
-                            )}
+                        {/* ── Tabbed track lists ── */}
+                        <div className="np-tabs-section">
+                            <div className="np-tabs">
+                                <button
+                                    className={`np-tab${activeTab === 'similar' ? ' np-tab--active' : ''}`}
+                                    onClick={() => setActiveTab('similar')}
+                                    style={activeTab === 'similar' ? { color: accentColor, borderBottomColor: accentColor } : undefined}
+                                >
+                                    Similar
+                                </button>
+                                <button
+                                    className={`np-tab${activeTab === 'artist' ? ' np-tab--active' : ''}`}
+                                    onClick={() => setActiveTab('artist')}
+                                    style={activeTab === 'artist' ? { color: accentColor, borderBottomColor: accentColor } : undefined}
+                                >
+                                    By {focusTrack.artist}
+                                </button>
+                            </div>
+
+                            <div className="np-tab-body">
+                                {activeLoading && (
+                                    <div className="np-artist-loading">
+                                        <span className="upload-spinner" style={{ width: 14, height: 14, borderWidth: 1.5 }} />
+                                    </div>
+                                )}
+
+                                {!activeLoading && activeList.length === 0 && (
+                                    <div className="np-artist-empty">
+                                        {activeTab === 'similar' ? 'No similar tracks found' : `No other tracks by ${focusTrack.artist} on the network`}
+                                    </div>
+                                )}
+
+                                {!activeLoading && activeList.length > 0 && (
+                                    <ul className="np-similar-list">
+                                        {activeList.map((t, i) => {
+                                            const isActive = playingId === t.id
+                                            return (
+                                                <li key={t.id} className={`np-similar-row${isActive ? ' np-similar-row--active' : ''}`}>
+                                                    <span className="np-similar-rank">{i + 1}</span>
+                                                    <div className="np-similar-info">
+                                                        <span className="np-similar-title">{t.title}</span>
+                                                        <span className="np-similar-meta">
+                                                            {activeTab === 'similar' ? t.artist : (t.year ?? '')}
+                                                            {t.genre && activeTab === 'similar' && <> · <span className="np-similar-genre">{t.genre}</span></>}
+                                                        </span>
+                                                    </div>
+                                                    <button
+                                                        className="np-similar-play"
+                                                        onClick={() => handlePlayRow(t)}
+                                                        style={{ color: accentColor }}
+                                                        aria-label={`Play ${t.title}`}
+                                                    >
+                                                        {isActive
+                                                            ? <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><rect x="5" y="4" width="4" height="16" rx="1"/><rect x="15" y="4" width="4" height="16" rx="1"/></svg>
+                                                            : <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                                                        }
+                                                    </button>
+                                                </li>
+                                            )
+                                        })}
+                                    </ul>
+                                )}
+                            </div>
                         </div>
 
                     </div>
                 </div>
-
             </div>
         </div>
     )

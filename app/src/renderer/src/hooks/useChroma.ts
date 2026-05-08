@@ -44,6 +44,8 @@ function normalizeHit(hit: any): Track | null {
     owner:           hit.owner ?? '',
     datasourceName:  hit.schemaId ?? '',
     name:            str('name') ?? title,
+    // pass through embedding if present — kernel uses this on play/skip
+    embedding:       hit.embedding ?? undefined,
   } satisfies Track
 }
 
@@ -65,7 +67,7 @@ async function chromaBrowse(offset: number): Promise<{ results: any[], total: nu
   return resp.json()
 }
 
-async function chromaSearch(query: string, nResults = 50): Promise<any[]> {
+async function chromaSearch(query: string, nResults = 100): Promise<any[]> {
   const params = new URLSearchParams({ q: query, n_results: String(nResults) })
   const resp = await fetch(`${CHROMA_URL}/search?${params}`)
   if (!resp.ok) throw new Error(`Chroma error: ${resp.status}`)
@@ -73,21 +75,43 @@ async function chromaSearch(query: string, nResults = 50): Promise<any[]> {
   return data.results ?? []
 }
 
+/**
+ * Query Chroma by raw embedding vector — used by the kernel.
+ * Returns hits with embeddings attached so the kernel can update on play/skip
+ * without a separate /embed round trip.
+ */
+async function chromaSearchVector(embedding: number[], nResults = 100): Promise<any[]> {
+  const resp = await fetch(`${CHROMA_URL}/search/vector`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ embedding, n_results: nResults }),
+  })
+  if (!resp.ok) throw new Error(`Chroma vector search error: ${resp.status}`)
+  const data = await resp.json()
+  return data.results ?? []
+}
+
 // ── hook ──────────────────────────────────────────────────────────────────────
 
 export interface UseChromaOptions {
-  initialQuery?: string  // if set, first load uses semantic search instead of browse
+  initialQuery?: string
 }
 
 export interface UseChromaResult {
-  tracks: Track[]
-  loading: boolean
+  tracks:      Track[]
+  loading:     boolean
   loadingMore: boolean
-  error: string | null
-  hasMore: boolean
-  loadMore: () => void
-  search: string
-  setSearch: (s: string) => void
+  error:       string | null
+  hasMore:     boolean
+  loadMore:    () => void
+  search:      string
+  setSearch:   (s: string) => void
+  /**
+   * Call this after the kernel seeds μ₀ to replace the generic initial results
+   * with kernel-personalized ones. Accepts the raw embedding vector.
+   * Subsequent loadMore calls continue with paginated browse as normal.
+   */
+  applyKernelQuery: (embedding: number[]) => void
 }
 
 export function useChroma({ initialQuery }: UseChromaOptions = {}): UseChromaResult {
@@ -98,14 +122,14 @@ export function useChroma({ initialQuery }: UseChromaOptions = {}): UseChromaRes
   const [search, setSearch]           = useState('')
   const [hasMore, setHasMore]         = useState(true)
 
-  const pageCache    = useRef<Map<number, Track[]>>(new Map())
-  const offsetRef    = useRef(0)
-  const totalRef     = useRef<number | null>(null)
-  const debounceRef  = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const activeQuery  = useRef('')
-  const loadingRef   = useRef(false)
-  const initialQueryRef = useRef(initialQuery) // stable ref, doesn't re-trigger effects
-  const isSearching  = search.trim().length > 0
+  const pageCache       = useRef<Map<number, Track[]>>(new Map())
+  const offsetRef       = useRef(0)
+  const totalRef        = useRef<number | null>(null)
+  const debounceRef     = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const activeQuery     = useRef('')
+  const loadingRef      = useRef(false)
+  const initialQueryRef = useRef(initialQuery)
+  const isSearching     = search.trim().length > 0
 
   const loadPage = useCallback(async (offset: number) => {
     if (loadingRef.current) return
@@ -141,7 +165,7 @@ export function useChroma({ initialQuery }: UseChromaOptions = {}): UseChromaRes
     }
   }, [])
 
-  // initial load — use taste profile query if available, else browse
+  // initial load — generic text query or plain browse
   useEffect(() => {
     const q = initialQueryRef.current?.trim()
     if (q) {
@@ -149,11 +173,9 @@ export function useChroma({ initialQuery }: UseChromaOptions = {}): UseChromaRes
       chromaSearch(q, 100)
         .then(hits => {
           const normalized = dedup(hits.map(normalizeHit).filter(Boolean) as Track[])
-          // store as page 0 so loadMore can append browse pages after
           pageCache.current.set(0, normalized)
           offsetRef.current = 0
           setTracks(normalized)
-          // after profile results, subsequent loadMore pages come from browse
           setHasMore(true)
         })
         .catch(e => setError(e instanceof Error ? e.message : String(e)))
@@ -169,7 +191,6 @@ export function useChroma({ initialQuery }: UseChromaOptions = {}): UseChromaRes
     debounceRef.current = setTimeout(async () => {
       const q = search.trim()
       if (!q) {
-        // restore browse mode from cache
         activeQuery.current = ''
         const cached = Array.from(pageCache.current.entries())
           .sort(([a], [b]) => a - b)
@@ -199,5 +220,50 @@ export function useChroma({ initialQuery }: UseChromaOptions = {}): UseChromaRes
     loadPage(offsetRef.current + PAGE_SIZE)
   }, [loadingMore, hasMore, isSearching, loadPage])
 
-  return { tracks, loading, loadingMore, error, hasMore, loadMore, search, setSearch }
+  /**
+   * Replace current tracks with kernel-personalized results.
+   *
+   * Flow:
+   *   1. Query /search/vector with the kernel's lookahead point q
+   *   2. Surface those results first (most relevant at top)
+   *   3. Append paginated browse results as the user scrolls
+   *
+   * Page cache is cleared so loadMore starts fresh from browse page 0
+   * after the kernel results — no duplicate suppression issues.
+   */
+  const applyKernelQuery = useCallback(async (embedding: number[]) => {
+    if (isSearching) return  // don't override user text search
+
+    setLoading(true)
+    setError(null)
+
+    try {
+      const hits = await chromaSearchVector(embedding, 100)
+      const normalized = dedup(hits.map(normalizeHit).filter(Boolean) as Track[])
+
+      // Clear page cache — browse pages after kernel results start fresh
+      pageCache.current.clear()
+      offsetRef.current = 0
+      totalRef.current  = null
+
+      setTracks(normalized)
+      setHasMore(true)   // browse pages still available via loadMore
+    } catch (e: any) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setLoading(false)
+    }
+  }, [isSearching])
+
+  return {
+    tracks,
+    loading,
+    loadingMore,
+    error,
+    hasMore,
+    loadMore,
+    search,
+    setSearch,
+    applyKernelQuery,
+  }
 }

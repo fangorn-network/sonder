@@ -10,11 +10,11 @@ from contextlib import asynccontextmanager
 import os
 
 from pydantic import BaseModel
- 
+
 class EmbedRequest(BaseModel):
     text: str | None = None
     texts: list[str] | None = None  # batch path — preferred for seeding
- 
+
 class VectorSearchRequest(BaseModel):
     embedding:  list[float]
     n_results:  int = 20
@@ -26,8 +26,8 @@ class VectorSearchRequest(BaseModel):
 ef_global = None
 SUBGRAPH_URL = "https://api.studio.thegraph.com/query/1745244/fangorn-data-discovery/version/latest"
 IPFS_GATEWAY = "https://ipfs.io/ipfs"
-SCHEMA_ID    = "0xf4016713d644f9f7b622826269a53a05092f04b73db9dfe95bd6d2d246e38380"
-CHROMA_PATH = os.environ.get("CHROMA_PATH", "./vectordb/chroma_db_test")
+SCHEMA_ID    = "0x19ad28398d8c9b43a4ef112b8e8dd72358154e52738789b546d43df0475c0216"
+CHROMA_PATH  = os.environ.get("CHROMA_PATH", "./db/0x19ad28398d8c9b43a4ef112b8e8dd72358154e52738789b546d43df0475c0216")
 COLLECTION   = "fangorn"
 PAGE_SIZE    = 100
 IPFS_TIMEOUT = 20
@@ -37,49 +37,77 @@ collection = None
 
 # ── subgraph (sync, runs in thread) ──────────────────────────────────────────
 
-MANIFESTS_QUERY = """
-query Manifests($schemaId: Bytes!, $first: Int!, $skip: Int!) {
-  manifestPublisheds(
+PUBLISHES_QUERY = """
+query Publishes($schemaId: Bytes!, $first: Int!, $skip: Int!) {
+manifestPublisheds(
     where: { schemaId: $schemaId }
     first: $first
     skip: $skip
     orderBy: blockNumber
     orderDirection: asc
-  ) {
+) {
     id owner schemaId nameHash name manifestCid blockNumber blockTimestamp transactionHash
-  }
-  manifestUpdateds(
+}
+}
+"""
+
+UPDATES_QUERY = """
+query Updates($schemaId: Bytes!, $first: Int!, $skip: Int!) {
+manifestUpdateds(
     where: { schemaId: $schemaId }
     first: $first
     skip: $skip
     orderBy: version
     orderDirection: desc
-  ) {
+) {
     id owner schemaId nameHash manifestCid version blockNumber blockTimestamp transactionHash
-  }
+}
 }
 """
 
-def _query_subgraph(variables: dict) -> dict:
-    resp = requests.post(SUBGRAPH_URL, json={"query": MANIFESTS_QUERY, "variables": variables}, timeout=30)
+def _query_subgraph(query: str, variables: dict) -> dict:
+    resp = requests.post(SUBGRAPH_URL, json={"query": query, "variables": variables}, timeout=30)
     resp.raise_for_status()
     data = resp.json()
     if "errors" in data:
         raise RuntimeError(f"Subgraph error: {data['errors']}")
     return data["data"]
 
+def _dedup(events: list, key: str = "id") -> list:
+    seen = set()
+    out = []
+    for e in events:
+        if e[key] not in seen:
+            seen.add(e[key])
+            out.append(e)
+    return out
+
 def _fetch_all_events(schema_id: str) -> tuple[list, list]:
-    publishes, updates = [], []
+    # Page publishes independently
+    publishes = []
     skip = 0
     while True:
-        data = _query_subgraph({"schemaId": schema_id, "first": PAGE_SIZE, "skip": skip})
+        data = _query_subgraph(PUBLISHES_QUERY, {"schemaId": schema_id, "first": PAGE_SIZE, "skip": skip})
         bp = data.get("manifestPublisheds", [])
-        bu = data.get("manifestUpdateds", [])
         publishes.extend(bp)
-        updates.extend(bu)
-        if len(bp) < PAGE_SIZE and len(bu) < PAGE_SIZE:
+        if len(bp) < PAGE_SIZE:
             break
         skip += PAGE_SIZE
+
+    # Page updates independently
+    updates = []
+    skip = 0
+    while True:
+        data = _query_subgraph(UPDATES_QUERY, {"schemaId": schema_id, "first": PAGE_SIZE, "skip": skip})
+        bu = data.get("manifestUpdateds", [])
+        updates.extend(bu)
+        if len(bu) < PAGE_SIZE:
+            break
+        skip += PAGE_SIZE
+
+    publishes = _dedup(publishes)
+    updates   = _dedup(updates)
+
     return publishes, updates
 
 # ── ipfs (async) ──────────────────────────────────────────────────────────────
@@ -118,6 +146,9 @@ def build_document_from_entry(entry: dict, handle_results: dict, meta: dict) -> 
     name   = entry.get("name", "")
     fields = entry.get("fields", {})
     parts  = [f"name: {name}"] if name else []
+
+    if name:
+        parts.append(f"spotify_track_id: {name}")
 
     for field_key, field_val in fields.items():
         if isinstance(field_val, dict):
@@ -159,30 +190,40 @@ def build_document_from_entry(entry: dict, handle_results: dict, meta: dict) -> 
 async def ingest():
     global collection
     global ef_global
-    
+
     loop = asyncio.get_event_loop()
 
     print(f"Fetching events for schemaId {SCHEMA_ID}...")
-    # run blocking subgraph calls in a thread so they don't block the event loop
     publishes, updates = await loop.run_in_executor(None, _fetch_all_events, SCHEMA_ID)
-    print(f"  {len(publishes)} publishes, {len(updates)} updates")
+    print(f"  {len(publishes)} publishes, {len(updates)} updates (after event-level dedup)")
 
+    # Build seen_cids: one meta entry per unique manifest CID.
+    # Track the highest blockTimestamp seen per CID so that downstream
+    # "newest manifest wins" logic operates on accurate timestamps.
     seen_cids: dict[str, dict] = {}
     for p in publishes:
         cid = p["manifestCid"]
-        if cid not in seen_cids:
+        ts  = int(p["blockTimestamp"])
+        if cid not in seen_cids or ts > seen_cids[cid]["blockTimestamp"]:
             seen_cids[cid] = {
-                "owner": p["owner"], "nameHash": p["nameHash"],
-                "name": p["name"], "manifestCid": cid,
-                "version": 0, "blockTimestamp": int(p["blockTimestamp"]),
+                "owner":          p["owner"],
+                "nameHash":       p["nameHash"],
+                "name":           p["name"],
+                "manifestCid":    cid,
+                "version":        0,
+                "blockTimestamp": ts,
             }
     for u in updates:
         cid = u["manifestCid"]
-        if cid not in seen_cids:
+        ts  = int(u["blockTimestamp"])
+        if cid not in seen_cids or ts > seen_cids[cid]["blockTimestamp"]:
             seen_cids[cid] = {
-                "owner": u["owner"], "nameHash": u["nameHash"],
-                "name": u["nameHash"], "manifestCid": cid,
-                "version": int(u["version"]), "blockTimestamp": int(u["blockTimestamp"]),
+                "owner":          u["owner"],
+                "nameHash":       u["nameHash"],
+                "name":           u["nameHash"],
+                "manifestCid":    cid,
+                "version":        int(u["version"]),
+                "blockTimestamp": ts,
             }
 
     unique_cids = list(seen_cids.keys())
@@ -197,26 +238,76 @@ async def ingest():
         for i, entry in enumerate(manifest_json.get("entries", [])):
             all_entries.append({"entry": entry, "entryIndex": i, "meta": meta})
 
-    print(f"  {len(all_entries)} entries to ingest")
+    print(f"  {len(all_entries)} raw entries across all manifests")
 
+    # ── Option B: newest manifest wins per entry name ─────────────────────────
+    # Root cause: each successive manifest publish carries forward all entries
+    # from prior manifests plus new ones, so the same track appears in multiple
+    # manifest CIDs. We keep only the copy from whichever manifest has the
+    # highest blockTimestamp.
+    #
+    # TODO (Option A): fix the publisher to emit only *new* entries per publish
+    # so manifests are incremental and this dedup becomes unnecessary.
+    best_entry: dict[str, dict] = {}
+    unnamed_entries: list[dict] = []
+
+    for item in all_entries:
+        name = item["entry"].get("name", "")
+        if not name:
+            # Can't deduplicate unnamed entries by name; collect separately.
+            unnamed_entries.append(item)
+            continue
+        ts = item["meta"]["blockTimestamp"]
+        if name not in best_entry or ts > best_entry[name]["meta"]["blockTimestamp"]:
+            best_entry[name] = item
+
+    deduped_entries = list(best_entry.values()) + unnamed_entries
+    print(f"  {len(deduped_entries)} entries after name-dedup "
+        f"({len(all_entries) - len(deduped_entries)} duplicates dropped, "
+        f"{len(unnamed_entries)} unnamed kept as-is)")
+
+    # ── resolve handle CIDs ───────────────────────────────────────────────────
     handle_cids = list(set(
-        uri for item in all_entries
+        uri for item in deduped_entries
         for uri in extract_handle_cids_from_entry(item["entry"])
     ))
     print(f"  {len(handle_cids)} handle CIDs — fetching from IPFS...")
     handle_results = await fetch_all_ipfs(handle_cids)
 
+    # ── build Chroma documents ────────────────────────────────────────────────
     ids, documents, metadatas = [], [], []
     skipped = 0
-    for item in all_entries:
+    seen_doc_ids: set[str] = set()
+    unnamed_counter = 0
+
+    for item in deduped_entries:
         result = build_document_from_entry(item["entry"], handle_results, item["meta"])
         if result is None:
             skipped += 1
             continue
         doc, meta = result
-        ids.append(f"{item['meta']['manifestCid']}-{item['entryIndex']}")
+
+        name = item["entry"].get("name", "")
+        if name:
+            # Entry name is a Spotify track ID (or equivalent unique handle),
+            # so it's safe to use as a stable, content-addressed Chroma ID.
+            doc_id = f"entry:{name}"
+        else:
+            doc_id = f"{item['meta']['manifestCid']}-{item['entryIndex']}-u{unnamed_counter}"
+            unnamed_counter += 1
+
+        if doc_id in seen_doc_ids:
+            # Shouldn't happen after dedup, but guard anyway.
+            print(f"  [warn] duplicate doc id skipped: {doc_id}")
+            skipped += 1
+            continue
+
+        seen_doc_ids.add(doc_id)
+        ids.append(doc_id)
         documents.append(doc)
         metadatas.append(meta)
+
+    print(f"  {len(ids)} documents to upsert into Chroma, {skipped} skipped")
 
     BATCH = 100
     for i in range(0, len(ids), BATCH):
@@ -284,8 +375,8 @@ async def embed(body: EmbedRequest):
         return {"embedding": vectors[0].tolist()}
     else:
         return {"error": "provide text or texts"}
- 
- 
+
+
 @app.post("/search/vector")
 async def search_vector(body: VectorSearchRequest):
     """
@@ -295,7 +386,7 @@ async def search_vector(body: VectorSearchRequest):
     where: dict = {}
     if body.owner:     where["owner"]    = body.owner
     if body.schema_id: where["schemaId"] = body.schema_id
- 
+
     loop = asyncio.get_event_loop()
     results = await loop.run_in_executor(
         None,
@@ -306,7 +397,7 @@ async def search_vector(body: VectorSearchRequest):
             include=["documents", "metadatas", "distances", "embeddings"],
         )
     )
- 
+
     hits = [
         {
             "id":        results["ids"][0][i],
@@ -319,10 +410,8 @@ async def search_vector(body: VectorSearchRequest):
         for i in range(len(results["ids"][0]))
     ]
     return {"results": hits}
- 
- 
-# ── modified /search — add embeddings to text search responses ────────────────
-# Replace your existing /search with this. Only change: embeddings in include + response.
+
+
 @app.get("/search")
 async def search(
     q:         str        = Query(...),
@@ -346,7 +435,7 @@ async def search(
             "id":        results["ids"][0][i],
             "score":     round(1 - results["distances"][0][i], 4),
             "distance":  results["distances"][0][i],
-            "embedding": results["embeddings"][0][i].tolist(),  # ← fix
+            "embedding": results["embeddings"][0][i].tolist(),
             "document":  results["documents"][0][i],
             **results["metadatas"][0][i],
         }

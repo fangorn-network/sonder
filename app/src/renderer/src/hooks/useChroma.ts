@@ -18,41 +18,44 @@ function parseDocument(doc: string): Record<string, string> {
 
 function normalizeHit(hit: any): Track | null {
   const f = parseDocument(hit.document ?? '')
+
   const str = (key: string): string | null => f[key] ?? null
   const num = (key: string): number | null => {
     const v = parseFloat(f[key] ?? '')
     return isNaN(v) ? null : v
   }
+  // values are comma-separated strings: "pop, electropop, dance pop"
   const arr = (key: string): string[] =>
     f[key] ? f[key].split(',').map((s: string) => s.trim()).filter(Boolean) : []
 
-  const title  = str('title') ?? str('name') ?? 'Unknown'
+  const title = str('title') ?? str('name') ?? 'Unknown'
   const artist = str('artist') ?? (hit.owner?.slice(0, 8) + '…')
 
   return {
-    id:              hit.id,
+    id: hit.id,
     manifestStateId: hit.manifestCid,
-    mbid:            str('mbid'),
+    spotify_artist_id: str('spotify_artist_id'),
+    spotify_track_id: str('spotify_track_id') ?? '',
     title,
     artist,
-    year:            num('year'),
-    energy:          num('energy'),
-    genres:          arr('genres'),
-    moods:           arr('moods'),
-    themes:          arr('themes'),
-    contexts:        arr('contexts'),
-    owner:           hit.owner ?? '',
-    datasourceName:  hit.schemaId ?? '',
-    name:            str('name') ?? title,
-    // pass through embedding if present — kernel uses this on play/skip
-    embedding:       hit.embedding ?? undefined,
+    year: num('year'),
+    rank: num('rank'),
+    duration_ms: num('duration_ms'),
+    genres: arr('genres'),
+    moods: arr('moods'),
+    themes: arr('themes'),
+    contexts: arr('contexts'),
+    owner: hit.owner ?? '',
+    datasourceName: hit.schemaId ?? '',
+    name: str('name') ?? title,
+    embedding: hit.embedding ?? undefined,
   } satisfies Track
 }
 
 function dedup(tracks: Track[]): Track[] {
   const seen = new Map<string, Track>()
   for (const t of tracks) {
-    const key = t.mbid ?? t.id
+    const key = t.spotify_track_id || t.id
     if (!seen.has(key)) seen.set(key, t)
   }
   return Array.from(seen.values())
@@ -60,31 +63,22 @@ function dedup(tracks: Track[]): Track[] {
 
 // ── api ───────────────────────────────────────────────────────────────────────
 
-async function chromaBrowse(offset: number): Promise<{ results: any[], total: number }> {
-  const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(offset) })
-  const resp = await fetch(`${CHROMA_URL}/browse?${params}`)
-  if (!resp.ok) throw new Error(`Chroma error: ${resp.status}`)
-  return resp.json()
-}
-
-async function chromaSearch(query: string, nResults = 100): Promise<any[]> {
-  const params = new URLSearchParams({ q: query, n_results: String(nResults) })
+async function chromaSearch(query: string, nResults: number, offset: number): Promise<any[]> {
+  const params = new URLSearchParams({
+    q: query || 'music',
+    n_results: String(nResults + offset),
+  })
   const resp = await fetch(`${CHROMA_URL}/search?${params}`)
   if (!resp.ok) throw new Error(`Chroma error: ${resp.status}`)
   const data = await resp.json()
-  return data.results ?? []
+  return (data.results ?? []).slice(offset)
 }
 
-/**
- * Query Chroma by raw embedding vector — used by the kernel.
- * Returns hits with embeddings attached so the kernel can update on play/skip
- * without a separate /embed round trip.
- */
 async function chromaSearchVector(embedding: number[], nResults = 100): Promise<any[]> {
   const resp = await fetch(`${CHROMA_URL}/search/vector`, {
-    method:  'POST',
+    method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ embedding, n_results: nResults }),
+    body: JSON.stringify({ embedding, n_results: nResults }),
   })
   if (!resp.ok) throw new Error(`Chroma vector search error: ${resp.status}`)
   const data = await resp.json()
@@ -94,176 +88,135 @@ async function chromaSearchVector(embedding: number[], nResults = 100): Promise<
 // ── hook ──────────────────────────────────────────────────────────────────────
 
 export interface UseChromaOptions {
-  initialQuery?: string
+  genreFilter?: string
+  moodFilter?: string
+  contextFilter?: string
 }
 
 export interface UseChromaResult {
-  tracks:      Track[]
-  loading:     boolean
+  tracks: Track[]
+  loading: boolean
   loadingMore: boolean
-  error:       string | null
-  hasMore:     boolean
-  loadMore:    () => void
-  search:      string
-  setSearch:   (s: string) => void
-  /**
-   * Call this after the kernel seeds μ₀ to replace the generic initial results
-   * with kernel-personalized ones. Accepts the raw embedding vector.
-   * Subsequent loadMore calls continue with paginated browse as normal.
-   */
+  error: string | null
+  hasMore: boolean
+  loadMore: () => void
+  search: string
+  setSearch: (s: string) => void
   applyKernelQuery: (embedding: number[]) => void
+  allGenres: string[]
+  allMoods: string[]
+  allContexts: string[]
 }
 
-export function useChroma({ initialQuery }: UseChromaOptions = {}): UseChromaResult {
-  const [tracks, setTracks]           = useState<Track[]>([])
-  const [loading, setLoading]         = useState(true)
+export function useChroma({
+  genreFilter,
+  moodFilter,
+  contextFilter,
+}: UseChromaOptions = {}): UseChromaResult {
+  const [tracks, setTracks] = useState<Track[]>([])
+  const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
-  const [error, setError]             = useState<string | null>(null)
-  const [search, setSearch]           = useState('')
-  const [hasMore, setHasMore]         = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
+  const [offset, setOffset] = useState(0)
+  const [hasMore, setHasMore] = useState(true)
 
-  const pageCache       = useRef<Map<number, Track[]>>(new Map())
-  const offsetRef       = useRef(0)
-  const totalRef        = useRef<number | null>(null)
-  const debounceRef     = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const activeQuery     = useRef('')
-  const loadingRef      = useRef(false)
-  const initialQueryRef = useRef(initialQuery)
-  const isSearching     = search.trim().length > 0
+  // Stable accumulated tag sets — only grow, never shrink.
+  // Built from search results so pills stay populated across filter changes.
+  const [allGenres, setAllGenres] = useState<string[]>([])
+  const [allMoods, setAllMoods] = useState<string[]>([])
+  const [allContexts, setAllContexts] = useState<string[]>([])
+  const knownGenres = useRef<Set<string>>(new Set())
+  const knownMoods = useRef<Set<string>>(new Set())
+  const knownContexts = useRef<Set<string>>(new Set())
 
-  const loadPage = useCallback(async (offset: number) => {
-    if (loadingRef.current) return
-    loadingRef.current = true
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const activeQuery = useRef('')
 
-    if (pageCache.current.has(offset)) {
-      const cached = pageCache.current.get(offset)!
-      setTracks(prev => dedup([...prev, ...cached]))
-      offsetRef.current = offset
-      const total = totalRef.current
-      setHasMore(total === null || offset + PAGE_SIZE < total)
-      loadingRef.current = false
-      return
+  const accumulateTags = useCallback((newTracks: Track[]) => {
+    let gd = false, md = false, cd = false
+    for (const t of newTracks) {
+      t.genres.forEach(g => { if (!knownGenres.current.has(g)) { knownGenres.current.add(g); gd = true } })
+      t.moods.forEach(m => { if (!knownMoods.current.has(m)) { knownMoods.current.add(m); md = true } })
+      t.contexts.forEach(c => { if (!knownContexts.current.has(c)) { knownContexts.current.add(c); cd = true } })
     }
+    if (gd) setAllGenres(Array.from(knownGenres.current).sort())
+    if (md) setAllMoods(Array.from(knownMoods.current).sort())
+    if (cd) setAllContexts(Array.from(knownContexts.current).sort())
+  }, [])
 
-    setLoadingMore(offset > 0)
-    if (offset === 0) setLoading(true)
+  // Build the effective search query from text search + active filters.
+  // Filters are appended to the query so Chroma's embedding search
+  // incorporates them — same mechanism that was working originally.
+  const buildQuery = useCallback((text: string) => {
+    const parts: string[] = []
+    if (text.trim()) parts.push(text.trim())
+    if (genreFilter && genreFilter !== 'all') parts.push(genreFilter)
+    if (moodFilter && moodFilter !== 'all') parts.push(moodFilter)
+    if (contextFilter && contextFilter !== 'all') parts.push(contextFilter)
+    return parts.join(' ') || 'music'
+  }, [genreFilter, moodFilter, contextFilter])
 
+  const fetchPage = useCallback(async (query: string, pageOffset: number, replace: boolean) => {
+    activeQuery.current = query
+    replace ? setLoading(true) : setLoadingMore(true)
     try {
-      const { results, total } = await chromaBrowse(offset)
-      totalRef.current = total
-      const normalized = results.map(normalizeHit).filter(Boolean) as Track[]
-      pageCache.current.set(offset, normalized)
-      offsetRef.current = offset
-      setTracks(prev => dedup(offset === 0 ? normalized : [...prev, ...normalized]))
-      setHasMore(offset + PAGE_SIZE < total)
+      const hits = await chromaSearch(query, PAGE_SIZE, pageOffset)
+      if (activeQuery.current !== query) return
+      const normalized = dedup(hits.map(normalizeHit).filter(Boolean) as Track[])
+      accumulateTags(normalized)
+      setTracks(prev => dedup(replace ? normalized : [...prev, ...normalized]))
+      setHasMore(hits.length === PAGE_SIZE)
     } catch (e: any) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
-      setLoading(false)
-      setLoadingMore(false)
-      loadingRef.current = false
+      replace ? setLoading(false) : setLoadingMore(false)
     }
-  }, [])
+  }, [accumulateTags])
 
-  // initial load — generic text query or plain browse
+  // Initial load
   useEffect(() => {
-    const q = initialQueryRef.current?.trim()
-    if (q) {
-      setLoading(true)
-      chromaSearch(q, 100)
-        .then(hits => {
-          const normalized = dedup(hits.map(normalizeHit).filter(Boolean) as Track[])
-          pageCache.current.set(0, normalized)
-          offsetRef.current = 0
-          setTracks(normalized)
-          setHasMore(true)
-        })
-        .catch(e => setError(e instanceof Error ? e.message : String(e)))
-        .finally(() => setLoading(false))
-    } else {
-      loadPage(0)
-    }
-  }, [loadPage])
+    fetchPage(buildQuery(''), 0, true)
+  }, [fetchPage, buildQuery])
 
-  // search with debounce
+  // Search debounce — also re-runs when filters change via buildQuery
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(async () => {
-      const q = search.trim()
-      if (!q) {
-        activeQuery.current = ''
-        const cached = Array.from(pageCache.current.entries())
-          .sort(([a], [b]) => a - b)
-          .flatMap(([, tracks]) => tracks)
-        setTracks(dedup(cached))
-        setHasMore(totalRef.current === null || offsetRef.current + PAGE_SIZE < (totalRef.current ?? 0))
-        return
-      }
-      activeQuery.current = q
-      setLoading(true)
-      try {
-        const hits = await chromaSearch(q)
-        if (activeQuery.current !== q) return
-        setTracks(dedup(hits.map(normalizeHit).filter(Boolean) as Track[]))
-        setHasMore(false)
-      } catch (e: any) {
-        setError(e instanceof Error ? e.message : String(e))
-      } finally {
-        setLoading(false)
-      }
+    debounceRef.current = setTimeout(() => {
+      setOffset(0)
+      setHasMore(true)
+      fetchPage(buildQuery(search), 0, true)
     }, 350)
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
-  }, [search])
+  }, [search, fetchPage, buildQuery])
 
   const loadMore = useCallback(() => {
-    if (loadingMore || !hasMore || isSearching) return
-    loadPage(offsetRef.current + PAGE_SIZE)
-  }, [loadingMore, hasMore, isSearching, loadPage])
+    if (loadingMore || !hasMore) return
+    const next = offset + PAGE_SIZE
+    setOffset(next)
+    fetchPage(buildQuery(search), next, false)
+  }, [loadingMore, hasMore, offset, search, fetchPage, buildQuery])
 
-  /**
-   * Replace current tracks with kernel-personalized results.
-   *
-   * Flow:
-   *   1. Query /search/vector with the kernel's lookahead point q
-   *   2. Surface those results first (most relevant at top)
-   *   3. Append paginated browse results as the user scrolls
-   *
-   * Page cache is cleared so loadMore starts fresh from browse page 0
-   * after the kernel results — no duplicate suppression issues.
-   */
   const applyKernelQuery = useCallback(async (embedding: number[]) => {
-    if (isSearching) return  // don't override user text search
-
     setLoading(true)
     setError(null)
-
     try {
       const hits = await chromaSearchVector(embedding, 100)
       const normalized = dedup(hits.map(normalizeHit).filter(Boolean) as Track[])
-
-      // Clear page cache — browse pages after kernel results start fresh
-      pageCache.current.clear()
-      offsetRef.current = 0
-      totalRef.current  = null
-
+      accumulateTags(normalized)
       setTracks(normalized)
-      setHasMore(true)   // browse pages still available via loadMore
+      setHasMore(true)
+      setOffset(0)
     } catch (e: any) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
       setLoading(false)
     }
-  }, [isSearching])
+  }, [accumulateTags])
 
   return {
-    tracks,
-    loading,
-    loadingMore,
-    error,
-    hasMore,
-    loadMore,
-    search,
-    setSearch,
-    applyKernelQuery,
+    tracks, loading, loadingMore, error, hasMore, loadMore,
+    search, setSearch, applyKernelQuery,
+    allGenres, allMoods, allContexts,
   }
 }

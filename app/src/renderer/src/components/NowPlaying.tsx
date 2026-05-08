@@ -29,9 +29,9 @@ async function fetchAlbumArt(title: string, artist: string): Promise<string | nu
 async function embedTrack(artist: string, title: string): Promise<number[] | null> {
     try {
         const res = await fetch(`${CHROMA_URL}/embed`, {
-            method:  'POST',
+            method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ text: `${artist} - ${title}` }),
+            body: JSON.stringify({ text: `${artist} - ${title}` }),
         })
         if (!res.ok) return null
         const data = await res.json()
@@ -44,37 +44,57 @@ async function embedTrack(artist: string, title: string): Promise<number[] | nul
 async function fetchSimilarTracks(
     embedding: number[],
     excludeId: string,
+    excludeTitle: string,
+    excludeArtist: string,
     n = 10,
 ): Promise<SimilarTrack[]> {
     try {
         const res = await fetch(`${CHROMA_URL}/search/vector`, {
-            method:  'POST',
+            method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ embedding, n_results: n + 2 }),
+            body: JSON.stringify({ embedding, n_results: n + 20 }), // big buffer
         })
         if (!res.ok) return []
         const data = await res.json()
+        const seen = new Set<string>()
         return (data.results ?? [])
-            .filter((h: any) => h.id !== excludeId)
-            .slice(0, n)
             .map((h: any) => parseHit(h))
+            .filter((t: SimilarTrack) => {
+                if (excludeId && t.id === excludeId) return false
+                if (
+                    t.title.toLowerCase() === excludeTitle.toLowerCase() &&
+                    t.artist.toLowerCase() === excludeArtist.toLowerCase()
+                ) return false
+                const key = t.spotifyTrackId ?? t.id
+                if (seen.has(key)) return false
+                seen.add(key)
+                return true
+            })
+            .slice(0, n)
     } catch {
         return []
     }
 }
 
-async function fetchArtistTracks(artist: string, excludeId: string, n = 10): Promise<SimilarTrack[]> {
+async function fetchArtistTracks(artist: string, excludeId: string, excludeTitle: string, n = 10): Promise<SimilarTrack[]> {
     try {
-        const params = new URLSearchParams({ q: artist, n_results: String(n + 4) })
+        // Use a large n_results since we're filtering to one artist
+        const params = new URLSearchParams({ q: artist, n_results: String(100) })
         const res = await fetch(`${CHROMA_URL}/search?${params}`)
         if (!res.ok) return []
         const data = await res.json()
+        const seen = new Set<string>()
         return (data.results ?? [])
             .map((h: any) => parseHit(h))
-            .filter((t: SimilarTrack) =>
-                t.id !== excludeId &&
-                t.artist.toLowerCase() === artist.toLowerCase()
-            )
+            .filter((t: SimilarTrack) => {
+                if (t.id === excludeId) return false
+                if (t.title.toLowerCase() === excludeTitle.toLowerCase()) return false
+                if (t.artist.toLowerCase() !== artist.toLowerCase()) return false
+                const key = t.spotifyTrackId ?? t.id
+                if (seen.has(key)) return false
+                seen.add(key)
+                return true
+            })
             .slice(0, n)
     } catch {
         return []
@@ -89,25 +109,29 @@ function parseHit(h: any): SimilarTrack {
         fields[part.slice(0, colon).trim()] = part.slice(colon + 2).trim()
     }
     const num = (k: string) => { const v = parseFloat(fields[k] ?? ''); return isNaN(v) ? null : v }
+    // Extract spotify track id from Chroma doc ID "entry:{spotifyTrackId}"
+    const spotifyTrackId = h.id?.startsWith('entry:') ? h.id.slice(6) : null
     return {
-        id:        h.id,
-        title:     fields['title'] ?? fields['name'] ?? 'Unknown',
-        artist:    fields['artist'] ?? '',
-        year:      num('year'),
-        genre:     fields['genres']?.split(',')[0]?.trim() ?? null,
+        id: h.id,
+        spotifyTrackId,
+        title: fields['title'] ?? fields['name'] ?? 'Unknown',
+        artist: fields['artist'] ?? '',
+        year: num('year'),
+        genre: fields['genres']?.split(',')[0]?.trim() ?? null,
         embedding: h.embedding ?? null,
-        score:     h.score ?? null,
+        score: h.score ?? null,
     }
 }
 
 interface SimilarTrack {
-    id:        string
-    title:     string
-    artist:    string
-    year:      number | null
-    genre:     string | null
+    id: string
+    spotifyTrackId: string | null
+    title: string
+    artist: string
+    year: number | null
+    genre: string | null
     embedding: number[] | null
-    score:     number | null
+    score: number | null
 }
 
 type RightTab = 'similar' | 'artist'
@@ -115,11 +139,11 @@ type RightTab = 'similar' | 'artist'
 // ── component ─────────────────────────────────────────────────────────────────
 
 interface NowPlayingProps {
-    onCollapse:   () => void
+    onCollapse: () => void
     lastPollTime: number
-    track?:       Track
-    trackColor?:  string
-    onFilter?:    (type: 'genre' | 'mood' | 'context', value: string) => void
+    track?: Track
+    trackColor?: string
+    onFilter?: (type: 'genre' | 'mood' | 'context', value: string) => void
     onCallAgent?: (query?: string) => void
 }
 
@@ -133,7 +157,7 @@ export function NowPlaying({
     const {
         currentTrack, isPlaying, connecting, error,
         togglePlay, seek, next, prev, onNext, onPrev, onSignal,
-        searchAndPlay, connected, connect,
+        play, searchAndPlay, connected, connect,
     } = useSpotifyContext()
 
     const focusTrack: Track | null = propTrack ?? (
@@ -149,30 +173,29 @@ export function NowPlaying({
             spotify_artist_id: null,
             rank: null,
             duration_ms: null,
-            preview_url: null,
             embedding: null,
         } satisfies Track : null
     )
 
     const isThisTrackActive =
         currentTrack && focusTrack &&
-        currentTrack.name.toLowerCase()   === focusTrack.title.toLowerCase() &&
+        currentTrack.name.toLowerCase() === focusTrack.title.toLowerCase() &&
         currentTrack.artist.toLowerCase() === focusTrack.artist.toLowerCase()
 
     // ── state ─────────────────────────────────────────────────────────────────
     const [liveProgressMs, setLiveProgressMs] = useState(0)
-    const [albumArt, setAlbumArt]             = useState<string | null>(
+    const [albumArt, setAlbumArt] = useState<string | null>(
         !propTrack ? (currentTrack?.albumArt ?? null) : null
     )
-    const [activeTab, setActiveTab]           = useState<RightTab>('similar')
-    const [similarTracks, setSimilarTracks]   = useState<SimilarTrack[]>([])
-    const [artistTracks, setArtistTracks]     = useState<SimilarTrack[]>([])
+    const [activeTab, setActiveTab] = useState<RightTab>('similar')
+    const [similarTracks, setSimilarTracks] = useState<SimilarTrack[]>([])
+    const [artistTracks, setArtistTracks] = useState<SimilarTrack[]>([])
     const [similarLoading, setSimilarLoading] = useState(false)
-    const [artistLoading, setArtistLoading]   = useState(false)
-    const [playLoading, setPlayLoading]       = useState(false)
-    const [playingId, setPlayingId]           = useState<string | null>(null)
+    const [artistLoading, setArtistLoading] = useState(false)
+    const [playLoading, setPlayLoading] = useState(false)
+    const [playingId, setPlayingId] = useState<string | null>(null)
 
-    const rafRef          = useRef<number | null>(null)
+    const rafRef = useRef<number | null>(null)
     const currentTrackRef = useRef(currentTrack)
     useEffect(() => { currentTrackRef.current = currentTrack }, [currentTrack])
 
@@ -192,7 +215,7 @@ export function NowPlaying({
     useEffect(() => {
         if (rafRef.current) cancelAnimationFrame(rafRef.current)
         if (!currentTrack) return
-        const base     = currentTrack.progressMs
+        const base = currentTrack.progressMs
         const pollTime = lastPollTime ?? Date.now()
         const tick = () => {
             const elapsed = isPlaying ? Date.now() - pollTime : 0
@@ -215,7 +238,13 @@ export function NowPlaying({
                     ? Array.from((focusTrack as any).embedding as number[])
                     : await embedTrack(focusTrack.artist, focusTrack.title)
             if (!embedding) return
-            const similar = await fetchSimilarTracks(embedding, focusTrack.id || '__none__', 10)
+            const similar = await fetchSimilarTracks(
+                embedding,
+                focusTrack.id || '__none__',
+                focusTrack.title,
+                focusTrack.artist,
+                10
+            )
             setSimilarTracks(similar)
         })().finally(() => setSimilarLoading(false))
     }, [focusTrack?.id, focusTrack?.title])
@@ -225,7 +254,7 @@ export function NowPlaying({
         if (!focusTrack?.artist) return
         setArtistLoading(true)
         setArtistTracks([])
-        fetchArtistTracks(focusTrack.artist, focusTrack.id || '__none__', 10)
+        fetchArtistTracks(focusTrack.artist, focusTrack.id || '__none__', focusTrack.title, 10)
             .then(setArtistTracks)
             .finally(() => setArtistLoading(false))
     }, [focusTrack?.artist, focusTrack?.id])
@@ -240,11 +269,11 @@ export function NowPlaying({
 
     if (!focusTrack) return null
 
-    const durationMs  = currentTrack?.durationMs ?? 0
-    const progress    = durationMs > 0 ? liveProgressMs / durationMs : 0
+    const durationMs = currentTrack?.durationMs ?? 0
+    const progress = durationMs > 0 ? liveProgressMs / durationMs : 0
     const accentColor = trackColor ?? 'var(--accent)'
-    const hasMeta     = focusTrack.genres.length > 0 || focusTrack.moods.length > 0 ||
-                        focusTrack.contexts.length > 0 || focusTrack.themes.length > 0
+    const hasMeta = focusTrack.genres.length > 0 || focusTrack.moods.length > 0 ||
+        focusTrack.contexts.length > 0 || focusTrack.themes.length > 0
 
     function scrubTo(e: React.MouseEvent<HTMLDivElement>) {
         const rect = e.currentTarget.getBoundingClientRect()
@@ -253,11 +282,19 @@ export function NowPlaying({
 
     const handlePlayPause = async () => {
         if (!connected) { await connect(); return }
-        if (isThisTrackActive) { await togglePlay() }
-        else {
+        if (isThisTrackActive) {
+            await togglePlay()
+        } else {
             setPlayLoading(true)
-            try { await searchAndPlay(`${focusTrack.title} ${focusTrack.artist}`.replace(/\(.*?\)/g, '').trim()) }
-            finally { setPlayLoading(false) }
+            try {
+                if (focusTrack.spotify_track_id) {
+                    await play(`spotify:track:${focusTrack.spotify_track_id}`)
+                } else {
+                    await searchAndPlay(`${focusTrack.title} ${focusTrack.artist}`.replace(/\(.*?\)/g, '').trim())
+                }
+            } finally {
+                setPlayLoading(false)
+            }
         }
     }
 
@@ -271,14 +308,14 @@ export function NowPlaying({
                     year: null, genres: [], moods: [], contexts: [], themes: [],
                     owner: '', manifestStateId: '', datasourceName: '', name: t.name,
                     spotify_track_id: '', spotify_artist_id: null,
-                    rank: null, duration_ms: null, preview_url: null, embedding: null,
+                    rank: null, duration_ms: null, embedding: null,
                 }
             })
         }
-        ;(onNext ?? next)?.()
+        ; (onNext ?? next)?.()
     }
 
-    const handlePrev = () => { ;(onPrev ?? prev)?.() }
+    const handlePrev = () => { ; (onPrev ?? prev)?.() }
 
     const handleFilterTag = (type: 'genre' | 'mood' | 'context', value: string) => {
         onFilter?.(type, value); onCollapse()
@@ -287,12 +324,19 @@ export function NowPlaying({
     const handlePlayRow = async (t: SimilarTrack) => {
         if (!connected) { await connect(); return }
         setPlayingId(t.id)
-        try { await searchAndPlay(`${t.title} ${t.artist}`.replace(/\(.*?\)/g, '').trim()) }
-        catch { setPlayingId(null) }
+        try {
+            if (t.spotifyTrackId) {
+                await play(`spotify:track:${t.spotifyTrackId}`)
+            } else {
+                await searchAndPlay(`${t.title} ${t.artist}`.replace(/\(.*?\)/g, '').trim())
+            }
+        } catch {
+            setPlayingId(null)
+        }
     }
 
-    const showPause     = isThisTrackActive && isPlaying
-    const activeList    = activeTab === 'similar' ? similarTracks : artistTracks
+    const showPause = isThisTrackActive && isPlaying
+    const activeList = activeTab === 'similar' ? similarTracks : artistTracks
     const activeLoading = activeTab === 'similar' ? similarLoading : artistLoading
 
     // ── render ────────────────────────────────────────────────────────────────
@@ -363,8 +407,8 @@ export function NowPlaying({
                             {connecting || playLoading
                                 ? <span className="upload-spinner" style={{ width: 20, height: 20, borderWidth: 2, borderTopColor: 'var(--bg)' }} />
                                 : showPause
-                                    ? <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><rect x="5" y="4" width="4" height="16" rx="1"/><rect x="15" y="4" width="4" height="16" rx="1"/></svg>
-                                    : <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M8 5.14v14l11-7-11-7z"/></svg>
+                                    ? <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><rect x="5" y="4" width="4" height="16" rx="1" /><rect x="15" y="4" width="4" height="16" rx="1" /></svg>
+                                    : <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M8 5.14v14l11-7-11-7z" /></svg>
                             }
                         </button>
                         <button className="np-btn np-btn--skip" onClick={handleNext}
@@ -487,8 +531,8 @@ export function NowPlaying({
                                                         aria-label={`Play ${t.title}`}
                                                     >
                                                         {isActive
-                                                            ? <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><rect x="5" y="4" width="4" height="16" rx="1"/><rect x="15" y="4" width="4" height="16" rx="1"/></svg>
-                                                            : <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                                                            ? <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><rect x="5" y="4" width="4" height="16" rx="1" /><rect x="15" y="4" width="4" height="16" rx="1" /></svg>
+                                                            : <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
                                                         }
                                                     </button>
                                                 </li>

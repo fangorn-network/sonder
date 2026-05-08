@@ -17,7 +17,6 @@ export interface Track {
   year: number | null
   rank: number | null
   duration_ms: number | null
-  preview_url: string | null
 
   // Taxonomy
   genres: string[]

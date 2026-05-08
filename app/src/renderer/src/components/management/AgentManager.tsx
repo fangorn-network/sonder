@@ -86,6 +86,20 @@ export function AgentManager({ providerStatus, models, selectedModel, onStateCha
     return () => { unsubPullRef.current?.() }
   }, [])
 
+  useEffect(() => {
+    if (selectedProvider !== LLMProvider.Ollama || !ollamaStatus?.running) return
+
+    const poll = async () => {
+      const loaded = await window.agentAPI.ollamaLoadedModels().catch(() => [])
+      setLoadedModels(loaded)
+    }
+
+    poll() // immediate check
+    const interval = setInterval(poll, 5000) // refresh every 5 seconds
+
+    return () => clearInterval(interval)
+  }, [selectedProvider, ollamaStatus?.running])
+
   const currentProvider = providerStatus?.provider
   const isPulling = pullTarget !== null
 
@@ -260,7 +274,6 @@ export function AgentManager({ providerStatus, models, selectedModel, onStateCha
               <>
                 <div className="agent-row">
                   <span className="agent-key">Ollama status</span>
-                  <span className="agent-key">status</span>
                   {!ollamaStatus.running ? (
                     <span className="agent-dot off" title="Ollama is not running on this machine.">stopped</span>
                   ) : loadedModels.length > 0 ? (
@@ -334,7 +347,7 @@ export function AgentManager({ providerStatus, models, selectedModel, onStateCha
                 checked={stopOllama}
                 onChange={(e) => { setStopOllama(e.target.checked); setDirty(true) }}
               />
-              <span className="agent-key">Unload all models from memory</span>
+              <span className="agent-key" title="Checking this box guarantees that all LLMs are stopped in Ollama.">(Ollama) Unload all models from memory</span>
             </label>
           </div>
         )}

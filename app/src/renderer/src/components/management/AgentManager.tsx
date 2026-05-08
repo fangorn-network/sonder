@@ -53,7 +53,7 @@ export function AgentManager({ providerStatus, models, selectedModel, onStateCha
   const [customModelName, setCustomModelName] = useState('')
 
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
-  const [stopOllama, setStopOllama] = useState(false)
+  const [stopOllama, setStopOllama] = useState(true) // default checked
 
   const unsubPullRef = useRef<(() => void) | null>(null)
 
@@ -65,14 +65,18 @@ export function AgentManager({ providerStatus, models, selectedModel, onStateCha
     setLocalModel(selectedModel)
   }, [selectedModel])
 
+  const [loadedModels, setLoadedModels] = useState<string[]>([])
+
   useEffect(() => {
     const init = async () => {
-      const [config, ollStatus] = await Promise.all([
+      const [config, ollStatus, loaded] = await Promise.all([
         window.agentAPI.getConfig(),
         window.agentAPI.ollamaStatus().catch(() => null),
+        window.agentAPI.ollamaLoadedModels().catch(() => []),
       ])
       if (config) {
         setClaudeKey(config.claudeApiKey ?? '')
+        setStopOllama(config.unloadModelsOnNone ?? true)
         setLocalModel(
           config.provider === LLMProvider.Anthropic
             ? (config.claudeModel ?? 'claude-sonnet-4-6')
@@ -80,6 +84,7 @@ export function AgentManager({ providerStatus, models, selectedModel, onStateCha
         )
       }
       setOllamaStatus(ollStatus)
+      setLoadedModels(loaded)
     }
     init()
   }, [])
@@ -131,6 +136,10 @@ export function AgentManager({ providerStatus, models, selectedModel, onStateCha
       }
 
       onStateChange({ providerStatus: status })
+
+      if (claudeKey.trim()) {
+        config.claudeApiKey = claudeKey.trim()
+      }
 
       if (!status.ready && status.error) {
         setSaveError(status.error)
@@ -258,9 +267,14 @@ export function AgentManager({ providerStatus, models, selectedModel, onStateCha
               <>
                 <div className="agent-row">
                   <span className="agent-key">Ollama status</span>
-                  <span className={`agent-dot ${ollamaStatus.running ? 'on' : 'off'}`}>
-                    {ollamaStatus.running ? 'running' : 'stopped'}
-                  </span>
+                  <span className="agent-key">status</span>
+                  {!ollamaStatus.running ? (
+                    <span className="agent-dot off" title="Ollama is not running on this machine.">stopped</span>
+                  ) : loadedModels.length > 0 ? (
+                    <span className="agent-dot on">running</span>
+                  ) : (
+                    <span className="agent-dot idle" title="Ollama has no models loaded in memory, but is running on this machine.">idle</span>
+                  )}
                 </div>
                 {ollamaStatus.version && (
                   <div className="agent-row">

@@ -1213,3 +1213,12 @@
   accent-color: rgba(90, 158, 95, 0.8);
   cursor: pointer;
 }
+
+.agent-dot.idle {
+  color: rgba(232, 210, 140, 0.75);
+}
+
+.agent-dot.idle::before {
+  background: rgba(210, 180, 60, 0.7);
+  box-shadow: 0 0 6px rgba(210, 180, 60, 0.4);
+}

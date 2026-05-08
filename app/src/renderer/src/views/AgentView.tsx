@@ -118,7 +118,7 @@ export function AgentView() {
               <span className="agent-val">
                 {currentProvider === LLMProvider.Anthropic
                   ? (CLAUDE_MODELS.find(m => m.id === selectedModel)?.label ?? selectedModel)
-                  : (selectedModel || 'default')}
+                  : (selectedModel || 'Sonnet 4.6')}
               </span>
             </div>
             {toolboxes && (

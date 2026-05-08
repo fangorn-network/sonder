@@ -63,6 +63,8 @@ export interface FangornAgentApi {
   onPullProgress(
     callback: (data: { model: string; status: string; completed?: number; total?: number }) => void
   ): () => void;
+  ollamaLoadedModels(): Promise<string[]> 
+  ollamaStop(): Promise<{ success: boolean; error?: string }>;
 
   // ── Agent chat ────────────────────────────────────────────────────
   chat(query: string): Promise<AgentResult>;
@@ -85,7 +87,6 @@ export interface FangornAgentApi {
   // ── Provider/model switching ──────────────────────────────────────
   changeProvider(provider: string, model: string, apiKey?: string, url?: string): Promise<{ success: boolean; error?: string }>;
   changeModel(model: string): Promise<{ success: boolean; error?: string }>;
-  ollamaStop(): Promise<{ success: boolean; error?: string }>;
 }
  
 export const agentAPI: FangornAgentApi = {
@@ -178,6 +179,8 @@ export const agentAPI: FangornAgentApi = {
     ipcRenderer.invoke("agent:change-model", model),
   ollamaStop: (): Promise<{ success: boolean; error?: string }> =>
   ipcRenderer.invoke("agent:ollama-stop"),
+  ollamaLoadedModels: (): Promise<string[]> =>
+  ipcRenderer.invoke("agent:ollama-loaded-models"),
   };
  
 // Expose to renderer

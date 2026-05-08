@@ -220,7 +220,11 @@ export function registerAgentIpcHandlers(
       return { success: false, error: err.message };
     }
   });
-  
+
+  ipcMain.handle("agent:ollama-loaded-models", async () => {
+    return manager.getOllamaManager().getLoadedModels();
+  });
+
   ipcMain.handle("agent:ollama-stop", async () => {
     try {
       await manager.getOllamaManager().unloadAllModels();

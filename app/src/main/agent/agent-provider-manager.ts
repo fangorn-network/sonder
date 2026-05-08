@@ -12,6 +12,7 @@ export interface AgentProviderConfig {
   claudeApiKey?: string;
   claudeModel?: string;
   defaultModel?: string;
+  unloadModelsOnNone?: boolean;
 }
 
 export interface ProviderStatus {

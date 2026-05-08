@@ -32,7 +32,7 @@
   background-size: cover;
   background-position: center;
   filter: blur(48px) saturate(1.4);
-  opacity: 0.78;
+  opacity: .91;
   pointer-events: none;
   z-index: 0;
 }
@@ -109,7 +109,7 @@ button.np-collapse {
   justify-content: center;
   /* width: 36px; */
   height: 36px;
-  margin-top: 50px;
+  margin-top: 42px;
   background: var(--glass-3);
   border: 1px solid var(--glass-edge-hi);
   color: var(--fg2);
@@ -134,7 +134,7 @@ button.np-collapse:hover {
 }
 
 .np-art {
-  width: min(80%, 340px);
+  width: min(75%, 680px);
   aspect-ratio: 1;
   border-radius: var(--r-lg);
   background: var(--glass-3);
@@ -480,6 +480,7 @@ button.np-collapse:hover {
 .np-artist-section-label {
   font-family: var(--font-mono);
   font-size: 10px;
+  color: white;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--fg4);
@@ -645,4 +646,149 @@ button.np-collapse:hover {
   letter-spacing: 0.14em;
   color: var(--fg4);
   text-transform: uppercase;
+}
+/* ── Add these to NowPlaying.css, replacing the .np-artist-list block ────── */
+
+/* Similar tracks ranked list */
+.np-similar-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.np-similar-row {
+  display: grid;
+  grid-template-columns: 20px 1fr 6px 28px;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 4px;
+  border-radius: 6px;
+  transition: background 0.15s;
+}
+
+.np-similar-row:hover {
+  background: rgba(255,255,255,0.04);
+}
+
+.np-similar-row--active {
+  background: rgba(255,255,255,0.06);
+}
+
+.np-similar-row:hover .np-similar-play {
+  opacity: 1;
+}
+
+.np-similar-rank {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--fg4);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.np-similar-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.np-similar-title {
+  font-size: 13px;
+  color: var(--fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.np-similar-meta {
+  font-size: 11px;
+  color: var(--fg3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.np-similar-genre {
+  color: var(--fg4);
+}
+
+/* Thin vertical energy bar */
+.np-similar-energy {
+  width: 3px;
+  height: 28px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 2px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  overflow: hidden;
+}
+
+.np-similar-energy-fill {
+  width: 100%;
+  border-radius: 2px;
+  min-height: 2px;
+}
+
+.np-similar-play {
+  background: none;
+  border: none;
+  padding: 6px;
+  cursor: pointer;
+  opacity: 0.3;
+  transition: opacity 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.np-similar-row--active .np-similar-play {
+  opacity: 1;
+}
+
+/* ── Tab bar — add to NowPlaying.css ─────────────────────────────────────── */
+
+.np-tabs-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.np-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--glass-edge);
+  margin-bottom: 4px;
+}
+
+.np-tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  padding: 8px 16px 9px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--fg4);
+  cursor: pointer;
+  transition: color 0.15s, border-bottom-color 0.15s;
+}
+
+.np-tab:hover {
+  color: var(--fg2);
+}
+
+.np-tab--active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.np-tab-body {
+  flex: 1;
+  padding-top: 8px;
 }

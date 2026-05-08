@@ -6,7 +6,7 @@ python3 -m venv ./venv
 source ./venv/bin/activate
 
 # install deps
-pip install aiohttp asyncio chromadb fastapi subgrounds
+pip install aiohttp asyncio chromadb fastapi pydantic
 
 # execute
 python main.py

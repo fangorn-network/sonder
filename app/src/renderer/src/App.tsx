@@ -14,15 +14,21 @@ import { useChroma } from './hooks/useChroma'
 import { StartupView } from './views/StartupView'
 import { useSpotify } from './hooks/useSpotify'
 import { SpotifyProvider } from './providers/SpotifyProvider'
-import { useTasteProfile } from './hooks/useTasteProfile'
+import { useSessionKernel } from './hooks/useSessionKernel'
 import { useSpotifyConfig } from './hooks/useSpotifyConfig'
 import { SpotifyConfigView } from './views/SpotifyConfigView'
+import type { TasteSignal } from './types'
 
 export default function App() {
 
   const { ready, authenticated, login } = usePrivy()
-  const { profile, applySignal, seedFromSpotify, toChromaQuery } = useTasteProfile()
   const { config, hasConfig, saveConfig } = useSpotifyConfig()
+
+  // Entropy lives here now — single source of truth, no taste profile needed.
+  // 0.2 = comfort-forward default. Expose setEntropy to UI when you want a dial.
+  const [entropy, setEntropy] = useState(0.2)
+
+  const kernel = useSessionKernel({ entropy })
 
   const [booted, setBooted] = useState(() => localStorage.getItem('booted') === 'true')
   const [showConfig, setShowConfig] = useState(false)
@@ -31,7 +37,9 @@ export default function App() {
   // NowPlaying overlay state — null = closed, 'player' = from player bar, Track = from card
   const [nowPlaying, setNowPlaying] = useState<null | 'player' | { track: Track; color: string }>(null)
 
-  const { tracks, loading, loadingMore, error, hasMore, loadMore, search, setSearch } = useChroma({ initialQuery: toChromaQuery() })
+  // 'music' is the cold start query — generic enough to populate browse immediately.
+  // The kernel takes over recommendation after Spotify seeds μ₀.
+  const { tracks, loading, loadingMore, error, hasMore, loadMore, applyKernelQuery, search, setSearch } = useChroma({ initialQuery: 'music' })
   const [recommendedTracks, setRecommendedTracks] = useState<RecommendedTracks | null>(null)
   const [recommendLoading, setRecommendLoading] = useState(false)
   const { sendMessage } = useFangornAgent()
@@ -41,6 +49,7 @@ export default function App() {
   const filteredTracksRef = useRef<Track[]>([])
   const playingIdRef = useRef<string | null>(null)
   const spotifyRef = useRef<ReturnType<typeof useSpotify> | null>(null)
+  const seededRef = useRef(false)
 
   // active genre filters — lifted so NowPlaying can close and filter
   const [genreFilter, setGenreFilter] = useState('all')
@@ -76,19 +85,43 @@ export default function App() {
 
   useEffect(() => { spotifyRef.current = spotify }, [spotify])
 
-  const prevConnected = useRef(false)
-
   useEffect(() => {
-    // if (spotify.connected && !prevConnected.current && !profile.seededFromSpotify) {
-    // TODO: experiment - reseed on each connection (they may have listened to music outside of fangorn between visits)
-    if (spotify.connected) {
-      console.log('seeding from spotify ')
-      seedFromSpotify(spotify.spotifyFetch)
-    } else {
-      console.log('NOT seeding anything')
-    }
-    prevConnected.current = spotify.connected
+    if (!spotify.connected || seededRef.current) return
+    seededRef.current = true
+
+    kernel.seedFromSpotify(spotify.spotifyFetch).then((q) => {
+      if (!q) return
+      // q is the kernel's lookahead vector μ₀ (v=0 on cold start, so q=μ₀)
+      // Replace generic 'music' browse results with kernel-personalized ones.
+      // loadMore continues with paginated browse after these.
+      applyKernelQuery(Array.from(q))
+    })
   }, [spotify.connected])
+
+
+
+  // ── Signal handler ────────────────────────────────────────────────────────
+  // play/skip drive kernel dynamics. like/filter/similar are no-ops at the
+  // kernel level for now — the tag layer is gone, these are available for
+  // future instrumentation (e.g. like could anchor μ more aggressively).
+  const handleSignal = useCallback(async (signal: TasteSignal) => {
+    const { type, track } = signal
+
+    if (type !== 'play' && type !== 'skip') return
+
+    try {
+      // Prefer embedding already on the track (kernel recommendation path).
+      // Fall back to on-demand embed for browse/search picks.
+      const embedding = (track as any).embedding
+        ? new Float32Array((track as any).embedding)
+        : await kernel.embedText(`${track.artist} - ${track.title}`)
+
+      if (type === 'play') kernel.onTrackPlay(embedding)
+      if (type === 'skip') kernel.onTrackSkip(embedding)
+    } catch (e) {
+      console.warn('[app] kernel signal failed:', e)
+    }
+  }, [kernel])
 
   const handleBooted = useCallback(() => { setBooted(true) }, [])
 
@@ -154,7 +187,7 @@ export default function App() {
   const nowPlayingOpen = nowPlaying !== null
 
   return (
-    <SpotifyProvider value={{ ...spotify, onNext: handleNext, onPrev: handlePrev, onSignal: applySignal }}>
+    <SpotifyProvider value={{ ...spotify, onNext: handleNext, onPrev: handlePrev, onSignal: handleSignal }}>
       <PlayerProvider tracks={tracks}>
         <div className="app">
           <header className="header">
@@ -183,19 +216,18 @@ export default function App() {
                   </button>
                 ))}
               </nav>
-            <button
-              onClick={() => setShowConfig(true)}
-              title="Spotify settings"
-              style={{
-                background: 'none', border: 'none', color: 'var(--fg4)',
-                fontSize: '16px', cursor: 'pointer', padding: '4px 8px',
-                lineHeight: 1, transition: 'color var(--t1)',
-              }}
-              onMouseEnter={e => (e.currentTarget.style.color = 'var(--fg2)')}
-              onMouseLeave={e => (e.currentTarget.style.color = 'var(--fg4)')}
-            >⚙</button>
+              <button
+                onClick={() => setShowConfig(true)}
+                title="Spotify settings"
+                style={{
+                  background: 'none', border: 'none', color: 'var(--fg4)',
+                  fontSize: '16px', cursor: 'pointer', padding: '4px 8px',
+                  lineHeight: 1, transition: 'color var(--t1)',
+                }}
+                onMouseEnter={e => (e.currentTarget.style.color = 'var(--fg2)')}
+                onMouseLeave={e => (e.currentTarget.style.color = 'var(--fg4)')}
+              >⚙</button>
             </div>
-
           </header>
 
           <main className="main">
@@ -215,7 +247,7 @@ export default function App() {
                 onCallAgent={handleFindSimilar}
                 onFilteredChange={f => { filteredTracksRef.current = f }}
                 onPlayingIdChange={id => { playingIdRef.current = id }}
-                onSignal={applySignal}
+                onSignal={handleSignal}
                 onTrackClick={(track, color) => setNowPlaying({ track, color })}
                 genreFilter={genreFilter}
                 moodFilter={moodFilter}
@@ -225,7 +257,7 @@ export default function App() {
                 onContextFilter={setContextFilter}
               />
             )}
-            {view === 'Agent' && (<AgentView/>)}
+            {view === 'Agent' && (<AgentView />)}
           </main>
 
           <PlayerBar
@@ -285,10 +317,10 @@ function BootSplash() {
     <div style={{ position: 'fixed', inset: 0, background: '#0a0f0a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <div style={{ color: '#a3c9a8', animation: 'fangornBootPulse 1.4s ease-in-out infinite' }}>
         <svg viewBox="0 0 40 40" width="32" height="32" aria-hidden="true">
-          <path d="M20 4 Q 32 14, 28 26 Q 24 34, 20 36 Q 16 34, 12 26 Q 8 14, 20 4 Z" fill="none" stroke="currentColor" strokeWidth="1"/>
-          <path d="M20 6 L 20 34" stroke="currentColor" strokeWidth="0.5" opacity="0.6"/>
-          <path d="M20 14 L 15 18 M20 18 L 14 22 M20 22 L 15 26" stroke="currentColor" strokeWidth="0.5" opacity="0.5"/>
-          <path d="M20 14 L 25 18 M20 18 L 26 22 M20 22 L 25 26" stroke="currentColor" strokeWidth="0.5" opacity="0.5"/>
+          <path d="M20 4 Q 32 14, 28 26 Q 24 34, 20 36 Q 16 34, 12 26 Q 8 14, 20 4 Z" fill="none" stroke="currentColor" strokeWidth="1" />
+          <path d="M20 6 L 20 34" stroke="currentColor" strokeWidth="0.5" opacity="0.6" />
+          <path d="M20 14 L 15 18 M20 18 L 14 22 M20 22 L 15 26" stroke="currentColor" strokeWidth="0.5" opacity="0.5" />
+          <path d="M20 14 L 25 18 M20 18 L 26 22 M20 22 L 25 26" stroke="currentColor" strokeWidth="0.5" opacity="0.5" />
         </svg>
       </div>
       <style>{`@keyframes fangornBootPulse { 0%,100%{opacity:0.3;transform:scale(1)} 50%{opacity:1;transform:scale(1.08)} }`}</style>

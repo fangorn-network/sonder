@@ -9,12 +9,25 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import os
 
+from pydantic import BaseModel
+ 
+class EmbedRequest(BaseModel):
+    text: str | None = None
+    texts: list[str] | None = None  # batch path — preferred for seeding
+ 
+class VectorSearchRequest(BaseModel):
+    embedding:  list[float]
+    n_results:  int = 20
+    owner:      str | None = None
+    schema_id:  str | None = None
+
 # ── config ────────────────────────────────────────────────────────────────────
 
+ef_global = None
 SUBGRAPH_URL = "https://api.studio.thegraph.com/query/1745244/fangorn-data-discovery/version/latest"
 IPFS_GATEWAY = "https://ipfs.io/ipfs"
-SCHEMA_ID    = "0x7ff75e67e1374fa653b3f0101bb8472caca236857d934ba767235cd3f3fad90f"
-CHROMA_PATH = os.environ.get("CHROMA_PATH", "./vectordb/chroma_db")
+SCHEMA_ID    = "0xf4016713d644f9f7b622826269a53a05092f04b73db9dfe95bd6d2d246e38380"
+CHROMA_PATH = os.environ.get("CHROMA_PATH", "./vectordb/chroma_db_test")
 COLLECTION   = "fangorn"
 PAGE_SIZE    = 100
 IPFS_TIMEOUT = 20
@@ -145,6 +158,8 @@ def build_document_from_entry(entry: dict, handle_results: dict, meta: dict) -> 
 
 async def ingest():
     global collection
+    global ef_global
+    
     loop = asyncio.get_event_loop()
 
     print(f"Fetching events for schemaId {SCHEMA_ID}...")
@@ -222,10 +237,10 @@ async def ingest():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global collection
+    global collection, ef_global
     client = chromadb.PersistentClient(path=CHROMA_PATH)
-    ef = embedding_functions.DefaultEmbeddingFunction()
-    collection = client.get_or_create_collection(COLLECTION, embedding_function=ef)
+    ef_global = embedding_functions.DefaultEmbeddingFunction()
+    collection = client.get_or_create_collection(COLLECTION, embedding_function=ef_global)
     asyncio.create_task(ingest())  # run ingestion in background, don't block startup
     yield
 
@@ -257,9 +272,60 @@ async def browse(
     ]
     return {"results": hits, "total": collection.count()}
 
+@app.post("/embed")
+async def embed(body: EmbedRequest):
+    loop = asyncio.get_event_loop()
+
+    if body.texts:
+        vectors = await loop.run_in_executor(None, lambda: ef_global(body.texts))
+        return {"embeddings": [v.tolist() for v in vectors]}
+    elif body.text:
+        vectors = await loop.run_in_executor(None, lambda: ef_global([body.text]))
+        return {"embedding": vectors[0].tolist()}
+    else:
+        return {"error": "provide text or texts"}
+ 
+ 
+@app.post("/search/vector")
+async def search_vector(body: VectorSearchRequest):
+    """
+    Query Chroma by raw embedding vector.
+    Returns hits including their embeddings so the kernel can update (μ, v, σ).
+    """
+    where: dict = {}
+    if body.owner:     where["owner"]    = body.owner
+    if body.schema_id: where["schemaId"] = body.schema_id
+ 
+    loop = asyncio.get_event_loop()
+    results = await loop.run_in_executor(
+        None,
+        lambda: collection.query(
+            query_embeddings=[body.embedding],
+            n_results=body.n_results,
+            where=where if where else None,
+            include=["documents", "metadatas", "distances", "embeddings"],
+        )
+    )
+ 
+    hits = [
+        {
+            "id":        results["ids"][0][i],
+            "distance":  results["distances"][0][i],
+            "score":     round(1 - results["distances"][0][i], 4),
+            "embedding": results["embeddings"][0][i].tolist(),
+            "document":  results["documents"][0][i],
+            **results["metadatas"][0][i],
+        }
+        for i in range(len(results["ids"][0]))
+    ]
+    return {"results": hits}
+ 
+ 
+# ── modified /search — add embeddings to text search responses ────────────────
+# Replace your existing /search with this. Only change: embeddings in include + response.
 @app.get("/search")
 async def search(
-    q:         str        = Query(..., description="Natural language search query"),
+    q:         str        = Query(...),
     n_results: int        = Query(10),
     owner:     str | None = Query(None),
     schema_id: str | None = Query(None),
@@ -272,19 +338,22 @@ async def search(
         query_texts=[q],
         n_results=n_results,
         where=where if where else None,
-        include=["documents", "metadatas", "distances"],
+        include=["documents", "metadatas", "distances", "embeddings"],
     )
 
     hits = [
         {
-            "id":       results["ids"][0][i],
-            "score":    round(1 - results["distances"][0][i], 4),
-            "document": results["documents"][0][i],
+            "id":        results["ids"][0][i],
+            "score":     round(1 - results["distances"][0][i], 4),
+            "distance":  results["distances"][0][i],
+            "embedding": results["embeddings"][0][i].tolist(),  # ← fix
+            "document":  results["documents"][0][i],
             **results["metadatas"][0][i],
         }
         for i in range(len(results["ids"][0]))
     ]
     return {"results": hits}
+
 
 @app.get("/health")
 async def health():

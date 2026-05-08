@@ -185,25 +185,13 @@ export default function App() {
               <span className="brand-name">SOND3R</span>
               <nav style={{ display: 'flex', gap: '16px', marginLeft: '24px' }}>
                 {(['Discover', 'Agent'] as ViewName[]).map((v) => (
-                  <button
-                    key={v}
-                    onClick={() => setView(v)}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      fontFamily: '"DM Mono", "Courier New", monospace',
-                      fontSize: '10px',
-                      letterSpacing: '0.2em',
-                      textTransform: 'uppercase' as const,
-                      color: view === v ? 'var(--fg2)' : 'var(--fg4)',
-                      cursor: 'pointer',
-                      padding: '4px 0',
-                      borderBottom: view === v ? '1px solid var(--fg3)' : '1px solid transparent',
-                      transition: 'all 0.2s ease',
-                    }}
-                  >
-                    {v}
-                  </button>
+                <button
+                  key={v}
+                  onClick={() => setView(v)}
+                  className={`app-nav-tab ${view === v ? 'active' : ''}`}
+                >
+                  {v}
+                </button>
                 ))}
               </nav>
               <button

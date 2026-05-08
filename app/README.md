@@ -32,3 +32,12 @@ $ pnpm build:mac
 # For Linux
 $ pnpm build:linux
 ```
+
+> Note: If work is being performed that requires changes to the agent, tools, or agent-types, add the following to pnpm section of package.json replaced with the location to the relevant projects
+```json
+"overrides": {
+  "@fangorn-network/agent": "link:../../agent/agent",
+  "@fangorn-network/agent-tools": "link:../../agent/tools",
+  "@fangorn-network/agent-types": "link:../../agent/agent-types"
+}
+```

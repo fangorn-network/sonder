@@ -7,6 +7,8 @@ import {
 } from "@fangorn-network/agent-types";
 import { AgentProviderManager } from "./agent-provider-manager";
 import { ToolboxConfigManager } from "./toolbox-config-manager";
+import { ToolboxEntry } from "@fangorn-network/agent-types";
+import { DEFAULT_SYSTEM_PROMPT } from "../../renderer/src/constants/prompts"
 
 export class AgentBridge {
   private agent: FangornAgent | null = null;
@@ -15,7 +17,7 @@ export class AgentBridge {
   private toolboxDir: string;
   private dataContextProvider: () => DataContext;
   private llmProvider = LLMProvider.Ollama;
-  private llmModel = "qwen3.5:0.8b"
+  private llmModel = ""
   private apiKey = ""
 
   constructor(
@@ -33,7 +35,7 @@ export class AgentBridge {
   /**
    * Get the toolbox entries from persisted config.
    */
-  private getToolboxEntries(): { id: string; enabled: boolean; fields: Record<string, any> }[] {
+  private getToolboxEntries(): ToolboxEntry[] {
     const cfg = this.toolboxConfigManager.getConfig();
     return cfg?.toolboxes ?? [];
   }
@@ -50,6 +52,8 @@ export class AgentBridge {
       return;
     }
 
+    this.llmProvider = config.provider
+
     // Set env vars that @fangorn-network/agent reads
     if (config.provider === "ollama") {
       process.env.LLM = "ollama";
@@ -63,17 +67,16 @@ export class AgentBridge {
       }
 
       if (config.defaultModel) {
-        process.env.MODEL = config.defaultModel;
+        this.llmModel= config.defaultModel;
       }
-    } else if (config.provider === "claude") {
-      process.env.LLM = "anthropic";
+    } else if (config.provider === LLMProvider.Anthropic) {
 
       if (config.claudeApiKey) {
-        process.env.ANTHROPIC_API_KEY = config.claudeApiKey;
+        this.apiKey = config.claudeApiKey;
       }
 
       if (config.claudeModel) {
-        process.env.ANTHROPIC_MODEL = config.claudeModel;
+        this.llmModel = config.claudeModel;
       }
     }
 
@@ -84,8 +87,11 @@ export class AgentBridge {
         url: "http://localhost:11434"
       }
 
+    const systemPrompt = config.systemPrompt ?? DEFAULT_SYSTEM_PROMPT
+
     const agentConfig: FangornAgentConfig = {
-      useMemory: true,
+      useMemory: false,
+      systemPrompt,
       agenticConfig,
       toolboxDir: this.toolboxDir,
       toolboxEntries: this.getToolboxEntries(),
@@ -121,16 +127,6 @@ export class AgentBridge {
     return this.agent!.toolScopedAgenticChat(query, toolNames);
   }
 
-  async findSimilar(data: any): Promise<FangornAgentResponse> {
-    this.ensureReady();
-    return this.agent!.findSimilar(data);
-  }
-
-  async returnFilters(data: any): Promise<FangornAgentResponse> {
-    this.ensureReady();
-    return this.agent!.returnFilters(data);
-  }
-
   getAllToolNames(): string[] {
     this.ensureReady();
     return this.agent!.getAllToolNames();
@@ -164,6 +160,11 @@ disableToolbox(name: string): void {
   getToolboxDir(): string {
     return this.toolboxDir;
   }
+
+  setSystemPrompt(prompt: string): void {
+  this.ensureReady();
+  this.agent!.setSystemPrompt(prompt);
+}
   
   async changeProvider(provider: string, model: string, apiKey?: string, url?: string): Promise<void> {
     this.ensureReady();
@@ -174,7 +175,7 @@ disableToolbox(name: string): void {
     this.ensureReady();
     const config = this.providerManager.getConfig();
     this.agent!.changeModel({
-      llmProvider: (config?.provider === "claude" ? "anthropic" : config?.provider ?? "ollama") as any,
+      llmProvider: this.llmProvider,
       llmModel: model,
       apiKey: config?.claudeApiKey,
     });
@@ -187,5 +188,10 @@ disableToolbox(name: string): void {
         "or the selected provider failed to start.",
       );
     }
+  }
+
+  destroy(): void {
+    this.agent?.reset();
+    this.agent = null;
   }
 }

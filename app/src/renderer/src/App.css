@@ -3125,3 +3125,30 @@ textarea {
   opacity: 0.4;
   cursor: default;
 }
+
+.app-nav-tab {
+  background: none;
+  border: none;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  cursor: pointer;
+  padding: 4px 0;
+  color: var(--fg4);
+  border-bottom: 1px solid transparent;
+  transition: all var(--t1);
+}
+
+.app-nav-tab:hover {
+  color: var(--fg3);
+}
+
+.app-nav-tab.active {
+  color: var(--fg2);
+  border-bottom-color: var(--fg3);
+}
+
+.app-nav-tab:focus:not(:focus-visible) {
+  outline: none;
+}

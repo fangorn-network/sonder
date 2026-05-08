@@ -344,6 +344,35 @@ export class OllamaManager {
     });
   }
 
+  async getLoadedModels(): Promise<string[]> {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3000);
+    const res = await fetch(`${this.baseUrl}/api/ps`, { signal: controller.signal });
+    clearTimeout(timeout);
+    if (!res.ok) return [];
+    const data = (await res.json()) as { models?: { name: string }[] };
+    return data.models?.map((m) => m.name) ?? [];
+  } catch {
+    return [];
+  }
+}
+
+  async unloadAllModels(): Promise<void> {
+    const models = await this.listModels();
+    for (const model of models) {
+      try {
+        await fetch(`${this.baseUrl}/api/generate`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ model, prompt: "", keep_alive: 0 }),
+        });
+      } catch {
+        // model may already be unloaded
+      }
+    }
+  }
+
   getBaseUrl(): string {
     return this.baseUrl;
   }

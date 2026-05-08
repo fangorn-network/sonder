@@ -9,7 +9,7 @@ import { PromptManager } from '../components/management/PromptManager'
 
 type Provider = LLMProvider | 'none'
 
-type AgentTab = 'overview' | 'toolboxes' | 'prompts'
+type AgentTab = 'core' | 'toolboxes' | 'prompts'
 
 interface ProviderStatus {
   provider: Provider
@@ -30,7 +30,7 @@ export function AgentView() {
   const [models, setModels] = useState<string[]>([])
   const [selectedModel, setSelectedModel] = useState('')
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState<AgentTab>('overview')
+  const [tab, setTab] = useState<AgentTab>('core')
 
   const refresh = useCallback(async () => {
     setLoading(true)
@@ -86,9 +86,8 @@ export function AgentView() {
     <div className="agent-view">
       <div className="agent-view-header">
         <div className="agent-view-header-left">
-          <h2 className="agent-view-title">agent</h2>
           <nav className="agent-view-tabs">
-            {(['overview', 'toolboxes', 'prompts'] as AgentTab[]).map((t) => (
+            {(['core', 'toolboxes', 'prompts'] as AgentTab[]).map((t) => (
               <button
                 key={t}
                 className={`agent-view-tab ${tab === t ? 'active' : ''}`}
@@ -99,7 +98,7 @@ export function AgentView() {
             ))}
           </nav>
         </div>
-        {tab === 'overview' && (
+        {tab === 'core' && (
           <button className="agent-view-refresh" onClick={refresh}>refresh</button>
         )}
       </div>
@@ -136,7 +135,7 @@ export function AgentView() {
         </section>
       )}
 
-      {tab === 'overview' && (
+      {tab === 'core' && (
         <AgentManager
           providerStatus={providerStatus}
           models={models}

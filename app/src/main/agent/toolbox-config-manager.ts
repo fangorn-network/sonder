@@ -1,17 +1,14 @@
 import { app } from "electron";
 import path from "path";
 import fs from "fs/promises";
+import { existsSync, readdirSync, readFileSync } from "fs";
 
 /**
  * Describes a single toolbox's UI-editable configuration.
- * Each toolbox defines its own schema; this is the serialised
- * representation that lives on disk and flows through IPC.
  */
 export interface ToolboxConfigEntry {
-  /** Matches the toolbox directory / plugin name */
   id: string;
   enabled: boolean;
-  /** Toolbox-specific config values (string fields, URLs, etc.) */
   fields: Record<string, string | string[] | boolean>;
 }
 
@@ -30,12 +27,12 @@ export interface ToolboxFieldDescriptor {
   label: string;
   type: "text" | "password" | "url" | "url-list" | "toggle";
   placeholder?: string;
-  /** If true, the app provides this value automatically (e.g. walletClient) */
   appProvided?: boolean;
 }
 
 /**
  * Metadata the UI needs to render a toolbox config card.
+ * Discovered from each toolbox's config.json.
  */
 export interface ToolboxDescriptor {
   id: string;
@@ -44,84 +41,96 @@ export interface ToolboxDescriptor {
   fields: ToolboxFieldDescriptor[];
 }
 
-/**
- * Registry of known toolboxes and their UI field descriptors.
- * Add new entries here when you create a new toolbox plugin.
- */
-export const TOOLBOX_REGISTRY: ToolboxDescriptor[] = [
-  {
-    id: "fangornToolbox",
-    label: "Fangorn (x402f)",
-    description: "Purchase and decrypt files using x402 and x402f",
-    fields: [
-      { key: "usdcContractAddress", label: "USDC Contract Address", type: "text", placeholder: "0x..." },
-      { key: "usdcDomainName", label: "USDC Domain Name", type: "text", placeholder: "e.g. USDC" },
-      { key: "facilitatorAddress", label: "Facilitator Address", type: "text", placeholder: "0x..." },
-      { key: "resourceServerUrl", label: "Resource Server URL", type: "url", placeholder: "https://..." },
-      { key: "domain", label: "Domain", type: "text", placeholder: "e.g. fangorn.network" },
-      { key: "walletClient", label: "Wallet Client", type: "text", appProvided: true },
-      { key: "config", label: "Chain Config", type: "text", appProvided: true },
-    ],
-  },
-  {
-    id: "mcpToolbox",
-    label: "MCP Servers",
-    description: "Connect to external MCP servers for additional tools",
-    fields: [
-      { key: "mcpServerUrls", label: "Server URLs", type: "url-list", placeholder: "https://mcp.example.com/sse" },
-    ],
-  },
-  {
-    id: "agent0SdkToolbox",
-    label: "Agent0 SDK",
-    description: "On-chain agent operations via Agent0",
-    fields: [
-      { key: "pinataJwt", label: "Pinata JWT", type: "password", placeholder: "eyJ..." },
-      { key: "key", label: "Private Key", type: "password", placeholder: "0x..." },
-      { key: "chainConfig", label: "Chain Config", type: "text", appProvided: true },
-    ],
-  },
-  {
-    id: "gmailToolbox",
-    label: "Gmail",
-    description: "Send and manage emails through Gmail",
-    fields: [
-      { key: "gmailClientId", label: "Client ID", type: "text", placeholder: "xxx.apps.googleusercontent.com" },
-      { key: "gmailClientSecret", label: "Client Secret", type: "password" },
-      { key: "gmailRefreshToken", label: "Refresh Token", type: "password" },
-      { key: "agentSignoff", label: "Email Sign-off", type: "text", placeholder: "e.g. Best regards, Agent" },
-    ],
-  },
-  {
-    id: "tasteToolbox",
-    label: "Taste Tools",
-    description: "Music taste analysis and recommendation tools",
-    fields: [],
-  },
-];
-
 export class ToolboxConfigManager {
   private configPath: string;
   private config: ToolboxConfigFile | null = null;
+  private registry: ToolboxDescriptor[] = [];
+  private toolboxDir: string | null = null;
 
   constructor() {
     this.configPath = path.join(app.getPath("userData"), "toolbox-config.json");
   }
 
+  /**
+   * Scan the toolbox directory for config.json files and build
+   * the registry of available toolboxes.
+   */
+  discoverRegistry(toolboxDir: string): ToolboxDescriptor[] {
+    this.toolboxDir = toolboxDir;
+    this.registry = [];
+
+    if (!existsSync(toolboxDir)) {
+      console.warn(`[toolbox-config] Directory not found: ${toolboxDir}`);
+      return this.registry;
+    }
+
+    for (const entry of readdirSync(toolboxDir, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+
+      const configPath = path.join(toolboxDir, entry.name, "config.json");
+      if (!existsSync(configPath)) {
+        console.warn(`[toolbox-config] No config.json in ${entry.name}, skipping`);
+        continue;
+      }
+
+      try {
+        const raw = readFileSync(configPath, "utf-8");
+        const descriptor = JSON.parse(raw) as ToolboxDescriptor;
+
+        // Ensure the id matches the directory name
+        if (descriptor.id !== entry.name) {
+          console.warn(
+            `[toolbox-config] config.json id "${descriptor.id}" doesn't match directory "${entry.name}", using directory name`
+          );
+          descriptor.id = entry.name;
+        }
+
+        this.registry.push(descriptor);
+        console.log(`[toolbox-config] Discovered: ${descriptor.label} (${entry.name})`);
+      } catch (err: any) {
+        console.error(`[toolbox-config] Failed to parse config.json in ${entry.name}:`, err.message);
+      }
+    }
+
+    return this.registry;
+  }
+
+  /**
+   * Load persisted config from disk. Merges with the discovered
+   * registry so new toolboxes get default entries and removed
+   * toolboxes are cleaned up.
+   */
   async load(): Promise<ToolboxConfigFile> {
+    let persisted: ToolboxConfigEntry[] = [];
+
     try {
       const raw = await fs.readFile(this.configPath, "utf-8");
-      this.config = JSON.parse(raw) as ToolboxConfigFile;
+      const parsed = JSON.parse(raw) as ToolboxConfigFile;
+      persisted = parsed.toolboxes ?? [];
     } catch {
-      // First launch — create defaults with everything disabled
-      this.config = {
-        toolboxes: TOOLBOX_REGISTRY.map((desc) => ({
-          id: desc.id,
-          enabled: false,
-          fields: {},
-        })),
-      };
+      // First launch or corrupt file — start fresh
     }
+
+    // Build a map of persisted entries
+    const persistedMap = new Map(persisted.map((e) => [e.id, e]));
+
+    // Merge: use persisted values where they exist, create defaults for new toolboxes
+    const merged: ToolboxConfigEntry[] = this.registry.map((desc) => {
+      const existing = persistedMap.get(desc.id);
+      if (existing) return existing;
+
+      return {
+        id: desc.id,
+        enabled: false,
+        fields: {},
+      };
+    });
+
+    this.config = { toolboxes: merged };
+
+    // Persist the merged result so new toolboxes appear in the file
+    await this.save(this.config);
+
     return this.config;
   }
 
@@ -151,6 +160,6 @@ export class ToolboxConfigManager {
   }
 
   getRegistry(): ToolboxDescriptor[] {
-    return TOOLBOX_REGISTRY;
+    return this.registry;
   }
 }

@@ -142,12 +142,18 @@ export function AgentView() {
     setSaveError(null)
   }
 
+  const currentProvider = providerStatus?.provider
+  const isPulling = pullTarget !== null
+
   const handleSave = useCallback(async () => {
     if (!selectedProvider) return
+
     setSaving(true)
     setSaveError(null)
+
     try {
       const config: AgentConfig = { provider: selectedProvider }
+
       if (selectedProvider === 'claude') {
         if (!claudeKey.trim()) {
           setSaveError('API key is required for Claude.')
@@ -157,14 +163,35 @@ export function AgentView() {
         config.claudeApiKey = claudeKey.trim()
         config.claudeModel = claudeModel
       }
+
       if (selectedProvider === 'ollama' && selectedModel) {
         config.defaultModel = selectedModel
       }
+
+      // Persist the config
       const status = await window.agentAPI.setProvider(config)
       setProviderStatus(status)
+
       if (!status.ready && status.error) {
         setSaveError(status.error)
       } else {
+        // Hot-swap provider/model on the running agent
+        const isReady = await window.agentAPI.isReady()
+        if (isReady) {
+          const providerChanged = currentProvider !== selectedProvider
+
+          if (providerChanged) {
+            const llmProvider = selectedProvider === 'claude' ? 'anthropic' : 'ollama'
+            const model = selectedProvider === 'claude' ? claudeModel : (selectedModel || 'qwen3.5:4b')
+            await window.agentAPI.changeProvider(llmProvider, model, claudeKey || undefined)
+          } else {
+            const model = selectedProvider === 'claude' ? claudeModel : selectedModel
+            if (model) {
+              await window.agentAPI.changeModel(model)
+            }
+          }
+        }
+
         setDirty(false)
         const modelList = await window.agentAPI.ollamaListModels().catch(() => [])
         setModels(modelList)
@@ -174,7 +201,7 @@ export function AgentView() {
     } finally {
       setSaving(false)
     }
-  }, [selectedProvider, claudeKey, claudeModel, selectedModel])
+  }, [selectedProvider, claudeKey, claudeModel, selectedModel, currentProvider])
 
   const handleInstallOllama = useCallback(async () => {
     await window.agentAPI.ollamaInstall()
@@ -249,9 +276,6 @@ export function AgentView() {
       </div>
     )
   }
-
-  const currentProvider = providerStatus?.provider
-  const isPulling = pullTarget !== null
 
   return (
     <div className="agent-view">
@@ -387,7 +411,7 @@ export function AgentView() {
                 <label className="agent-key" htmlFor="claude-key">api key</label>
                 <input
                   id="claude-key"
-                  type="password"
+                  type="text"
                   className="agent-input"
                   value={claudeKey}
                   onChange={(e) => { setClaudeKey(e.target.value); setDirty(true) }}

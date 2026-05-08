@@ -184,4 +184,40 @@ export function registerAgentIpcHandlers(
       return { success: false, error: err.message };
     }
   });
+
+  ipcMain.handle("agent:toolbox-enable", async (_event, id: string) => {
+    try {
+      await bridge.enableToolbox(id);
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle("agent:toolbox-disable", async (_event, name: string) => {
+    try {
+      bridge.disableToolbox(name);
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle("agent:change-provider", async (_event, provider: string, model: string, apiKey?: string, url?: string) => {
+    try {
+      await bridge.changeProvider(provider, model, apiKey, url);
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle("agent:change-model", async (_event, model: string) => {
+    try {
+      await bridge.changeModel(model);
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
 }

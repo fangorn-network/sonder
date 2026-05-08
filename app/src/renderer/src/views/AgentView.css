@@ -7,9 +7,9 @@
 
 .agent-view {
   width: 100%;
-  max-width: 800px;
+  max-width: 1100px;
   margin: 0 auto;
-  padding: var(--sp-6) var(--sp-4) 64px;
+  padding: var(--sp-7) var(--sp-6) 80px;
 }
 
 .agent-view-loading {
@@ -38,7 +38,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: var(--sp-5);
+  margin-bottom: var(--sp-6);
 }
 
 .agent-view-header-left {
@@ -49,7 +49,7 @@
 
 .agent-view-title {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 14px;
   letter-spacing: 0.25em;
   text-transform: uppercase;
   color: var(--fg3);
@@ -62,13 +62,9 @@
   gap: var(--sp-3);
 }
 
-.agent-view-tab:focus:not(:focus-visible) {
-  outline: none;
-}
-
 .agent-view-tab {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.15em;
   text-transform: uppercase;
   color: var(--fg4);
@@ -113,7 +109,7 @@
 .agent-view-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: var(--sp-4);
+  gap: var(--sp-5);
 }
 
 @media (max-width: 560px) {
@@ -130,10 +126,10 @@
   -webkit-backdrop-filter: var(--blur-sm);
   border: 1px solid var(--glass-edge);
   border-radius: var(--r-md);
-  padding: var(--sp-4);
+  padding: var(--sp-5);
   display: flex;
   flex-direction: column;
-  gap: var(--sp-3);
+  gap: var(--sp-4);
   box-shadow: inset 0 1px 0 var(--glass-edge-top);
 }
 
@@ -143,7 +139,7 @@
 
 .agent-card-label {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.2em;
   text-transform: uppercase;
   color: var(--fg4);
@@ -168,13 +164,13 @@
 
 .agent-key {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 12px;
   color: var(--fg3);
 }
 
 .agent-val {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 12px;
   color: var(--fg2);
   text-align: right;
 }
@@ -233,7 +229,7 @@
 .agent-status-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 10px var(--sp-5);
+  gap: var(--sp-3) var(--sp-7);
 }
 
 .agent-status-item {
@@ -267,12 +263,12 @@
   background: var(--glass-1);
   border: 1px solid var(--glass-edge);
   border-radius: var(--r-sm);
-  padding: var(--sp-3);
+  padding: var(--sp-4);
   cursor: pointer;
   text-align: left;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--sp-2);
   transition: all var(--t1);
 }
 
@@ -295,14 +291,14 @@
 
 .agent-provider-name {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 12px;
   color: var(--fg2);
   letter-spacing: 0.1em;
 }
 
 .agent-provider-desc {
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 10px;
   color: var(--fg4);
   line-height: 1.4;
 }
@@ -312,8 +308,8 @@
 .agent-provider-config {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: var(--sp-3);
+  gap: var(--sp-3);
+  padding: var(--sp-4);
   background: var(--glass-1);
   border: 1px solid var(--border2);
   border-radius: var(--r-sm);
@@ -393,12 +389,12 @@
 .agent-input {
   flex: 1;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 12px;
   color: var(--fg2);
   background: var(--bg1);
   border: 1px solid var(--border);
   border-radius: var(--r-sm);
-  padding: 6px 10px;
+  padding: var(--sp-2) var(--sp-3);
   outline: none;
   transition: border-color var(--t1);
 }
@@ -416,14 +412,14 @@
 .agent-save-btn {
   align-self: flex-end;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.15em;
   text-transform: uppercase;
   color: var(--accent);
   background: var(--accent-dim);
   border: 1px solid var(--accent-border);
   border-radius: var(--r-sm);
-  padding: 7px 20px;
+  padding: var(--sp-2) var(--sp-5);
   cursor: pointer;
   transition: all var(--t1);
 }
@@ -740,7 +736,7 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--sp-4);
-  padding: 14px var(--sp-4);
+  padding: var(--sp-4) var(--sp-5);
   cursor: pointer;
   transition: background var(--t1);
 }
@@ -759,21 +755,21 @@
 .toolbox-card-title-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--sp-3);
 }
 
 .toolbox-card-name {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 12px;
   color: var(--fg2);
   letter-spacing: 0.05em;
 }
 
 .toolbox-card-desc {
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 10px;
   color: var(--fg4);
-  line-height: 1.3;
+  line-height: 1.4;
 }
 
 .toolbox-card-actions {
@@ -845,12 +841,12 @@
 /* ── Toolbox Card Body ─────────────────────────────────────────────────────── */
 
 .toolbox-card-body {
-  padding: 0 var(--sp-4) 14px;
+  padding: 0 var(--sp-5) var(--sp-4);
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--sp-3);
   border-top: 1px solid var(--border2);
-  padding-top: var(--sp-3);
+  padding-top: var(--sp-4);
 }
 
 .toolbox-field {
@@ -934,25 +930,25 @@
 
 .prompt-desc {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
   color: var(--fg4);
   margin: 0;
-  line-height: 1.4;
+  line-height: 1.5;
 }
 
 .prompt-textarea {
   width: 100%;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 12px;
   color: var(--fg2);
   background: var(--bg1);
   border: 1px solid var(--border);
   border-radius: var(--r-sm);
-  padding: var(--sp-3);
+  padding: var(--sp-4);
   outline: none;
   resize: vertical;
-  min-height: 200px;
-  line-height: 1.6;
+  min-height: 240px;
+  line-height: 1.7;
   transition: border-color var(--t1);
   box-sizing: border-box;
 }

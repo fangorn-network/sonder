@@ -41,6 +41,10 @@ interface BrowseViewProps {
   allGenres: string[]
   allMoods: string[]
   allContexts: string[]
+  // Ambient agent — Window-mode saliency surface
+  ambientStatus?: 'idle' | 'fetching' | 'error'
+  ambientQueueSize?: number
+  ambientLastReason?: string
 }
 
 async function fetchAlbumArt(title: string, artist: string): Promise<string | null> {
@@ -67,12 +71,14 @@ export function BrowseView({
   onFilteredChange, onPlayingIdChange, onSignal, onTrackClick,
   genreFilter, moodFilter, contextFilter, onGenreFilter, onMoodFilter, onContextFilter,
   allGenres, allMoods, allContexts,
+  ambientStatus, ambientQueueSize, ambientLastReason,
 }: BrowseViewProps) {
   const sentinelRef = useRef<HTMLDivElement>(null)
   const [filterOpen, setFilterOpen] = useState(false)
   const [playingId, setPlayingId] = useState<string | null>(null)
   const [albumArtCache, setAlbumArtCache] = useState<Record<string, string>>({})
   const fetchingRef = useRef<Set<string>>(new Set())
+  const [reasonExpanded, setReasonExpanded] = useState(false)
 
   const { play, searchAndPlay, connect, connected } = useSpotifyContext()
 
@@ -95,8 +101,6 @@ export function BrowseView({
     }
   }
 
-  // Built from allGenres (stable, never shrinks) so colors don't shift
-  // when a filter narrows the visible track set.
   const genreColor: Record<string, string> = {}
   ;(allGenres ?? []).forEach((g, i) => {
     genreColor[g] = GENRE_PALETTE[i % GENRE_PALETTE.length]
@@ -114,13 +118,10 @@ export function BrowseView({
     onContextFilter('all')
   }
 
-  // tracks IS the filtered set — filtering handled upstream in useChroma
   const filtered = tracks
 
-  // ── sync filtered tracks to parent ───────────────────────────────────
   useEffect(() => { onFilteredChange?.(filtered) }, [filtered])
 
-  // ── album art fetching ───────────────────────────────────────────────
   useEffect(() => {
     if (filtered.length === 0) return
     const missing = filtered.filter(t => !albumArtCache[t.id] && !fetchingRef.current.has(t.id))
@@ -135,7 +136,6 @@ export function BrowseView({
     })
   }, [filtered])
 
-  // ── infinite scroll ──────────────────────────────────────────────────
   useEffect(() => {
     const el = sentinelRef.current
     if (!el) return
@@ -147,7 +147,6 @@ export function BrowseView({
     return () => observer.disconnect()
   }, [loadMore])
 
-  // ── filter sheet scroll lock ─────────────────────────────────────────
   useEffect(() => {
     if (!filterOpen) return
     const prev = document.body.style.overflow
@@ -157,7 +156,11 @@ export function BrowseView({
     return () => { document.body.style.overflow = prev; window.removeEventListener('keydown', onKey) }
   }, [filterOpen])
 
-  // ── card ─────────────────────────────────────────────────────────────
+  // Collapse reason when agent finishes a new fetch
+  useEffect(() => {
+    if (ambientStatus === 'idle' && ambientLastReason) setReasonExpanded(false)
+  }, [ambientLastReason])
+
   const renderCard = (track: Track) => {
     const accentColor = hashColor(track.id)
     const primaryGenre = track.genres[0] ?? null
@@ -272,6 +275,10 @@ export function BrowseView({
     </section>
   )
 
+  const showAmbientBar = ambientStatus !== undefined
+  const isFetching = ambientStatus === 'fetching'
+  const isError = ambientStatus === 'error'
+
   return (
     <div className="browse-view">
       <div className="browse-toolbar">
@@ -299,6 +306,67 @@ export function BrowseView({
           {hasActiveFilter && <span className="bv-filter-badge">{activeCount}</span>}
         </button>
       </div>
+
+      {/* Ambient agent status bar — Window-mode saliency surface */}
+      {showAmbientBar && (
+        <div
+          style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            padding: '6px 12px', margin: '0 0 8px',
+            borderRadius: reasonExpanded ? '6px 6px 0 0' : 6,
+            fontSize: 11, letterSpacing: '0.04em',
+            background: isError ? 'rgba(248,113,113,0.07)' : 'rgba(167,139,250,0.07)',
+            border: `1px solid ${isError ? 'rgba(248,113,113,0.18)' : 'rgba(167,139,250,0.18)'}`,
+            color: isError ? '#f87171' : '#a78bfa',
+            transition: 'all 0.25s ease',
+          }}
+        >
+          <span style={{
+            width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
+            background: isError ? '#f87171' : isFetching ? '#a78bfa' : '#34d399',
+            boxShadow: isFetching ? '0 0 6px #a78bfa88' : undefined,
+            animation: isFetching ? 'ambientPulse 1.2s ease-in-out infinite' : undefined,
+          }} />
+          <span style={{ flex: 1, opacity: 0.85 }}>
+            {isError
+              ? 'agent · fetch failed'
+              : isFetching
+                ? 'agent · listening…'
+                : `agent · ${ambientQueueSize ?? 0} queued`
+            }
+          </span>
+          {ambientLastReason && !isError && (
+            <button
+              onClick={() => setReasonExpanded(v => !v)}
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                color: 'inherit', fontSize: 10, opacity: 0.65, padding: '0 2px',
+                letterSpacing: '0.06em', textTransform: 'uppercase',
+              }}
+              title="Why did the agent queue these?"
+            >
+              {reasonExpanded ? 'hide' : 'why?'}
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Expanded reason panel — the agent's saliency explanation */}
+      {showAmbientBar && reasonExpanded && ambientLastReason && (
+        <div style={{
+          margin: '-8px 0 8px',
+          padding: '8px 12px',
+          borderRadius: '0 0 6px 6px',
+          background: 'rgba(167,139,250,0.05)',
+          border: '1px solid rgba(167,139,250,0.12)',
+          borderTop: 'none',
+          fontSize: 11, lineHeight: 1.6,
+          color: 'var(--fg3, #c4b5fd)',
+          fontStyle: 'italic',
+        }}>
+          {ambientLastReason}
+        </div>
+      )}
 
       {hasActiveFilter && (
         <div className="bv-active-chips">
@@ -420,6 +488,13 @@ export function BrowseView({
           </div>
         </div>
       )}
+
+      <style>{`
+        @keyframes ambientPulse {
+          0%, 100% { opacity: 0.4; transform: scale(1); }
+          50% { opacity: 1; transform: scale(1.3); }
+        }
+      `}</style>
     </div>
   )
 }

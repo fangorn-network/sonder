@@ -37,24 +37,24 @@ export default function ListenerPage() {
         <div className="l-statements-inner">
           <div className="l-statement">
             <p className="l-statement-text">
-              Grows with you. Every listen shapes a taste profile that lives on your machine — not in a data center, not sold to advertisers.
+              Sond3r grows with you. Every listen shapes a taste profile that you own - not owned by a platform.
             </p>
           </div>
           <div className="l-statement">
             <p className="l-statement-text">
-              Search by feel. Tell SOND3R what you're in the mood for. Late night. Melancholic. Driving. It understands intent.
+              Search by <i>context</i>. Tell SOND3R what you're in the mood for. Late night. Melancholic. Driving. It understands intent.
             </p>
           </div>
           <div className="l-statement">
             <p className="l-statement-text">
-              Wrapped whenever you want it. Your listening insights are yours to explore any time — not handed back once a year.
+              Your listening insights are yours to explore any time instead of generated and wrapped once a year.
             </p>
           </div>
-          <div className="l-statement">
+          {/* <div className="l-statement">
             <p className="l-statement-text">
-              Buy music directly from artists. Payment clears instantly to their wallet. You stay anonymous. No platform in the middle.
+              [FUTURE] Buy music directly from artists. Payment clears instantly to their wallet. You stay anonymous. No platform in the middle.
             </p>
-          </div>
+          </div> */}
           <div className="l-statement l-statement--earn">
             <p className="l-statement-text">
               Earn from label auctions. Artists drop tracks asking for real feedback. Pick the tags that best describe what you hear. When your taste matches, you earn USDC.

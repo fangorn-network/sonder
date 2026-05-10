@@ -41,3 +41,11 @@ $ pnpm build:linux
   "@fangorn-network/agent-types": "link:../../agent/agent-types"
 }
 ```
+
+#### Known Issues:
+1. (Linux) Electron sandbox issue
+To fix, run
+```sh
+sudo chown root:root ./node_modules/.pnpm/electron@39.8.9/node_modules/electron/dist/chrome-sandbox
+sudo chmod 4755 ./node_modules/.pnpm/electron@39.8.9/node_modules/electron/dist/chrome-sandbox
+```

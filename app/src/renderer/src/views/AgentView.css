@@ -1,0 +1,985 @@
+/* =============================================================================
+   AGENT MANAGEMENT
+   Covers: AgentView, AgentManager, ToolboxManager, PromptManager
+   ─────────────────────────────────────────────────────────────────────────── */
+
+/* ── Layout ────────────────────────────────────────────────────────────────── */
+
+.agent-view {
+  width: 100%;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: var(--sp-7) var(--sp-6) 80px;
+}
+
+.agent-view-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+}
+
+.agent-view-pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--fg3);
+  animation: agentPulse 1.4s ease-in-out infinite;
+}
+
+@keyframes agentPulse {
+  0%, 100% { opacity: 0.3; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.5); }
+}
+
+/* ── Header & Tabs ─────────────────────────────────────────────────────────── */
+
+.agent-view-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--sp-6);
+}
+
+.agent-view-header-left {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+}
+
+.agent-view-title {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--fg3);
+  font-weight: 400;
+  margin: 0;
+}
+
+.agent-view-tabs {
+  display: flex;
+  gap: var(--sp-3);
+}
+
+.agent-view-tab {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--fg4);
+  background: none;
+  border: none;
+  border-bottom: 1px solid transparent;
+  padding: var(--sp-1) 0;
+  cursor: pointer;
+  transition: all var(--t1);
+}
+
+.agent-view-tab:hover {
+  color: var(--fg3);
+}
+
+.agent-view-tab.active {
+  color: var(--fg2);
+  border-bottom-color: var(--fg3);
+}
+
+.agent-view-refresh {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--fg3);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 6px 14px;
+  cursor: pointer;
+  transition: all var(--t1);
+}
+
+.agent-view-refresh:hover {
+  color: var(--fg2);
+  border-color: var(--border3);
+}
+
+/* ── Grid ──────────────────────────────────────────────────────────────────── */
+
+.agent-view-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-5);
+}
+
+@media (max-width: 560px) {
+  .agent-view-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── Cards ─────────────────────────────────────────────────────────────────── */
+
+.agent-card {
+  background: var(--glass-2);
+  backdrop-filter: var(--blur-sm);
+  -webkit-backdrop-filter: var(--blur-sm);
+  border: 1px solid var(--glass-edge);
+  border-radius: var(--r-md);
+  padding: var(--sp-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  box-shadow: inset 0 1px 0 var(--glass-edge-top);
+}
+
+.agent-card-wide {
+  grid-column: 1 / -1;
+}
+
+.agent-card-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--fg4);
+  margin: 0;
+  font-weight: 400;
+}
+
+.agent-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+/* ── Rows & Key/Value ──────────────────────────────────────────────────────── */
+
+.agent-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+
+.agent-key {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--fg3);
+}
+
+.agent-val {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--fg2);
+  text-align: right;
+}
+
+.agent-err {
+  color: var(--err);
+}
+
+/* ── Status Dots ───────────────────────────────────────────────────────────── */
+
+.agent-dot {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.agent-dot::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.agent-dot.on {
+  color: var(--success);
+}
+
+.agent-dot.on::before {
+  background: var(--success);
+  box-shadow: 0 0 6px var(--success-dim);
+}
+
+.agent-dot.off {
+  color: var(--err);
+}
+
+.agent-dot.off::before {
+  background: var(--err);
+  box-shadow: 0 0 6px var(--err-dim);
+}
+
+.agent-dot.idle {
+  color: var(--orange);
+}
+
+.agent-dot.idle::before {
+  background: var(--orange);
+  box-shadow: 0 0 6px var(--orange-dim);
+}
+
+/* ── Status Grid ───────────────────────────────────────────────────────────── */
+
+.agent-status-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-3) var(--sp-7);
+}
+
+.agent-status-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+
+@media (max-width: 560px) {
+  .agent-status-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── Provider Selection ────────────────────────────────────────────────────── */
+
+.agent-provider-options {
+  display: flex;
+  gap: 10px;
+}
+
+@media (max-width: 560px) {
+  .agent-provider-options {
+    flex-direction: column;
+  }
+}
+
+.agent-provider-btn {
+  flex: 1;
+  background: var(--glass-1);
+  border: 1px solid var(--glass-edge);
+  border-radius: var(--r-sm);
+  padding: var(--sp-4);
+  cursor: pointer;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  transition: all var(--t1);
+}
+
+.agent-provider-btn:hover {
+  border-color: var(--glass-edge-hi);
+  background: var(--glass-hover);
+}
+
+.agent-provider-btn.selected {
+  border-color: var(--accent-border);
+  background: var(--accent-dim);
+}
+
+.agent-provider-btn-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+
+.agent-provider-name {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--fg2);
+  letter-spacing: 0.1em;
+}
+
+.agent-provider-desc {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--fg4);
+  line-height: 1.4;
+}
+
+/* ── Provider Config Sub-sections ──────────────────────────────────────────── */
+
+.agent-provider-config {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-4);
+  background: var(--glass-1);
+  border: 1px solid var(--border2);
+  border-radius: var(--r-sm);
+}
+
+.agent-provider-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+
+/* ── Links ─────────────────────────────────────────────────────────────────── */
+
+.agent-link-btn {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--fg3);
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  padding: 0;
+  transition: color var(--t1);
+}
+
+.agent-link-btn:hover {
+  color: var(--fg);
+}
+
+/* ── Model Select ──────────────────────────────────────────────────────────── */
+
+.agent-model-select {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+
+.agent-select {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--fg2);
+  background: var(--bg1);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 5px var(--sp-2);
+  outline: none;
+  cursor: pointer;
+  transition: border-color var(--t1);
+}
+
+.agent-select:focus {
+  border-color: var(--accent-border);
+}
+
+.agent-select option {
+  background: var(--bg1);
+  color: var(--fg2);
+}
+
+.agent-model {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--fg2);
+}
+
+/* ── Inputs ────────────────────────────────────────────────────────────────── */
+
+.agent-input-group {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.agent-input {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--fg2);
+  background: var(--bg1);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: var(--sp-2) var(--sp-3);
+  outline: none;
+  transition: border-color var(--t1);
+}
+
+.agent-input::placeholder {
+  color: var(--fg4);
+}
+
+.agent-input:focus {
+  border-color: var(--accent-border);
+}
+
+/* ── Save Button ───────────────────────────────────────────────────────────── */
+
+.agent-save-btn {
+  align-self: flex-end;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--accent);
+  background: var(--accent-dim);
+  border: 1px solid var(--accent-border);
+  border-radius: var(--r-sm);
+  padding: var(--sp-2) var(--sp-5);
+  cursor: pointer;
+  transition: all var(--t1);
+}
+
+.agent-save-btn:hover:not(:disabled) {
+  background: rgba(167, 139, 250, 0.18);
+  border-color: var(--accent);
+}
+
+.agent-save-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.agent-save-error {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--err);
+  padding: var(--sp-1) 0;
+}
+
+/* ── Checkbox ──────────────────────────────────────────────────────────────── */
+
+.agent-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  cursor: pointer;
+}
+
+.agent-checkbox-row input[type="checkbox"] {
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+/* ── Claude Model Selector ─────────────────────────────────────────────────── */
+
+.agent-claude-models {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.agent-claude-model-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.agent-claude-model-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: 10px var(--sp-3);
+  background: var(--glass-1);
+  border: 1px solid var(--glass-edge);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  text-align: left;
+  transition: all var(--t1);
+}
+
+.agent-claude-model-btn:hover {
+  border-color: var(--glass-edge-hi);
+  background: var(--glass-hover);
+}
+
+.agent-claude-model-btn.selected {
+  border-color: var(--accent-border);
+  background: var(--accent-dim);
+}
+
+.agent-claude-model-name {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--fg2);
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+.agent-claude-model-btn.selected .agent-claude-model-name {
+  color: var(--accent);
+}
+
+.agent-claude-model-desc {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--fg4);
+  text-align: right;
+  line-height: 1.3;
+}
+
+/* ── Pull Progress ─────────────────────────────────────────────────────────── */
+
+.agent-pull-status {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px var(--sp-3);
+  background: var(--glass-1);
+  border: 1px solid var(--glass-edge);
+  border-radius: var(--r-sm);
+}
+
+.agent-pull-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+
+.agent-pull-bar-track {
+  width: 100%;
+  height: 3px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.agent-pull-bar-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+/* ── Delete Confirmation ───────────────────────────────────────────────────── */
+
+.agent-delete-confirm {
+  display: flex;
+  gap: 10px;
+}
+
+.agent-delete-btn {
+  opacity: 0;
+  transition: opacity var(--t1);
+}
+
+.agent-row:hover .agent-delete-btn {
+  opacity: 1;
+}
+
+.agent-delete-yes {
+  color: var(--err) !important;
+}
+
+.agent-delete-yes:hover {
+  opacity: 0.8;
+}
+
+/* ── Curated Model List ────────────────────────────────────────────────────── */
+
+.agent-curated-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.agent-curated-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: 10px var(--sp-3);
+  border-radius: var(--r-sm);
+  transition: background var(--t1);
+}
+
+.agent-curated-item:hover {
+  background: var(--glass-hover);
+}
+
+.agent-curated-header {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.agent-curated-info {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.agent-curated-name {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--fg2);
+  letter-spacing: 0.05em;
+}
+
+.agent-curated-badge {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  color: var(--success);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.agent-curated-desc {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--fg4);
+  line-height: 1.3;
+}
+
+.agent-curated-sizes {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.agent-size-btn {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--fg3);
+  background: var(--glass-1);
+  border: 1px solid var(--glass-edge);
+  border-radius: var(--r-sm);
+  padding: 3px var(--sp-2);
+  cursor: pointer;
+  transition: all var(--t1);
+}
+
+.agent-size-btn:hover:not(:disabled) {
+  color: var(--fg);
+  border-color: var(--glass-edge-hi);
+  background: var(--glass-hover);
+}
+
+.agent-size-btn.pulled {
+  color: var(--success);
+  border-color: rgba(34, 197, 94, 0.2);
+  cursor: default;
+}
+
+.agent-size-btn:disabled:not(.pulled) {
+  opacity: 0.3;
+  cursor: default;
+}
+
+/* ── Toolbox Chips (overview) ──────────────────────────────────────────────── */
+
+.agent-toolbox-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.agent-toolbox-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.agent-toolbox-name {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--fg3);
+  font-weight: 500;
+}
+
+.agent-toolbox-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.agent-chip {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--fg3);
+  background: var(--glass-1);
+  border: 1px solid var(--glass-edge);
+  border-radius: var(--r-sm);
+  padding: 3px var(--sp-2);
+}
+
+/* =============================================================================
+   TOOLBOX MANAGER
+   ─────────────────────────────────────────────────────────────────────────── */
+
+.toolbox-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 120px;
+}
+
+.toolbox-manager {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.toolbox-card {
+  background: var(--glass-2);
+  backdrop-filter: var(--blur-sm);
+  -webkit-backdrop-filter: var(--blur-sm);
+  border: 1px solid var(--glass-edge);
+  border-radius: var(--r-md);
+  overflow: hidden;
+  transition: border-color var(--t1);
+}
+
+.toolbox-card:hover {
+  border-color: var(--glass-edge-hi);
+}
+
+.toolbox-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  padding: var(--sp-4) var(--sp-5);
+  cursor: pointer;
+  transition: background var(--t1);
+}
+
+.toolbox-card-header:hover {
+  background: var(--glass-hover);
+}
+
+.toolbox-card-info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+
+.toolbox-card-title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.toolbox-card-name {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--fg2);
+  letter-spacing: 0.05em;
+}
+
+.toolbox-card-desc {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--fg4);
+  line-height: 1.4;
+}
+
+.toolbox-card-actions {
+  flex-shrink: 0;
+}
+
+/* ── Toggle Switch ─────────────────────────────────────────────────────────── */
+
+.toolbox-toggle {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.toolbox-toggle-track {
+  width: 32px;
+  height: 16px;
+  border-radius: 8px;
+  background: var(--border);
+  border: 1px solid var(--border3);
+  position: relative;
+  transition: all var(--t2);
+}
+
+.toolbox-toggle.on .toolbox-toggle-track {
+  background: var(--success-dim);
+  border-color: var(--success);
+}
+
+.toolbox-toggle-thumb {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--fg4);
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  transition: all var(--t2);
+}
+
+.toolbox-toggle.on .toolbox-toggle-thumb {
+  left: 18px;
+  background: var(--success);
+  box-shadow: 0 0 4px var(--success-dim);
+}
+
+.toolbox-toggle.small .toolbox-toggle-track {
+  width: 26px;
+  height: 14px;
+}
+
+.toolbox-toggle.small .toolbox-toggle-thumb {
+  width: 8px;
+  height: 8px;
+  top: 2px;
+  left: 2px;
+}
+
+.toolbox-toggle.small.on .toolbox-toggle-thumb {
+  left: 14px;
+}
+
+.toolbox-toggle:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* ── Toolbox Card Body ─────────────────────────────────────────────────────── */
+
+.toolbox-card-body {
+  padding: 0 var(--sp-5) var(--sp-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  border-top: 1px solid var(--border2);
+  padding-top: var(--sp-4);
+}
+
+.toolbox-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.toolbox-field-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.toolbox-field-row .agent-key {
+  min-width: 110px;
+  flex-shrink: 0;
+}
+
+.toolbox-field-row .agent-input {
+  flex: 1;
+}
+
+.toolbox-no-config {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--fg4);
+  padding: var(--sp-1) 0;
+}
+
+/* ── URL List ──────────────────────────────────────────────────────────────── */
+
+.toolbox-url-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.toolbox-url-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.toolbox-url-list-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.toolbox-url-list-row .agent-input {
+  flex: 1;
+}
+
+.toolbox-card-body .agent-save-btn {
+  align-self: flex-end;
+}
+
+/* =============================================================================
+   PROMPT MANAGER
+   ─────────────────────────────────────────────────────────────────────────── */
+
+.prompt-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 120px;
+}
+
+.prompt-manager {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.prompt-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.prompt-desc {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--fg4);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.prompt-textarea {
+  width: 100%;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--fg2);
+  background: var(--bg1);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: var(--sp-4);
+  outline: none;
+  resize: vertical;
+  min-height: 240px;
+  line-height: 1.7;
+  transition: border-color var(--t1);
+  box-sizing: border-box;
+}
+
+.prompt-textarea::placeholder {
+  color: var(--fg4);
+}
+
+.prompt-textarea:focus {
+  border-color: var(--accent-border);
+}
+
+.prompt-manager .agent-save-btn {
+  align-self: flex-end;
+}
+
+.agent-status-card {
+  margin-bottom: var(--sp-5);
+}
+
+.agent-status-card .agent-val {
+  color: var(--accent);
+}
+.agent-status-card .agent-dot {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.agent-status-card .agent-key {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--fg4);
+}

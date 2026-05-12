@@ -1,0 +1,17 @@
+{
+    "spotify_track_id": {
+        "@type": "string"
+    },
+    "spotify_artist_id": {
+        "@type": "string"
+    },
+    "isrcCode": {
+        "@type": "string | null"
+    },
+    "trackId": {
+        "@type": "string"
+    },
+    "rank": {
+        "@type": "number"
+    }
+}

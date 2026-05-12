@@ -21,6 +21,7 @@ interface SpotifyState {
         albumArt: string
         durationMs: number
         progressMs: number
+        spotifyTrackId: string | null
     } | null
 }
 
@@ -34,6 +35,10 @@ export function useSpotify({ onTrackEnd }: UseSpotifyOptions = {}) {
 
     const userPausedRef = useRef(false)
     const wasPlayingRef = useRef(false)
+    // Guard: suppresses track-end detection during play() initiation sequence.
+    // Set to true when play() starts, cleared once we get a confirmed is_playing:true poll.
+    const transitioningRef = useRef(false)
+
     const [tokens, setTokens] = useState<SpotifyTokens | null>(() => {
         try {
             const raw = localStorage.getItem(STORAGE_KEY)
@@ -94,12 +99,17 @@ export function useSpotify({ onTrackEnd }: UseSpotifyOptions = {}) {
         retries = 2
     ): Promise<{ status: number; data: any }> => {
         const token = await getToken()
-        const { status, body: text } = await (window.api as any).spotifyApi({
-            url: `https://api.spotify.com${path}`,
-            method,
-            token,
-            body
-        })
+        const { status, body: text } = await (window as any)
+            .electron
+            .ipcRenderer
+            .invoke('spotify:api',
+                {
+                    url: `https://api.spotify.com${path}`,
+                    method,
+                    token,
+                    body
+                }
+            )
 
         if (status === 429 && retries > 0) {
             const retryAfter = parseInt('1', 10)
@@ -115,72 +125,90 @@ export function useSpotify({ onTrackEnd }: UseSpotifyOptions = {}) {
         }
     }, [getToken])
 
+    const processPlaybackState = useCallback((data: any) => {
+        if (!data?.item) return
+
+        const isPlaying: boolean = data.is_playing
+
+        // If we're mid-transition (play() just fired), only clear the guard
+        // once Spotify confirms playback is actually running. Suppress any
+        // track-end logic until then.
+        if (transitioningRef.current) {
+            if (isPlaying) {
+                transitioningRef.current = false
+                wasPlayingRef.current = true
+            }
+            // Either way, don't evaluate track-end during transition
+            setState(s => ({
+                ...s,
+                connected: true,
+                isPlaying,
+                deviceId: data.device?.id ?? s.deviceId,
+                currentTrack: {
+                    name: data.item.name,
+                    artist: data.item.artists.map((a: any) => a.name).join(', '),
+                    albumArt: data.item.album.images[0]?.url ?? '',
+                    durationMs: data.item.duration_ms,
+                    progressMs: data.progress_ms,
+                    spotifyTrackId: data.item.id ?? null,
+                }
+            }))
+            return
+        }
+
+        // Normal path: detect natural track end
+        if (wasPlayingRef.current && !isPlaying && !userPausedRef.current) {
+            onTrackEndRef.current?.()
+        }
+        wasPlayingRef.current = isPlaying
+
+        setState(s => ({
+            ...s,
+            connected: true,
+            isPlaying,
+            deviceId: data.device?.id ?? s.deviceId,
+            currentTrack: {
+                name: data.item.name,
+                artist: data.item.artists.map((a: any) => a.name).join(', '),
+                albumArt: data.item.album.images[0]?.url ?? '',
+                durationMs: data.item.duration_ms,
+                progressMs: data.progress_ms,
+                spotifyTrackId: data.item.id ?? null,
+            }
+        }))
+    }, [])
+
     // forcePoll — bypasses isPlaying guard, used right after play()
     const forcePoll = useCallback(async () => {
         if (inFlightRef.current) return
-
         inFlightRef.current = true
-
         try {
             const { status, data } = await spotifyFetch('/v1/me/player')
             if (status === 204 || status === 202 || !data?.item) return
             lastPollTimeRef.current = Date.now()
-            setState(s => ({
-                ...s,
-                connected: true,
-                isPlaying: data.is_playing,
-                deviceId: data.device?.id ?? s.deviceId,
-                currentTrack: {
-                    name: data.item.name,
-                    artist: data.item.artists.map((a: any) => a.name).join(', '),
-                    albumArt: data.item.album.images[0]?.url ?? '',
-                    durationMs: data.item.duration_ms,
-                    progressMs: data.progress_ms,
-                }
-            }))
-            if (wasPlayingRef.current && !data.is_playing && !userPausedRef.current) {
-                onTrackEndRef.current?.()
-            }
-            wasPlayingRef.current = data.is_playing
+            processPlaybackState(data)
         } catch {
             // swallow
         } finally {
             inFlightRef.current = false
         }
-    }, [spotifyFetch])
+    }, [spotifyFetch, processPlaybackState])
 
     const pollPlayback = useCallback(async () => {
         if (inFlightRef.current) return
-        if (!isPlayingRef.current) return
+        if (!isPlayingRef.current && !transitioningRef.current) return
         inFlightRef.current = true
         try {
             const { status, data } = await spotifyFetch('/v1/me/player')
             if (status === 204 || status === 202 || !data?.item) return
             lastPollTimeRef.current = Date.now()
-            setState(s => ({
-                ...s,
-                connected: true,
-                isPlaying: data.is_playing,
-                deviceId: data.device?.id ?? s.deviceId,
-                currentTrack: {
-                    name: data.item.name,
-                    artist: data.item.artists.map((a: any) => a.name).join(', '),
-                    albumArt: data.item.album.images[0]?.url ?? '',
-                    durationMs: data.item.duration_ms,
-                    progressMs: data.progress_ms,
-                }
-            }))
-            // detect natural track end (not user pause)
-            if (wasPlayingRef.current && !data.is_playing && !userPausedRef.current) {
-                onTrackEndRef.current?.()
-            }
-            wasPlayingRef.current = data.is_playing
+            processPlaybackState(data)
         } catch {
             // swallow
         } finally {
             inFlightRef.current = false
         }
-    }, [spotifyFetch])
+    }, [spotifyFetch, processPlaybackState])
 
     useEffect(() => {
         if (!tokens) return
@@ -219,10 +247,16 @@ export function useSpotify({ onTrackEnd }: UseSpotifyOptions = {}) {
 
     const play = useCallback(async (spotifyUri?: string) => {
         userPausedRef.current = false
+        // Reset stale playback state and arm the transition guard BEFORE
+        // any API calls so polls during the initiation window are suppressed.
+        wasPlayingRef.current = false
+        transitioningRef.current = true
+
         let deviceId = state.deviceId
         if (!deviceId) {
             const devices = await getDevices()
             if (devices.length === 0) {
+                transitioningRef.current = false
                 setState(s => ({ ...s, error: 'No active Spotify device. Open Spotify on any device first.' }))
                 return
             }
@@ -230,26 +264,42 @@ export function useSpotify({ onTrackEnd }: UseSpotifyOptions = {}) {
             deviceId = activeDevice.id
         }
 
-        // transfer playback to device first
+        // Transfer playback to device first
         await spotifyFetch('/v1/me/player', 'PUT', {
             device_ids: [deviceId],
             play: false,
         })
 
-        await new Promise(r => setTimeout(r, 500))
+        await new Promise(r => setTimeout(r, 1000))
 
-        const { status } = await spotifyFetch('/v1/me/player/play', 'PUT', {
+        const { status, data } = await spotifyFetch('/v1/me/player/play', 'PUT', {
             device_id: deviceId,
             ...(spotifyUri ? { uris: [spotifyUri] } : {})
         })
         console.log('play status:', status)
 
-        // force poll bypasses isPlaying guard so PlayerBar appears immediately
-        setTimeout(() => forcePoll(), 600)
+        // Poll a few times during startup to clear the transition guard as
+        // soon as Spotify confirms is_playing:true. Safety timeout at 5s.
+        const pollAttempts = [600, 1200, 2000, 3500, 5000]
+        pollAttempts.forEach(delay => {
+            setTimeout(() => {
+                if (transitioningRef.current) forcePoll()
+            }, delay)
+        })
+
+        // Hard safety: clear transition guard after 5s regardless, to avoid
+        // permanently blocking track-end detection if something goes wrong.
+        setTimeout(() => {
+            if (transitioningRef.current) {
+                transitioningRef.current = false
+                console.warn('useSpotify: transition guard timed out')
+            }
+        }, 6000)
     }, [spotifyFetch, getDevices, forcePoll, state.deviceId])
 
     const pause = useCallback(async () => {
-        userPausedRef.current = true  // ← mark as user-initiated
+        userPausedRef.current = true
+        transitioningRef.current = false // cancel any in-flight transition
         await spotifyFetch('/v1/me/player/pause', 'PUT')
         setTimeout(() => forcePoll(), 500)
     }, [spotifyFetch, forcePoll])
@@ -260,13 +310,26 @@ export function useSpotify({ onTrackEnd }: UseSpotifyOptions = {}) {
     }, [state.isPlaying, play, pause])
 
     const next = useCallback(async () => {
+        // Treat skip as a new play initiation — reset stale state
+        wasPlayingRef.current = false
+        transitioningRef.current = true
         await spotifyFetch('/v1/me/player/next', 'POST')
         setTimeout(() => forcePoll(), 500)
+        setTimeout(() => {
+            if (transitioningRef.current) forcePoll()
+        }, 1500)
+        setTimeout(() => { transitioningRef.current = false }, 4000)
     }, [spotifyFetch, forcePoll])
 
     const prev = useCallback(async () => {
+        wasPlayingRef.current = false
+        transitioningRef.current = true
         await spotifyFetch('/v1/me/player/previous', 'POST')
         setTimeout(() => forcePoll(), 500)
+        setTimeout(() => {
+            if (transitioningRef.current) forcePoll()
+        }, 1500)
+        setTimeout(() => { transitioningRef.current = false }, 4000)
     }, [spotifyFetch, forcePoll])
 
     const seek = useCallback(async (positionMs: number) => {
@@ -305,6 +368,8 @@ export function useSpotify({ onTrackEnd }: UseSpotifyOptions = {}) {
     const disconnect = useCallback(() => {
         localStorage.removeItem(STORAGE_KEY)
         setTokens(null)
+        transitioningRef.current = false
+        wasPlayingRef.current = false
         setState({
             connected: false,
             connecting: false,
@@ -329,5 +394,6 @@ export function useSpotify({ onTrackEnd }: UseSpotifyOptions = {}) {
         seek,
         setVolume,
         searchAndPlay,
+        spotifyFetch
     }
 }

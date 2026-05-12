@@ -59,6 +59,7 @@
   justify-content: center;
   overflow: hidden;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.06);
+  cursor: pointer;
 }
 
 .player-art-initials {
@@ -109,39 +110,63 @@
   gap: var(--sp-3);
 }
 
+/* Base button — no font-size, SVGs size themselves */
 .player-btn {
   background: none;
   border: none;
   cursor: pointer;
   color: var(--fg3);
-  font-size: 13px;
-  padding: 4px 6px;
+  padding: 0;
   border-radius: var(--r-sm);
-  transition: color var(--t1);
+  transition: color var(--t1), opacity var(--t1), transform var(--t1);
   display: flex;
   align-items: center;
   justify-content: center;
-  line-height: 1;
+  line-height: 0;
+  flex-shrink: 0;
 }
+
 .player-btn:hover:not(:disabled) { color: var(--fg); }
 .player-btn:disabled { opacity: 0.2; cursor: not-allowed; }
 
+/* Skip buttons — fixed size, icon fills it */
+.player-btn--skip {
+  width: 32px;
+  height: 32px;
+}
+
+.player-btn--skip:hover:not(:disabled) {
+  transform: scale(1.1);
+}
+
+/* Play/pause — circle, perfectly centered */
 .player-btn--play {
   width: 34px;
   height: 34px;
   border-radius: 50%;
   background: var(--accent-hi);
   color: var(--bg);
-  font-size: 12px;
+  /* No font-size — SVG sizes itself via width/height attrs */
   transition: opacity var(--t1), transform var(--t1);
 }
+
+.player-btn--play svg {
+  display: block;
+  /* optical center: play triangle leans left */
+  transform: translateX(1px);
+}
+
+.player-btn--playing svg {
+  /* pause bars are symmetric — no offset */
+  transform: none;
+}
+
 .player-btn--play:hover:not(:disabled) {
   opacity: 0.85;
   transform: scale(1.05);
 }
-.player-btn--play:disabled { opacity: 0.35; cursor: not-allowed; }
 
-.player-btn--skip { font-size: 14px; }
+.player-btn--play:disabled { opacity: 0.35; cursor: not-allowed; }
 
 /* progress */
 .player-progress-row {
@@ -201,6 +226,7 @@
   transition: opacity var(--t1);
   pointer-events: none;
 }
+
 .player-progress:hover .player-progress-thumb { opacity: 1; }
 
 .player-error {
@@ -237,7 +263,7 @@
   font-size: 10px;
   color: var(--fg3);
 }
- 
+
 @media (max-width: 680px) {
   .player-bar {
     left: 0;
@@ -249,4 +275,67 @@
   }
   .player-center { grid-column: 1 / -1; order: -1; }
   .player-meta { display: none; }
+}
+
+/* ── play/pause button in TrackDetails ── */
+.td-title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.td-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.td-title-row .td-title,
+.td-title-row .td-artist {
+  margin-bottom: 0;
+}
+
+.td-play-btn {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: none;
+  background: var(--td-play-color, var(--accent));
+  color: #0a0a14;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+  cursor: pointer;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.25),
+    0 4px 16px -4px rgba(0, 0, 0, 0.5);
+  transition: transform var(--t1), opacity var(--t1), box-shadow var(--t1);
+}
+
+.td-play-btn svg {
+  display: block;
+  transform: translateX(1px); /* optical center for play triangle */
+}
+
+.td-play-btn--playing svg {
+  transform: none;
+}
+
+.td-play-btn:hover:not(:disabled) {
+  transform: scale(1.08);
+  opacity: 0.92;
+}
+
+.td-play-btn:active:not(:disabled) {
+  transform: scale(0.94);
+}
+
+.td-play-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }

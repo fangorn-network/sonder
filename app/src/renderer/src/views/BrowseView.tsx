@@ -1,6 +1,5 @@
-import { useEffect, useRef, useState, useMemo } from 'react'
-import type { RecommendedTracks, Track } from '../types'
-import { TrackDetails } from './TrackDetails'
+import { useEffect, useRef, useState } from 'react'
+import type { RecommendedTracks, TasteSignal, Track } from '../types'
 import './mobile.css'
 import './Browse-Filters.css'
 import { useSpotifyContext } from '../providers/SpotifyProvider'
@@ -31,94 +30,86 @@ interface BrowseViewProps {
   onCallAgent: (query?: string) => void
   onFilteredChange?: (tracks: Track[]) => void
   onPlayingIdChange?: (id: string) => void
+  onSignal?: (signal: TasteSignal) => void
+  onTrackClick: (track: Track, color: string) => void
+  genreFilter: string
+  moodFilter: string
+  contextFilter: string
+  onGenreFilter: (v: string) => void
+  onMoodFilter: (v: string) => void
+  onContextFilter: (v: string) => void
+  allGenres: string[]
+  allMoods: string[]
+  allContexts: string[]
+  // Ambient agent — Window-mode saliency surface
+  ambientStatus?: 'idle' | 'fetching' | 'error'
+  ambientQueueSize?: number
+  ambientLastReason?: string
 }
 
 async function fetchAlbumArt(title: string, artist: string): Promise<string | null> {
   try {
     const q = encodeURIComponent(`${artist} ${title}`)
-    const res = await fetch(`https://itunes.apple.com/search?term=${q}&entity=song&limit=3`)
-    const data = await res.json()
+    const { body } = await (window as any).electron.ipcRenderer.invoke('fetch:proxy', {
+      url: `https://itunes.apple.com/search?term=${q}&entity=song&limit=3`
+    })
+    const data = JSON.parse(body)
+
     const url = data.results?.[0]?.artworkUrl100
     if (url) return url.replace('100x100bb', '600x600bb')
   } catch { }
-
   try {
     const q = encodeURIComponent(`artist:"${artist}" track:"${title}"`)
-    const res = await fetch(`https://api.deezer.com/search?q=${q}&limit=1`)
-    const data = await res.json()
+    const { body } = await (window as any).electron.ipcRenderer.invoke('deezer:api', {
+      url: `https://api.deezer.com/search?q=${q}&limit=1`
+    })
+    const data = JSON.parse(body)
     const url = data.data?.[0]?.album?.cover_xl
     if (url) return url
   } catch { }
-
   return null
 }
 
 export function BrowseView({
   tracks, loading, loadingMore, error, hasMore, loadMore, search, setSearch,
   recommendedTracks, recommendLoading, onClearRecommendations, onCallAgent,
-  onFilteredChange, onPlayingIdChange,
+  onFilteredChange, onPlayingIdChange, onSignal, onTrackClick,
+  genreFilter, moodFilter, contextFilter, onGenreFilter, onMoodFilter, onContextFilter,
+  allGenres, allMoods, allContexts,
+  ambientStatus, ambientQueueSize, ambientLastReason,
 }: BrowseViewProps) {
   const sentinelRef = useRef<HTMLDivElement>(null)
-  const [genreFilter, setGenreFilter] = useState('all')
-  const [moodFilter, setMoodFilter] = useState('all')
-  const [contextFilter, setContextFilter] = useState('all')
-  const [detailsTrack, setDetailsTrack] = useState<Track | null>(null)
   const [filterOpen, setFilterOpen] = useState(false)
   const [playingId, setPlayingId] = useState<string | null>(null)
   const [albumArtCache, setAlbumArtCache] = useState<Record<string, string>>({})
   const fetchingRef = useRef<Set<string>>(new Set())
+  const [reasonExpanded, setReasonExpanded] = useState(false)
 
-  const { searchAndPlay, connect, connected } = useSpotifyContext()
-  const [playingArt, setPlayingArt] = useState<string | null>(null)
+  const { play, searchAndPlay, connect, connected } = useSpotifyContext()
 
   const handlePlay = async (e: React.MouseEvent, track: Track) => {
     e.stopPropagation()
     if (!connected) { await connect(); return }
     setPlayingId(track.id)
-    onPlayingIdChange?.(track.id)  // ← add this
+    onPlayingIdChange?.(track.id)
+    onSignal?.({ type: 'play', track, weight: 1.0 })
     try {
-      const cleanQuery = `${track.title} ${track.artist}`.replace(/\(.*?\)/g, '').trim()
-      const result = await searchAndPlay(cleanQuery)
-      if (result?.albumArt) setPlayingArt(result.albumArt)
+      if (track.spotifyTrackId) {
+        await play(`spotify:track:${track.spotifyTrackId}`)
+      } else {
+        const query = `${track.title} ${track.artist}`.replace(/\(.*?\)/g, '').trim()
+        await searchAndPlay(query)
+      }
     } catch (err) {
-      console.error('searchAndPlay failed:', err)
+      console.error('play failed:', err)
       setPlayingId(null)
     }
   }
 
-  // ── derived filter sets ──────────────────────────────────────────────
-  const genres = useMemo(() => {
-    const set = new Set<string>()
-    tracks.forEach(t => t.genres.forEach(g => set.add(g)))
-    return Array.from(set).sort()
-  }, [tracks])
-
-  const moods = useMemo(() => {
-    const set = new Set<string>()
-    tracks.forEach(t => t.moods.forEach(m => set.add(m)))
-    return Array.from(set).sort()
-  }, [tracks])
-
-  const contexts = useMemo(() => {
-    const set = new Set<string>()
-    tracks.forEach(t => t.contexts.forEach(c => set.add(c)))
-    return Array.from(set).sort()
-  }, [tracks])
-
-  const genreColor = useMemo(() => {
-    const map: Record<string, string> = {}
-    genres.forEach((g, i) => { map[g] = GENRE_PALETTE[i % GENRE_PALETTE.length] })
-    return map
-  }, [genres])
-
-  const filtered = useMemo(() => {
-    return tracks.filter(t => {
-      if (contextFilter !== 'all' && !t.contexts.includes(contextFilter)) return false
-      if (genreFilter !== 'all' && !t.genres.includes(genreFilter)) return false
-      if (moodFilter !== 'all' && !t.moods.includes(moodFilter)) return false
-      return true
+  const genreColor: Record<string, string> = {}
+    ; (allGenres ?? []).forEach((g, i) => {
+      genreColor[g] = GENRE_PALETTE[i % GENRE_PALETTE.length]
     })
-  }, [tracks, contextFilter, genreFilter, moodFilter])
 
   const activeCount =
     (genreFilter !== 'all' ? 1 : 0) +
@@ -127,19 +118,20 @@ export function BrowseView({
   const hasActiveFilter = activeCount > 0
 
   const clearAll = () => {
-    setGenreFilter('all')
-    setMoodFilter('all')
-    setContextFilter('all')
+    onGenreFilter('all')
+    onMoodFilter('all')
+    onContextFilter('all')
   }
 
-  // ── album art fetching ───────────────────────────────────────────────
+  const filtered = tracks
+
+  useEffect(() => { onFilteredChange?.(filtered) }, [filtered])
+
   useEffect(() => {
     if (filtered.length === 0) return
     const missing = filtered.filter(t => !albumArtCache[t.id] && !fetchingRef.current.has(t.id))
     if (missing.length === 0) return
-
-    const batch = missing.slice(0, 20)
-    batch.forEach((track, i) => {
+    missing.slice(0, 20).forEach((track, i) => {
       fetchingRef.current.add(track.id)
       setTimeout(async () => {
         const art = await fetchAlbumArt(track.title, track.artist)
@@ -150,15 +142,11 @@ export function BrowseView({
   }, [filtered])
 
   useEffect(() => {
-    onFilteredChange?.(filtered)
-  }, [filtered])
-
-  useEffect(() => {
     const el = sentinelRef.current
     if (!el) return
     const observer = new IntersectionObserver(
       entries => { if (entries[0].isIntersecting) loadMore() },
-      { rootMargin: '300px' }
+      { rootMargin: '-100px' }
     )
     observer.observe(el)
     return () => observer.disconnect()
@@ -168,39 +156,35 @@ export function BrowseView({
     if (!filterOpen) return
     const prev = document.body.style.overflow
     document.body.style.overflow = 'hidden'
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setFilterOpen(false)
-    }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setFilterOpen(false) }
     window.addEventListener('keydown', onKey)
-    return () => {
-      document.body.style.overflow = prev
-      window.removeEventListener('keydown', onKey)
-    }
+    return () => { document.body.style.overflow = prev; window.removeEventListener('keydown', onKey) }
   }, [filterOpen])
 
-  // ── card ─────────────────────────────────────────────────────────────
+  // Collapse reason when agent finishes a new fetch
+  useEffect(() => {
+    if (ambientStatus === 'idle' && ambientLastReason) setReasonExpanded(false)
+  }, [ambientLastReason])
+
   const renderCard = (track: Track) => {
     const accentColor = hashColor(track.id)
-    const primaryGenre = track.genres[0] ?? null
-    const primaryGenreColor = primaryGenre ? (genreColor[primaryGenre] ?? accentColor) : accentColor
+    // const primaryGenre = track.genres[0] ?? null
+    const primaryGenreColor = accentColor
     const isThisPlaying = playingId === track.id
+    const durationStr = track.durationMs
+      ? `${Math.floor(track.durationMs / 60000)}:${String(Math.floor((track.durationMs % 60000) / 1000)).padStart(2, '0')}`
+      : null
 
     return (
       <div
         key={track.id}
         className="tg-card"
-        // style={{ borderTop: `2px solid ${primaryGenreColor}` }}
-        onClick={() => setDetailsTrack(track)}
+        onClick={() => onTrackClick(track, primaryGenreColor)}
       >
         <div className="tg-art">
           {albumArtCache[track.id]
             ? <img src={albumArtCache[track.id]} alt={track.title} style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', inset: 0, borderRadius: 4 }} />
-            : <span
-              className="tg-art-initial"
-            // style={{ color: primaryGenreColor }}
-            >
-              {track.title.slice(0, 1).toUpperCase()}
-            </span>
+            : <span className="tg-art-initial">{track.title.slice(0, 1).toUpperCase()}</span>
           }
           <button
             className={`tg-play-btn${isThisPlaying ? ' tg-play-btn--active' : ''}`}
@@ -210,55 +194,27 @@ export function BrowseView({
             style={{ background: primaryGenreColor, border: 'none', cursor: 'pointer' }}
           >
             {isThisPlaying
-              ? <span style={{ fontSize: 10 }}>▐▐</span>
-              : (
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true">
-                  <path d="M8 5v14l11-7z" />
-                </svg>
-              )
+              ? <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><rect x="5" y="4" width="4" height="16" rx="1" /><rect x="15" y="4" width="4" height="16" rx="1" /></svg>
+              : <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
             }
           </button>
-
-          {track.energy !== null && (
-            <div
-              className="tg-energy-bar"
-              style={{
-                position: 'absolute',
-                bottom: 0,
-                left: 0,
-                height: '3px',
-                width: `${Math.round(track.energy * 100)}%`,
-                background: primaryGenreColor,
-                opacity: 0.8,
-              }}
-            />
-          )}
         </div>
 
         <div className="tg-body">
           <div className="tg-title">{track.title}</div>
           <div className="tg-artist">
             {track.artist}
-            {track.year !== null && (
-              <span className="tg-year"> · {track.year}</span>
-            )}
+            {track.year !== null && <span className="tg-year"> · {track.year}</span>}
+            {durationStr && <span className="tg-year"> · {durationStr}</span>}
           </div>
-
+          {/* 
           {track.genres.length > 0 && (
             <div className="tg-meta tg-meta--genres">
               {track.genres.slice(0, 3).map(g => (
-                <span
-                  key={g}
-                  className="tg-genre"
-                  style={{
-                    color: genreColor[g] ?? accentColor,
-                    background: `${genreColor[g] ?? accentColor}15`,
-                    borderColor: `${genreColor[g] ?? accentColor}30`,
-                  }}
-                  onClick={e => { e.stopPropagation(); setGenreFilter(g) }}
-                >
-                  {g}
-                </span>
+                <span key={g} className="tg-genre"
+                  style={{ color: genreColor[g] ?? accentColor, background: `${genreColor[g] ?? accentColor}15`, borderColor: `${genreColor[g] ?? accentColor}30` }}
+                  onClick={e => { e.stopPropagation(); onGenreFilter(g) }}
+                >{g}</span>
               ))}
             </div>
           )}
@@ -266,13 +222,7 @@ export function BrowseView({
           {track.moods.length > 0 && (
             <div className="tg-meta tg-meta--moods">
               {track.moods.slice(0, 3).map(m => (
-                <span
-                  key={m}
-                  className="tg-genre"
-                  onClick={e => { e.stopPropagation(); setMoodFilter(m) }}
-                >
-                  {m}
-                </span>
+                <span key={m} className="tg-genre" onClick={e => { e.stopPropagation(); onMoodFilter(m) }}>{m}</span>
               ))}
             </div>
           )}
@@ -280,32 +230,18 @@ export function BrowseView({
           {track.contexts.length > 0 && (
             <div className="tg-meta tg-meta--moods">
               {track.contexts.slice(0, 3).map(c => (
-                <span
-                  key={c}
-                  className="tg-genre"
-                  onClick={e => { e.stopPropagation(); setContextFilter(c) }}
-                >
-                  {c}
-                </span>
+                <span key={c} className="tg-genre" onClick={e => { e.stopPropagation(); onContextFilter(c) }}>{c}</span>
               ))}
             </div>
           )}
 
-          {track.energy !== null && (
-            <div className="tg-energy">
-              <span className="tg-energy-label">energy</span>
-              <div className="tg-energy-track">
-                <div
-                  className="tg-energy-fill"
-                  style={{
-                    width: `${Math.round(track.energy * 100)}%`,
-                    background: primaryGenreColor,
-                  }}
-                />
-              </div>
-              <span className="tg-energy-val">{Math.round(track.energy * 100)}</span>
+          {track.themes.length > 0 && (
+            <div className="tg-meta tg-meta--themes">
+              {track.themes.slice(0, 2).map(t => (
+                <span key={t} className="tg-genre tg-genre--theme">{t}</span>
+              ))}
             </div>
-          )}
+          )} */}
         </div>
       </div>
     )
@@ -336,17 +272,17 @@ export function BrowseView({
               key={v}
               className={`bf-pill ${active ? 'bf-pill--active' : ''}`}
               onClick={() => setCurrent(v)}
-              style={active && c ? {
-                background: c + '22',
-                borderColor: c + '88',
-                color: c,
-              } : undefined}
+              style={active && c ? { background: c + '22', borderColor: c + '88', color: c } : undefined}
             >{v}</button>
           )
         })}
       </div>
     </section>
   )
+
+  const showAmbientBar = ambientStatus !== undefined
+  const isFetching = ambientStatus === 'fetching'
+  const isError = ambientStatus === 'error'
 
   return (
     <div className="browse-view">
@@ -363,7 +299,6 @@ export function BrowseView({
           />
           {search && <button className="search-clear" onClick={() => setSearch('')}>✕</button>}
         </div>
-
         <button
           className={`bv-filter-btn${hasActiveFilter ? ' bv-filter-btn--active' : ''}`}
           onClick={() => setFilterOpen(true)}
@@ -377,17 +312,74 @@ export function BrowseView({
         </button>
       </div>
 
+      {/* Ambient agent status bar — Window-mode saliency surface */}
+      {showAmbientBar && (
+        <div
+          style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            padding: '6px 12px', margin: '0 0 8px',
+            borderRadius: reasonExpanded ? '6px 6px 0 0' : 6,
+            fontSize: 11, letterSpacing: '0.04em',
+            background: isError ? 'rgba(248,113,113,0.07)' : 'rgba(167,139,250,0.07)',
+            border: `1px solid ${isError ? 'rgba(248,113,113,0.18)' : 'rgba(167,139,250,0.18)'}`,
+            color: isError ? '#f87171' : '#a78bfa',
+            transition: 'all 0.25s ease',
+          }}
+        >
+          <span style={{
+            width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
+            background: isError ? '#f87171' : isFetching ? '#a78bfa' : '#34d399',
+            boxShadow: isFetching ? '0 0 6px #a78bfa88' : undefined,
+            animation: isFetching ? 'ambientPulse 1.2s ease-in-out infinite' : undefined,
+          }} />
+          <span style={{ flex: 1, opacity: 0.85 }}>
+            {isError
+              ? 'agent · fetch failed'
+              : isFetching
+                ? 'agent · listening…'
+                : `agent · ${ambientQueueSize ?? 0} queued`
+            }
+          </span>
+          {ambientLastReason && !isError && (
+            <button
+              onClick={() => setReasonExpanded(v => !v)}
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                color: 'inherit', fontSize: 10, opacity: 0.65, padding: '0 2px',
+                letterSpacing: '0.06em', textTransform: 'uppercase',
+              }}
+              title="Why did the agent queue these?"
+            >
+              {reasonExpanded ? 'hide' : 'why?'}
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Expanded reason panel — the agent's saliency explanation */}
+      {showAmbientBar && reasonExpanded && ambientLastReason && (
+        <div style={{
+          margin: '-8px 0 8px',
+          padding: '8px 12px',
+          borderRadius: '0 0 6px 6px',
+          background: 'rgba(167,139,250,0.05)',
+          border: '1px solid rgba(167,139,250,0.12)',
+          borderTop: 'none',
+          fontSize: 11, lineHeight: 1.6,
+          color: 'var(--fg3, #c4b5fd)',
+          fontStyle: 'italic',
+        }}>
+          {ambientLastReason}
+        </div>
+      )}
+
       {hasActiveFilter && (
         <div className="bv-active-chips">
           {genreFilter !== 'all' && (
             <button
               className="bv-active-chip"
-              style={{
-                color: genreColor[genreFilter],
-                borderColor: `${genreColor[genreFilter] ?? '#888'}55`,
-                background: `${genreColor[genreFilter] ?? '#888'}12`,
-              }}
-              onClick={() => setGenreFilter('all')}
+              style={{ color: genreColor[genreFilter], borderColor: `${genreColor[genreFilter] ?? '#888'}55`, background: `${genreColor[genreFilter] ?? '#888'}12` }}
+              onClick={() => onGenreFilter('all')}
               aria-label={`Remove genre: ${genreFilter}`}
             >
               <span className="bv-active-chip-cat">genre</span>
@@ -398,7 +390,7 @@ export function BrowseView({
           {moodFilter !== 'all' && (
             <button
               className="bv-active-chip"
-              onClick={() => setMoodFilter('all')}
+              onClick={() => onMoodFilter('all')}
               aria-label={`Remove mood: ${moodFilter}`}
             >
               <span className="bv-active-chip-cat">mood</span>
@@ -409,7 +401,7 @@ export function BrowseView({
           {contextFilter !== 'all' && (
             <button
               className="bv-active-chip"
-              onClick={() => setContextFilter('all')}
+              onClick={() => onContextFilter('all')}
               aria-label={`Remove context: ${contextFilter}`}
             >
               <span className="bv-active-chip-cat">context</span>
@@ -440,9 +432,7 @@ export function BrowseView({
             <button className="rec-banner-clear" onClick={onClearRecommendations}>✕ Clear</button>
           </div>
           <div className="track-grid">
-            {recommendedTracks.tracks
-              .filter(t => t.id !== recommendedTracks.sourceId)
-              .map(renderCard)}
+            {recommendedTracks.tracks.filter(t => t.id !== recommendedTracks.sourceId).map(renderCard)}
           </div>
         </div>
       )}
@@ -468,12 +458,12 @@ export function BrowseView({
         </div>
       )}
 
+      <div style={{ height: 200 }} />
       <div ref={sentinelRef} style={{ height: 1 }} />
 
       {loadingMore && (
         <div className="chain-loading" style={{ padding: '20px 0' }}>
-          <span className="upload-spinner" />
-          Loading more…
+          <span className="upload-spinner" />Loading more…
         </div>
       )}
 
@@ -482,44 +472,21 @@ export function BrowseView({
       )}
 
       {filterOpen && (
-        <div
-          className="bv-sheet-backdrop"
-          onClick={() => setFilterOpen(false)}
-          role="presentation"
-        >
-          <div
-            className="bv-sheet"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Filters"
-            onClick={e => e.stopPropagation()}
-          >
+        <div className="bv-sheet-backdrop" onClick={() => setFilterOpen(false)} role="presentation">
+          <div className="bv-sheet" role="dialog" aria-modal="true" aria-label="Filters" onClick={e => e.stopPropagation()}>
             <div className="bv-sheet-handle" aria-hidden="true" />
             <header className="bv-sheet-header">
               <h2 className="bv-sheet-title">Filters</h2>
-              <button
-                className="bv-sheet-close"
-                onClick={() => setFilterOpen(false)}
-                aria-label="Close filters"
-              >✕</button>
+              <button className="bv-sheet-close" onClick={() => setFilterOpen(false)} aria-label="Close filters">✕</button>
             </header>
-
             <div className="bv-sheet-body">
-              {renderSheetSection('Genre', genres, genreFilter, setGenreFilter, g => genreColor[g])}
-              {renderSheetSection('Mood', moods, moodFilter, setMoodFilter)}
-              {renderSheetSection('Context', contexts, contextFilter, setContextFilter)}
+              {renderSheetSection('Genre', allGenres ?? [], genreFilter, onGenreFilter, g => genreColor[g])}
+              {renderSheetSection('Mood', allMoods ?? [], moodFilter, onMoodFilter)}
+              {renderSheetSection('Context', allContexts ?? [], contextFilter, onContextFilter)}
             </div>
-
             <footer className="bv-sheet-footer">
-              <button
-                className="bv-sheet-btn bv-sheet-btn--ghost"
-                onClick={clearAll}
-                disabled={!hasActiveFilter}
-              >Clear all</button>
-              <button
-                className="bv-sheet-btn bv-sheet-btn--primary"
-                onClick={() => setFilterOpen(false)}
-              >
+              <button className="bv-sheet-btn bv-sheet-btn--ghost" onClick={clearAll} disabled={!hasActiveFilter}>Clear all</button>
+              <button className="bv-sheet-btn bv-sheet-btn--primary" onClick={() => setFilterOpen(false)}>
                 Show {filtered.length} {filtered.length === 1 ? 'track' : 'tracks'}
               </button>
             </footer>
@@ -527,20 +494,12 @@ export function BrowseView({
         </div>
       )}
 
-      {detailsTrack && (
-        <TrackDetails
-          track={detailsTrack}
-          color={hashColor(detailsTrack.id)}
-          onClose={() => setDetailsTrack(null)}
-          onCallAgent={onCallAgent}
-          onFilter={(type, value) => {
-            if (type === 'genre') setGenreFilter(value)
-            if (type === 'mood') setMoodFilter(value)
-            if (type === 'context') setContextFilter(value)
-            setDetailsTrack(null)
-          }}
-        />
-      )}
+      <style>{`
+        @keyframes ambientPulse {
+          0%, 100% { opacity: 0.4; transform: scale(1); }
+          50% { opacity: 1; transform: scale(1.3); }
+        }
+      `}</style>
     </div>
   )
 }

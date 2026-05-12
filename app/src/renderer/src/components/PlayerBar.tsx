@@ -10,7 +10,12 @@ function fmtTime(ms: number) {
   return `${m}:${sec.toString().padStart(2, '0')}`
 }
 
-export function PlayerBar() {
+interface PlayerBarProps {
+  onExpand: () => void
+  hidden?: boolean
+}
+
+export function PlayerBar({ onExpand, hidden }: PlayerBarProps) {
   const {
     currentTrack,
     isPlaying,
@@ -23,10 +28,13 @@ export function PlayerBar() {
     prev,
     onNext,
     onPrev,
+    onSignal,
   } = useSpotifyContext()
 
   const [liveProgressMs, setLiveProgressMs] = useState(0)
   const rafRef = useRef<number | null>(null)
+  const currentTrackRef = useRef(currentTrack)
+  useEffect(() => { currentTrackRef.current = currentTrack }, [currentTrack])
 
   useEffect(() => {
     if (rafRef.current) cancelAnimationFrame(rafRef.current)
@@ -54,51 +62,91 @@ export function PlayerBar() {
     seek(ratio * durationMs)
   }
 
-  // use app-level handlers if provided, fall back to raw Spotify skip
-  const handleNext = onNext ?? next
-  const handlePrev = onPrev ?? prev
+  const handleNext = () => {
+    if (currentTrackRef.current && onSignal) {
+      const t = currentTrackRef.current
+      onSignal({
+        type: 'skip',
+        weight: -1.0,
+        track: {
+          id: '', title: t.name, artist: t.artist, year: null, energy: null,
+          genres: [], moods: [], contexts: [], themes: [],
+          owner: '', manifestStateId: '', datasourceName: '', mbid: null, name: t.name,
+        }
+      })
+    }
+    ;(onNext ?? next)?.()
+  }
+
+  const handlePrev = () => { ;(onPrev ?? prev)?.() }
 
   return (
-    <div className="player-bar">
-      <div className="player-track">
-        {albumArt
-          ? <img className="player-art" src={albumArt} alt={name} />
-          : (
-            <div className="player-art player-art--fallback">
-              <span className="player-art-initials">{name.slice(0, 1).toUpperCase()}</span>
-            </div>
-          )
-        }
-        <div className="player-track-info">
-          <div className="player-title">{name}</div>
-          <div className="player-artist">{artist}</div>
-        </div>
-      </div>
-      <div className="player-center">
-        <div className="player-controls">
-          <button className="player-btn player-btn--skip" onClick={handlePrev} title="Previous">⏮</button>
-          <button
-            className={`player-btn player-btn--play ${isPlaying ? 'player-btn--playing' : ''}`}
-            onClick={togglePlay}
-            disabled={connecting}
-            title={isPlaying ? 'Pause' : 'Play'}
-          >
-            {connecting ? <span className="upload-spinner" /> : isPlaying ? '▐▐' : '▶'}
-          </button>
-          <button className="player-btn player-btn--skip" onClick={handleNext} title="Next">⏭</button>
-        </div>
-        <div className="player-progress-row">
-          <span className="player-time">{fmtTime(liveProgressMs)}</span>
-          <div className="player-progress" onClick={scrubTo}>
-            <div className="player-progress-track">
-              <div className="player-progress-fill" style={{ width: `${progress * 100}%` }} />
-              <div className="player-progress-thumb" style={{ left: `${progress * 100}%` }} />
-            </div>
+    <>
+      <div className="player-bar" style={hidden ? { display: 'none' } : undefined}>
+        {/* clicking art or track info expands to now playing */}
+        <div className="player-track" onClick={onExpand} style={{ cursor: 'pointer' }}>
+          {albumArt
+            ? <img className="player-art" src={albumArt} alt={name} />
+            : (
+              <div className="player-art player-art--fallback">
+                <span className="player-art-initials">{name.slice(0, 1).toUpperCase()}</span>
+              </div>
+            )
+          }
+          <div className="player-track-info">
+            <div className="player-title">{name}</div>
+            <div className="player-artist">{artist}</div>
           </div>
-          <span className="player-time">{fmtTime(durationMs)}</span>
         </div>
-        {error && <div className="player-error">{error}</div>}
+
+        <div className="player-center">
+          <div className="player-controls">
+            <button className="player-btn player-btn--skip" onClick={handlePrev} title="Previous">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
+                <path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/>
+              </svg>
+            </button>
+            <button
+              className={`player-btn player-btn--play${isPlaying ? ' player-btn--playing' : ''}`}
+              onClick={togglePlay}
+              disabled={connecting}
+              title={isPlaying ? 'Pause' : 'Play'}
+            >
+              {connecting
+                ? <span className="upload-spinner" />
+                : isPlaying
+                  ? (
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
+                      <rect x="5" y="4" width="4" height="16" rx="1"/>
+                      <rect x="15" y="4" width="4" height="16" rx="1"/>
+                    </svg>
+                  )
+                  : (
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
+                      <path d="M8 5.14v14l11-7-11-7z"/>
+                    </svg>
+                  )
+              }
+            </button>
+            <button className="player-btn player-btn--skip" onClick={handleNext} title="Next">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
+                <path d="M16 6h2v12h-2zM6 18l8.5-6L6 6v12z"/>
+              </svg>
+            </button>
+          </div>
+          <div className="player-progress-row">
+            <span className="player-time">{fmtTime(liveProgressMs)}</span>
+            <div className="player-progress" onClick={scrubTo}>
+              <div className="player-progress-track">
+                <div className="player-progress-fill" style={{ width: `${progress * 100}%` }} />
+                <div className="player-progress-thumb" style={{ left: `${progress * 100}%` }} />
+              </div>
+            </div>
+            <span className="player-time">{fmtTime(durationMs)}</span>
+          </div>
+          {error && <div className="player-error">{error}</div>}
+        </div>
       </div>
-    </div>
+    </>
   )
 }

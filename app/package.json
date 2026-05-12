@@ -1,9 +1,9 @@
 {
-  "name": "electron-app",
+  "name": "sond3r",
   "version": "1.0.0",
   "description": "An Electron application with React and TypeScript",
   "main": "./out/main/index.js",
-  "author": "example.com",
+  "author": "sonder.music",
   "homepage": "https://electron-vite.org",
   "scripts": {
     "format": "prettier --write .",
@@ -15,6 +15,7 @@
     "dev": "electron-vite dev",
     "build": "npm run typecheck && electron-vite build",
     "postinstall": "electron-builder install-app-deps",
+    "link": "pnpm link ../../agent/agent && pnpm link ../../agent/tools",
     "build:unpack": "npm run build && electron-builder --dir",
     "build:win": "npm run build && electddron-builder --win",
     "build:mac": "electron-vite build && electron-builder --mac",
@@ -23,8 +24,11 @@
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
+    "@fangorn-network/agent": "^0.0.3",
+    "@fangorn-network/agent-tools": "0.0.2",
+    "@fangorn-network/agent-types": "0.0.3",
     "@fangorn-network/fetch": "2026.04.27",
-    "@fangorn-network/sdk": "2026.04.23",
+    "@fangorn-network/sdk": "2026.05.11.0",
     "@privy-io/react-auth": "^3.16.0",
     "@privy-io/wagmi": "^4.0.2",
     "@semaphore-protocol/identity": "^4.14.2",
@@ -35,6 +39,8 @@
     "express": "^5.2.1",
     "firebase": "^12.12.1",
     "graphql": "^16.13.2",
+    "mime": "^4.1.0",
+    "mime-types": "^3.0.2",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "viem": "^2.47.1",
@@ -47,6 +53,7 @@
     "@eslint/js": "^9.39.1",
     "@graphprotocol/client-cli": "^3.0.7",
     "@types/jsmediatags": "^3.9.6",
+    "@types/mime-types": "^3.0.1",
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
@@ -73,5 +80,6 @@
       "electron",
       "esbuild"
     ]
-  }
+  },
+  "packageManager": "pnpm@10.27.0+sha512.72d699da16b1179c14ba9e64dc71c9a40988cbdc65c264cb0e489db7de917f20dcf4d64d8723625f2969ba52d4b7e2a1170682d9ac2a5dcaeaab732b7e16f04a"
 }

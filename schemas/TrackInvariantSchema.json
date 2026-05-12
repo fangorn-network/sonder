@@ -1,0 +1,37 @@
+{
+    "schemaVersion": {
+        "@type": "number"
+    },
+    "isrcCode": {
+        "@type": "string | null"
+    },
+    "trackId": {
+        "@type": "string"
+    },
+    "title": {
+        "@type": "string"
+    },
+    "byArtist": {
+        "@type": "string"
+    },
+    "datePublished": {
+        "@type": "string | null"
+    },
+    "durationMs": {
+        "@type": "number"
+    },
+    "contributors": {
+        "@type": "array",
+        "items": {
+            "role": {
+                "@type": "string | null"
+            },
+            "name": {
+                "@type": "string | null"
+            },
+            "id": {
+                "@type": "string | null"
+            }
+        }
+    }
+}

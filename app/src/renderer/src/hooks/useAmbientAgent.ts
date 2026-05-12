@@ -89,8 +89,11 @@ export function useAmbientAgent({ kernel, enabled }: AmbientAgentOptions): Ambie
 
   // ── Core fetch ────────────────────────────────────────────────────────────
   const fetchBatch = useCallback(async () => {
+    console.log('calling fetch batch')
     if (!enabled) return
+
     if (fetchingRef.current) return
+
     const k = kernelRef.current
     if (!k) return
 
@@ -102,6 +105,7 @@ export function useAmbientAgent({ kernel, enabled }: AmbientAgentOptions): Ambie
 
     try {
       const query = buildQuery(k, needed)
+      console.log('using query ' + query)
       setLastQuery(query)
 
       const result = await sendMessage(query)

@@ -21,6 +21,7 @@ interface SpotifyState {
         albumArt: string
         durationMs: number
         progressMs: number
+        spotifyTrackId: string | null
     } | null
 }
 
@@ -98,12 +99,17 @@ export function useSpotify({ onTrackEnd }: UseSpotifyOptions = {}) {
         retries = 2
     ): Promise<{ status: number; data: any }> => {
         const token = await getToken()
-        const { status, body: text } = await (window.api as any).spotifyApi({
-            url: `https://api.spotify.com${path}`,
-            method,
-            token,
-            body
-        })
+        const { status, body: text } = await (window as any)
+            .electron
+            .ipcRenderer
+            .invoke('spotify:api',
+                {
+                    url: `https://api.spotify.com${path}`,
+                    method,
+                    token,
+                    body
+                }
+            )
 
         if (status === 429 && retries > 0) {
             const retryAfter = parseInt('1', 10)
@@ -144,6 +150,7 @@ export function useSpotify({ onTrackEnd }: UseSpotifyOptions = {}) {
                     albumArt: data.item.album.images[0]?.url ?? '',
                     durationMs: data.item.duration_ms,
                     progressMs: data.progress_ms,
+                    spotifyTrackId: data.item.id ?? null,
                 }
             }))
             return
@@ -166,6 +173,7 @@ export function useSpotify({ onTrackEnd }: UseSpotifyOptions = {}) {
                 albumArt: data.item.album.images[0]?.url ?? '',
                 durationMs: data.item.duration_ms,
                 progressMs: data.progress_ms,
+                spotifyTrackId: data.item.id ?? null,
             }
         }))
     }, [])
@@ -262,9 +270,9 @@ export function useSpotify({ onTrackEnd }: UseSpotifyOptions = {}) {
             play: false,
         })
 
-        await new Promise(r => setTimeout(r, 500))
+        await new Promise(r => setTimeout(r, 1000))
 
-        const { status } = await spotifyFetch('/v1/me/player/play', 'PUT', {
+        const { status, data } = await spotifyFetch('/v1/me/player/play', 'PUT', {
             device_id: deviceId,
             ...(spotifyUri ? { uris: [spotifyUri] } : {})
         })

@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { useSpotifyContext } from '../providers/SpotifyProvider'
 import type { Track } from '../types'
 import './NowPlaying.css'
+import { PublishModal } from './PublishModal'
+import { useFangorn } from '../hooks/useFangorn'
 
 const CHROMA_URL = (import.meta as any).env.VITE_CHROMA_URL ?? 'http://localhost:8080'
 
@@ -14,6 +16,30 @@ function fmtTime(ms: number) {
 }
 
 // ── api ───────────────────────────────────────────────────────────────────────
+
+async function checkExistsInChroma(
+    spotifyTrackId: string | null,
+    title: string,
+    artist: string,
+): Promise<boolean> {
+    try {
+        const q = encodeURIComponent(`${artist} ${title}`)
+        const res = await fetch(`${CHROMA_URL}/search?q=${q}&n_results=5`)
+        if (!res.ok) return false
+        const data = await res.json()
+        return (data.results ?? []).some((h: any) => {
+            const f = h.fields ?? {}
+            const hId = (f.externalId as string) ?? (h.id?.startsWith('track:') ? h.id.slice(6) : null)
+            if (spotifyTrackId && hId === spotifyTrackId) return true
+            // fallback: title+artist match
+            const hTitle = (f.title ?? f.name ?? '').toLowerCase()
+            const hArtist = (f.byArtist ?? f.artist ?? '').toLowerCase()
+            return hTitle === title.toLowerCase() && hArtist === artist.toLowerCase()
+        })
+    } catch {
+        return false
+    }
+}
 
 async function fetchAlbumArt(title: string, artist: string): Promise<string | null> {
     try {
@@ -52,7 +78,7 @@ async function fetchSimilarTracks(
         const res = await fetch(`${CHROMA_URL}/search/vector`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ embedding, n_results: n + 20 }), // big buffer
+            body: JSON.stringify({ embedding, n_results: n + 20 }),
         })
         if (!res.ok) return []
         const data = await res.json()
@@ -76,9 +102,13 @@ async function fetchSimilarTracks(
     }
 }
 
-async function fetchArtistTracks(artist: string, excludeId: string, excludeTitle: string, n = 10): Promise<SimilarTrack[]> {
+async function fetchArtistTracks(
+    artist: string,
+    excludeId: string,
+    excludeTitle: string,
+    n = 10,
+): Promise<SimilarTrack[]> {
     try {
-        // Use a large n_results since we're filtering to one artist
         const params = new URLSearchParams({ q: artist, n_results: String(100) })
         const res = await fetch(`${CHROMA_URL}/search?${params}`)
         if (!res.ok) return []
@@ -102,26 +132,25 @@ async function fetchArtistTracks(artist: string, excludeId: string, excludeTitle
 }
 
 function parseHit(h: any): SimilarTrack {
-    const fields: Record<string, string> = {}
-    for (const part of (h.document ?? '').split(' | ')) {
-        const colon = part.indexOf(': ')
-        if (colon === -1) continue
-        fields[part.slice(0, colon).trim()] = part.slice(colon + 2).trim()
-    }
-    const num = (k: string) => { const v = parseFloat(fields[k] ?? ''); return isNaN(v) ? null : v }
-    // Extract spotify track id from Chroma doc ID "entry:{spotifyTrackId}"
-    const spotifyTrackId = h.id?.startsWith('entry:') ? h.id.slice(6) : null
+    const f: Record<string, any> = h.fields ?? {}
+    const spotifyTrackId =
+        (f.externalId as string) ??
+        (h.id?.startsWith('track:') ? h.id.slice(6) : null)
     return {
         id: h.id,
         spotifyTrackId,
-        title: fields['title'] ?? fields['name'] ?? 'Unknown',
-        artist: fields['artist'] ?? '',
-        year: num('year'),
-        genre: fields['genres']?.split(',')[0]?.trim() ?? null,
+        title: (f.title as string) ?? (f.name as string) ?? 'Unknown',
+        artist: (f.byArtist as string) ?? (f.artist as string) ?? '',
+        year: typeof f.datePublished === 'string'
+            ? parseInt(f.datePublished.slice(0, 4)) || null
+            : (f.year as number) ?? null,
+        genre: Array.isArray(f.genres) ? (f.genres[0] ?? null) : null,
         embedding: h.embedding ?? null,
         score: h.score ?? null,
     }
 }
+
+// ── types ─────────────────────────────────────────────────────────────────────
 
 interface SimilarTrack {
     id: string
@@ -160,20 +189,20 @@ export function NowPlaying({
         play, searchAndPlay, connected, connect,
     } = useSpotifyContext()
 
+    const { fangorn, address, loading: fangornLoading } = useFangorn()
+
     const focusTrack: Track | null = propTrack ?? (
         currentTrack ? {
             id: '',
+            trackId: '',
+            owner: '',
+            manifestCid: '',
             title: currentTrack.name,
             artist: currentTrack.artist,
             year: null,
-            genres: [], moods: [], themes: [], contexts: [],
-            owner: '', manifestStateId: '', datasourceName: '',
-            name: currentTrack.name,
-            spotify_track_id: '',
-            spotify_artist_id: null,
-            rank: null,
-            duration_ms: null,
-            embedding: null,
+            durationMs: currentTrack.durationMs ?? null,
+            spotifyTrackId: currentTrack.spotifyTrackId ?? null,  // ← was null
+            // genres: [], moods: [], themes: [], contexts: [],
         } satisfies Track : null
     )
 
@@ -183,6 +212,7 @@ export function NowPlaying({
         currentTrack.artist.toLowerCase() === focusTrack.artist.toLowerCase()
 
     // ── state ─────────────────────────────────────────────────────────────────
+
     const [liveProgressMs, setLiveProgressMs] = useState(0)
     const [albumArt, setAlbumArt] = useState<string | null>(
         !propTrack ? (currentTrack?.albumArt ?? null) : null
@@ -197,9 +227,27 @@ export function NowPlaying({
 
     const rafRef = useRef<number | null>(null)
     const currentTrackRef = useRef(currentTrack)
+
+    const [existsInIndex, setExistsInIndex] = useState<boolean | null>(null)
+    const [showPublish, setShowPublish] = useState(false)
+
+    useEffect(() => {
+        if (!focusTrack) return
+        setExistsInIndex(null)
+        checkExistsInChroma(
+            focusTrack.spotifyTrackId,
+            focusTrack.title,
+            focusTrack.artist,
+        ).then(setExistsInIndex)
+
+        console.log("UPDATED")
+        console.log(existsInIndex)
+    }, [focusTrack?.spotifyTrackId, focusTrack?.title, focusTrack?.artist])
+
     useEffect(() => { currentTrackRef.current = currentTrack }, [currentTrack])
 
     // ── album art ─────────────────────────────────────────────────────────────
+
     useEffect(() => {
         if (!propTrack && currentTrack?.albumArt) setAlbumArt(currentTrack.albumArt)
     }, [currentTrack?.albumArt, propTrack])
@@ -212,6 +260,7 @@ export function NowPlaying({
     }, [focusTrack?.title, focusTrack?.artist])
 
     // ── progress ticker ───────────────────────────────────────────────────────
+
     useEffect(() => {
         if (rafRef.current) cancelAnimationFrame(rafRef.current)
         if (!currentTrack) return
@@ -227,6 +276,7 @@ export function NowPlaying({
     }, [currentTrack?.progressMs, currentTrack?.durationMs, isPlaying, lastPollTime])
 
     // ── similar tracks ────────────────────────────────────────────────────────
+
     useEffect(() => {
         if (!focusTrack) return
         setSimilarLoading(true)
@@ -234,8 +284,8 @@ export function NowPlaying({
 
         (async () => {
             const embedding: number[] | null =
-                (focusTrack as any).embedding
-                    ? Array.from((focusTrack as any).embedding as number[])
+                focusTrack.embedding
+                    ? Array.from(focusTrack.embedding)
                     : await embedTrack(focusTrack.artist, focusTrack.title)
             if (!embedding) return
             const similar = await fetchSimilarTracks(
@@ -243,13 +293,14 @@ export function NowPlaying({
                 focusTrack.id || '__none__',
                 focusTrack.title,
                 focusTrack.artist,
-                10
+                10,
             )
             setSimilarTracks(similar)
         })().finally(() => setSimilarLoading(false))
     }, [focusTrack?.id, focusTrack?.title])
 
     // ── artist tracks ─────────────────────────────────────────────────────────
+
     useEffect(() => {
         if (!focusTrack?.artist) return
         setArtistLoading(true)
@@ -260,6 +311,7 @@ export function NowPlaying({
     }, [focusTrack?.artist, focusTrack?.id])
 
     // ── keyboard + scroll lock ────────────────────────────────────────────────
+
     useEffect(() => {
         const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onCollapse() }
         window.addEventListener('keydown', onKey)
@@ -272,8 +324,12 @@ export function NowPlaying({
     const durationMs = currentTrack?.durationMs ?? 0
     const progress = durationMs > 0 ? liveProgressMs / durationMs : 0
     const accentColor = trackColor ?? 'var(--accent)'
-    const hasMeta = focusTrack.genres.length > 0 || focusTrack.moods.length > 0 ||
-        focusTrack.contexts.length > 0 || focusTrack.themes.length > 0
+    // const hasMeta = (
+    //     focusTrack.genres.length > 0 ||
+    //     focusTrack.moods.length > 0 ||
+    //     focusTrack.contexts.length > 0 ||
+    //     focusTrack.themes.length > 0
+    // )
 
     function scrubTo(e: React.MouseEvent<HTMLDivElement>) {
         const rect = e.currentTarget.getBoundingClientRect()
@@ -287,10 +343,12 @@ export function NowPlaying({
         } else {
             setPlayLoading(true)
             try {
-                if (focusTrack.spotify_track_id) {
-                    await play(`spotify:track:${focusTrack.spotify_track_id}`)
+                if (focusTrack.spotifyTrackId) {
+                    await play(`spotify:track:${focusTrack.spotifyTrackId}`)
                 } else {
-                    await searchAndPlay(`${focusTrack.title} ${focusTrack.artist}`.replace(/\(.*?\)/g, '').trim())
+                    await searchAndPlay(
+                        `${focusTrack.title} ${focusTrack.artist}`.replace(/\(.*?\)/g, '').trim()
+                    )
                 }
             } finally {
                 setPlayLoading(false)
@@ -304,12 +362,17 @@ export function NowPlaying({
             onSignal({
                 type: 'skip', weight: -1.0,
                 track: {
-                    id: '', title: t.name, artist: t.artist,
-                    year: null, genres: [], moods: [], contexts: [], themes: [],
-                    owner: '', manifestStateId: '', datasourceName: '', name: t.name,
-                    spotify_track_id: '', spotify_artist_id: null,
-                    rank: null, duration_ms: null, embedding: null,
-                }
+                    id: '',
+                    trackId: '',
+                    owner: '',
+                    manifestCid: '',
+                    title: t.name,
+                    artist: t.artist,
+                    year: null,
+                    durationMs: null,
+                    spotifyTrackId: null,
+                    // genres: [], moods: [], themes: [], contexts: [],
+                },
             })
         }
         ; (onNext ?? next)?.()
@@ -328,7 +391,9 @@ export function NowPlaying({
             if (t.spotifyTrackId) {
                 await play(`spotify:track:${t.spotifyTrackId}`)
             } else {
-                await searchAndPlay(`${t.title} ${t.artist}`.replace(/\(.*?\)/g, '').trim())
+                await searchAndPlay(
+                    `${t.title} ${t.artist}`.replace(/\(.*?\)/g, '').trim()
+                )
             }
         } catch {
             setPlayingId(null)
@@ -340,6 +405,7 @@ export function NowPlaying({
     const activeLoading = activeTab === 'similar' ? similarLoading : artistLoading
 
     // ── render ────────────────────────────────────────────────────────────────
+
     return (
         <div className="np-overlay">
             {albumArt && <div className="np-bg" style={{ backgroundImage: `url(${albumArt})` }} />}
@@ -372,9 +438,29 @@ export function NowPlaying({
                     </div>
 
                     <div className="np-info">
-                        <div className="np-name">{focusTrack.title}</div>
-                        {focusTrack.duration_ms && (
-                            <div className="np-duration">{fmtTime(focusTrack.duration_ms)}</div>
+                        <div className="np-name" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            {focusTrack.title}
+                            {existsInIndex === false && (
+                                <button
+                                    className="np-publish-btn"
+                                    onClick={() => setShowPublish(true)}
+                                    title="Add to Fangorn"
+                                    aria-label="Publish to Fangorn"
+                                >
+                                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none"
+                                        stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                                        <circle cx="12" cy="12" r="10" />
+                                        <path d="M12 8v8M8 12h8" />
+                                    </svg>
+                                </button>
+                            )}
+                            {existsInIndex === null && (
+                                <span className="upload-spinner"
+                                    style={{ width: 12, height: 12, borderWidth: 1.5, opacity: 0.4 }} />
+                            )}
+                        </div>
+                        {focusTrack.durationMs && (
+                            <div className="np-duration">{fmtTime(focusTrack.durationMs)}</div>
                         )}
                     </div>
 
@@ -395,12 +481,14 @@ export function NowPlaying({
 
                     <div className="np-controls">
                         <button className="np-btn np-btn--skip" onClick={handlePrev}
-                            style={{ opacity: isThisTrackActive ? 1 : 0.2, pointerEvents: isThisTrackActive ? 'auto' : 'none' }} aria-label="Previous">
+                            style={{ opacity: isThisTrackActive ? 1 : 0.2, pointerEvents: isThisTrackActive ? 'auto' : 'none' }}
+                            aria-label="Previous">
                             <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z" /></svg>
                         </button>
                         <button
                             className={`np-btn np-btn--play${showPause ? ' np-btn--playing' : ''}`}
-                            onClick={handlePlayPause} disabled={connecting || playLoading}
+                            onClick={handlePlayPause}
+                            disabled={connecting || playLoading}
                             aria-label={showPause ? 'Pause' : 'Play'}
                             style={{ background: accentColor } as React.CSSProperties}
                         >
@@ -412,7 +500,8 @@ export function NowPlaying({
                             }
                         </button>
                         <button className="np-btn np-btn--skip" onClick={handleNext}
-                            style={{ opacity: isThisTrackActive ? 1 : 0.2, pointerEvents: isThisTrackActive ? 'auto' : 'none' }} aria-label="Next">
+                            style={{ opacity: isThisTrackActive ? 1 : 0.2, pointerEvents: isThisTrackActive ? 'auto' : 'none' }}
+                            aria-label="Next">
                             <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M16 6h2v12h-2zM6 18l8.5-6L6 6v12z" /></svg>
                         </button>
                     </div>
@@ -424,8 +513,7 @@ export function NowPlaying({
                 <div className="np-col-right">
                     <div className="np-right-body">
 
-                        {/* Tags */}
-                        {hasMeta && (
+                        {/* {hasMeta && (
                             <div className="np-tags-section">
                                 {focusTrack.genres.length > 0 && (
                                     <div className="np-tags">
@@ -439,14 +527,16 @@ export function NowPlaying({
                                 {focusTrack.moods.length > 0 && (
                                     <div className="np-tags">
                                         {focusTrack.moods.map(m => (
-                                            <button key={m} className="np-tag np-tag--mood" onClick={() => handleFilterTag('mood', m)}>{m}</button>
+                                            <button key={m} className="np-tag np-tag--mood"
+                                                onClick={() => handleFilterTag('mood', m)}>{m}</button>
                                         ))}
                                     </div>
                                 )}
                                 {focusTrack.contexts.length > 0 && (
                                     <div className="np-tags">
                                         {focusTrack.contexts.map(c => (
-                                            <button key={c} className="np-tag np-tag--context" onClick={() => handleFilterTag('context', c)}>{c}</button>
+                                            <button key={c} className="np-tag np-tag--context"
+                                                onClick={() => handleFilterTag('context', c)}>{c}</button>
                                         ))}
                                     </div>
                                 )}
@@ -458,27 +548,27 @@ export function NowPlaying({
                                     </div>
                                 )}
                             </div>
-                        )}
+                        )} */}
 
-                        {/* Onchain fields */}
-                        {(focusTrack.spotify_track_id || focusTrack.owner) && (
+                        {(focusTrack.spotifyTrackId || focusTrack.owner) && (
                             <div className="np-fields">
-                                {focusTrack.spotify_track_id && (
+                                {focusTrack.spotifyTrackId && (
                                     <div className="np-field">
                                         <span className="np-field-key">spotify id</span>
-                                        <span className="np-field-val np-mono">{focusTrack.spotify_track_id}</span>
+                                        <span className="np-field-val np-mono">{focusTrack.spotifyTrackId}</span>
                                     </div>
                                 )}
                                 {focusTrack.owner && (
                                     <div className="np-field">
                                         <span className="np-field-key">artist address</span>
-                                        <span className="np-field-val np-mono">{focusTrack.owner.slice(0, 6)}…{focusTrack.owner.slice(-4)}</span>
+                                        <span className="np-field-val np-mono">
+                                            {focusTrack.owner.slice(0, 6)}…{focusTrack.owner.slice(-4)}
+                                        </span>
                                     </div>
                                 )}
                             </div>
                         )}
 
-                        {/* ── Tabbed track lists ── */}
                         <div className="np-tabs-section">
                             <div className="np-tabs">
                                 <button
@@ -506,7 +596,10 @@ export function NowPlaying({
 
                                 {!activeLoading && activeList.length === 0 && (
                                     <div className="np-artist-empty">
-                                        {activeTab === 'similar' ? 'No similar tracks found' : `No other tracks by ${focusTrack.artist} on the network`}
+                                        {activeTab === 'similar'
+                                            ? 'No similar tracks found'
+                                            : `No other tracks by ${focusTrack.artist} on the network`
+                                        }
                                     </div>
                                 )}
 
@@ -521,7 +614,9 @@ export function NowPlaying({
                                                         <span className="np-similar-title">{t.title}</span>
                                                         <span className="np-similar-meta">
                                                             {activeTab === 'similar' ? t.artist : (t.year ?? '')}
-                                                            {t.genre && activeTab === 'similar' && <> · <span className="np-similar-genre">{t.genre}</span></>}
+                                                            {t.genre && activeTab === 'similar' && (
+                                                                <> · <span className="np-similar-genre">{t.genre}</span></>
+                                                            )}
                                                         </span>
                                                     </div>
                                                     <button
@@ -546,6 +641,16 @@ export function NowPlaying({
                     </div>
                 </div>
             </div>
+            {showPublish && focusTrack && (
+                <PublishModal
+                    track={focusTrack}
+                    fangorn={fangorn}
+                    publisherAddress={address}
+                    onClose={() => setShowPublish(false)}
+                    onPublished={() => { setShowPublish(false); setExistsInIndex(true) }}
+                    accentColor={accentColor}
+                />
+            )}
         </div>
     )
 }

@@ -23,14 +23,20 @@ export interface KernelParams {
   temp_max?:    number
 }
 
-export interface ChromaHit {
-  id:        string
-  embedding: number[]   // float[384] from backend
-  distance:  number     // L2 distance
-  document:  string
-  metadata:  Record<string, unknown>
-}
+export type FieldValue = string | number | boolean | null
 
+export interface ChromaHit {
+    id: string
+    score: number
+    distance: number
+    embedding: number[]
+    document: string
+    fields: Record<string, FieldValue>  // parsed from server payload
+    // fangorn envelope fields still flat in metadata
+    owner?: string
+    manifestCid?: string
+    trackId?: string
+}
 export interface WeightedHit extends ChromaHit {
   weight: number        // normalized importance weight
 }

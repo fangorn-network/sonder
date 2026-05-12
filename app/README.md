@@ -1,4 +1,6 @@
-# electron-app
+# SOND3R
+
+It turns music from a background utility into a participatory sport.
 
 An Electron application with React and TypeScript
 

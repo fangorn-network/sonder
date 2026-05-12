@@ -2,7 +2,6 @@
  * sessionKernel.ts
  *
  * Implements a Markov kernel over the all-MiniLM-L6-v2 embedding space (d=384, L2).
- * > "Manhattan" metric
  *
  * State: $(\mu, \nu, \sigma)$
  *   $\mu \in \mathbb{R}^d$ - current position (weighted mean of recent plays)

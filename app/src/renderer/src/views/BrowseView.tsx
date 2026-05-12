@@ -50,15 +50,20 @@ interface BrowseViewProps {
 async function fetchAlbumArt(title: string, artist: string): Promise<string | null> {
   try {
     const q = encodeURIComponent(`${artist} ${title}`)
-    const res = await fetch(`https://itunes.apple.com/search?term=${q}&entity=song&limit=3`)
-    const data = await res.json()
+    const { body } = await (window as any).electron.ipcRenderer.invoke('fetch:proxy', {
+      url: `https://itunes.apple.com/search?term=${q}&entity=song&limit=3`
+    })
+    const data = JSON.parse(body)
+
     const url = data.results?.[0]?.artworkUrl100
     if (url) return url.replace('100x100bb', '600x600bb')
   } catch { }
   try {
     const q = encodeURIComponent(`artist:"${artist}" track:"${title}"`)
-    const res = await fetch(`https://api.deezer.com/search?q=${q}&limit=1`)
-    const data = await res.json()
+    const { body } = await (window as any).electron.ipcRenderer.invoke('deezer:api', {
+      url: `https://api.deezer.com/search?q=${q}&limit=1`
+    })
+    const data = JSON.parse(body)
     const url = data.data?.[0]?.album?.cover_xl
     if (url) return url
   } catch { }
@@ -89,8 +94,8 @@ export function BrowseView({
     onPlayingIdChange?.(track.id)
     onSignal?.({ type: 'play', track, weight: 1.0 })
     try {
-      if (track.spotify_track_id) {
-        await play(`spotify:track:${track.spotify_track_id}`)
+      if (track.spotifyTrackId) {
+        await play(`spotify:track:${track.spotifyTrackId}`)
       } else {
         const query = `${track.title} ${track.artist}`.replace(/\(.*?\)/g, '').trim()
         await searchAndPlay(query)
@@ -102,9 +107,9 @@ export function BrowseView({
   }
 
   const genreColor: Record<string, string> = {}
-  ;(allGenres ?? []).forEach((g, i) => {
-    genreColor[g] = GENRE_PALETTE[i % GENRE_PALETTE.length]
-  })
+    ; (allGenres ?? []).forEach((g, i) => {
+      genreColor[g] = GENRE_PALETTE[i % GENRE_PALETTE.length]
+    })
 
   const activeCount =
     (genreFilter !== 'all' ? 1 : 0) +
@@ -163,11 +168,11 @@ export function BrowseView({
 
   const renderCard = (track: Track) => {
     const accentColor = hashColor(track.id)
-    const primaryGenre = track.genres[0] ?? null
-    const primaryGenreColor = primaryGenre ? (genreColor[primaryGenre] ?? accentColor) : accentColor
+    // const primaryGenre = track.genres[0] ?? null
+    const primaryGenreColor = accentColor
     const isThisPlaying = playingId === track.id
-    const durationStr = track.duration_ms
-      ? `${Math.floor(track.duration_ms / 60000)}:${String(Math.floor((track.duration_ms % 60000) / 1000)).padStart(2, '0')}`
+    const durationStr = track.durationMs
+      ? `${Math.floor(track.durationMs / 60000)}:${String(Math.floor((track.durationMs % 60000) / 1000)).padStart(2, '0')}`
       : null
 
     return (
@@ -189,8 +194,8 @@ export function BrowseView({
             style={{ background: primaryGenreColor, border: 'none', cursor: 'pointer' }}
           >
             {isThisPlaying
-              ? <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><rect x="5" y="4" width="4" height="16" rx="1"/><rect x="15" y="4" width="4" height="16" rx="1"/></svg>
-              : <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+              ? <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><rect x="5" y="4" width="4" height="16" rx="1" /><rect x="15" y="4" width="4" height="16" rx="1" /></svg>
+              : <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
             }
           </button>
         </div>
@@ -202,7 +207,7 @@ export function BrowseView({
             {track.year !== null && <span className="tg-year"> · {track.year}</span>}
             {durationStr && <span className="tg-year"> · {durationStr}</span>}
           </div>
-
+          {/* 
           {track.genres.length > 0 && (
             <div className="tg-meta tg-meta--genres">
               {track.genres.slice(0, 3).map(g => (
@@ -236,7 +241,7 @@ export function BrowseView({
                 <span key={t} className="tg-genre tg-genre--theme">{t}</span>
               ))}
             </div>
-          )}
+          )} */}
         </div>
       </div>
     )
@@ -300,7 +305,7 @@ export function BrowseView({
           aria-label="Open filters"
         >
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-            <path d="M3 6h18M6 12h12M10 18h4"/>
+            <path d="M3 6h18M6 12h12M10 18h4" />
           </svg>
           <span>Filter</span>
           {hasActiveFilter && <span className="bv-filter-badge">{activeCount}</span>}

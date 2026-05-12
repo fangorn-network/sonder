@@ -5,14 +5,8 @@
     "spotify_artist_id": {
         "@type": "string"
     },
-    "title": {
+    "isrcCode": {
         "@type": "string"
-    },
-    "artist": {
-        "@type": "string"
-     },
-    "year": {
-        "@type": "number"
     },
     "rank": {
         "@type": "number"

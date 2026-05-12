@@ -20,6 +20,7 @@ import { SpotifyConfigView } from './views/SpotifyConfigView'
 import { useAmbientAgent } from './hooks/useAmbientAgent'
 import type { KernelSnapshot } from './hooks/useAmbientAgent'
 import type { TasteSignal } from './types'
+import { ConnectWallet } from './components/ConnectWallet'
 
 // How many recent plays/skips to carry into the kernel snapshot prompt.
 // Short by design — enough to shape a query, not a full session log.
@@ -178,7 +179,7 @@ export default function App() {
     })
   }, [spotify.connected]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ─── Signal handler ──────────────────────────────────────────────────────────
+  // ─── Signal handler ─── ───────────────────────────────────────────────────────
   // Feeds play/skip events into the kernel AND into the local history refs
   // so the ambient agent's next query is shaped by recent behaviour.
   const handleSignal = useCallback(async (signal: TasteSignal) => {
@@ -297,6 +298,7 @@ export default function App() {
                 onMouseEnter={e => (e.currentTarget.style.color = 'var(--fg2)')}
                 onMouseLeave={e => (e.currentTarget.style.color = 'var(--fg4)')}
               >⚙</button>
+              <ConnectWallet />
             </div>
           </header>
 

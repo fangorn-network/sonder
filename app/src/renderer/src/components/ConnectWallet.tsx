@@ -1,16 +1,20 @@
-import { usePrivy, useFundWallet } from '@privy-io/react-auth'
-import { createPublicClient, http, parseAbi, formatUnits } from 'viem'
+import { usePrivy, useFundWallet, useWallets } from '@privy-io/react-auth'
+import { createPublicClient, createWalletClient, http, custom, parseAbi, formatUnits } from 'viem'
 import { arbitrumSepolia } from 'viem/chains'
-import { FangornConfig } from '@fangorn-network/sdk'
 import { useEffect, useState } from 'react'
-import { useSpotifyContext } from '../providers/SpotifyProvider'
 import '../App.css'
 
 const USDC_ADDRESS = '0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d'
+const TARGET_CONTRACT = '0x14cff4b583cabde7066d12f04bf9eaba408a426f'
+
 const USDC_ABI = parseAbi(['function balanceOf(address) view returns (uint256)'])
+const CONTRACT_ABI = parseAbi([
+  'function publish(string manifest_cid, bytes32 schema_id, string name, uint256 price) public'
+])
+
 const publicClient = createPublicClient({
   chain: arbitrumSepolia,
-  transport: http(FangornConfig.ArbitrumSepolia.rpcUrl)
+  transport: http("https://sepolia-rollup.arbitrum.io/rpc")
 })
 
 function EyeIcon({ hidden }: { hidden: boolean }) {
@@ -30,7 +34,9 @@ function EyeIcon({ hidden }: { hidden: boolean }) {
 
 export function ConnectWallet() {
   const { login, logout, authenticated, user } = usePrivy()
+  const { wallets } = useWallets() 
   const { fundWallet } = useFundWallet({ onUserExited: () => { } })
+  
   const [balance, setBalance] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const [hidden, setHidden] = useState(true)
@@ -39,6 +45,36 @@ export function ConnectWallet() {
   const label = user?.email?.address
     ?? (user as any)?.google?.email
     ?? (address ? `${address.slice(0, 6)}...${address.slice(-4)}` : '')
+
+  const embeddedWallet = wallets.find((w) => w.walletClientType === 'privy')
+
+  const handlePublish = async () => {
+    if (!embeddedWallet || !address) return
+
+    try {
+      const provider = await embeddedWallet.getEthereumProvider()
+      const walletClient = createWalletClient({
+        account: address,
+        chain: arbitrumSepolia,
+        transport: custom(provider) 
+      })
+
+      const hash = await walletClient.writeContract({
+        address: TARGET_CONTRACT,
+        abi: CONTRACT_ABI,
+        functionName: 'publish',
+        args: [
+          'bafkreidyfq3aq4pcalvj7hptynlpkkpth3ju4bqg3b5hau34wwr5ivzmda',
+          '0xdd2ff7c1afae71333aac86f18316093fb017e4a47e7c6ef2b1c37b8ca62d53a6',
+          '2gY3Z3f1Qe4vWnw15dBkSw',
+          0n
+        ],
+      })
+      console.log("Success:", hash)
+    } catch (error) {
+      console.error("Write Error:", error)
+    }
+  }
 
   function handleCopyAddress() {
     if (!address || hidden) return
@@ -63,36 +99,24 @@ export function ConnectWallet() {
     return (
       <div className="wallet-chip connected">
         <span className="wallet-dot" />
-        <button className="wallet-label" onClick={handleCopyAddress} title={hidden ? undefined : address}>
+        <button className="wallet-label" onClick={handleCopyAddress}>
           {hidden ? null : copied ? 'copied!' : label}
         </button>
         {balance !== null && !hidden && (
-          <span
-            className="wallet-balance"
-            onClick={async () => address && await fundWallet({ address })}
-            title="Click to add funds"
-            style={{ cursor: 'pointer' }}
-          >
+          <span className="wallet-balance" onClick={() => address && fundWallet({ address })}>
             <span className="wallet-balance-currency">$</span>
             {Number(balance).toFixed(2)}
             <span className="wallet-balance-unit"> USDC</span>
           </span>
         )}
-        <button
-          className="wallet-hide-btn"
-          onClick={() => setHidden(h => !h)}
-          title={hidden ? 'Show details' : 'Hide details'}
-        >
+        <button className="wallet-hide-btn" onClick={() => setHidden(h => !h)}>
           <EyeIcon hidden={hidden} />
         </button>
+        {!hidden && <button onClick={handlePublish}>Publish</button>}
         <button className="wallet-logout" onClick={logout}>✕</button>
       </div>
     )
   }
 
-  return (
-    <button className="btn-connect" onClick={login}>
-      Connect
-    </button>
-  )
+  return <button className="btn-connect" onClick={login}>Connect</button>
 }

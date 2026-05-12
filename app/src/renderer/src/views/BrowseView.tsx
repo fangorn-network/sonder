@@ -41,20 +41,29 @@ interface BrowseViewProps {
   allGenres: string[]
   allMoods: string[]
   allContexts: string[]
+  // Ambient agent — Window-mode saliency surface
+  ambientStatus?: 'idle' | 'fetching' | 'error'
+  ambientQueueSize?: number
+  ambientLastReason?: string
 }
 
 async function fetchAlbumArt(title: string, artist: string): Promise<string | null> {
   try {
     const q = encodeURIComponent(`${artist} ${title}`)
-    const res = await fetch(`https://itunes.apple.com/search?term=${q}&entity=song&limit=3`)
-    const data = await res.json()
+    const { body } = await (window as any).electron.ipcRenderer.invoke('fetch:proxy', {
+      url: `https://itunes.apple.com/search?term=${q}&entity=song&limit=3`
+    })
+    const data = JSON.parse(body)
+
     const url = data.results?.[0]?.artworkUrl100
     if (url) return url.replace('100x100bb', '600x600bb')
   } catch { }
   try {
     const q = encodeURIComponent(`artist:"${artist}" track:"${title}"`)
-    const res = await fetch(`https://api.deezer.com/search?q=${q}&limit=1`)
-    const data = await res.json()
+    const { body } = await (window as any).electron.ipcRenderer.invoke('deezer:api', {
+      url: `https://api.deezer.com/search?q=${q}&limit=1`
+    })
+    const data = JSON.parse(body)
     const url = data.data?.[0]?.album?.cover_xl
     if (url) return url
   } catch { }
@@ -67,12 +76,14 @@ export function BrowseView({
   onFilteredChange, onPlayingIdChange, onSignal, onTrackClick,
   genreFilter, moodFilter, contextFilter, onGenreFilter, onMoodFilter, onContextFilter,
   allGenres, allMoods, allContexts,
+  ambientStatus, ambientQueueSize, ambientLastReason,
 }: BrowseViewProps) {
   const sentinelRef = useRef<HTMLDivElement>(null)
   const [filterOpen, setFilterOpen] = useState(false)
   const [playingId, setPlayingId] = useState<string | null>(null)
   const [albumArtCache, setAlbumArtCache] = useState<Record<string, string>>({})
   const fetchingRef = useRef<Set<string>>(new Set())
+  const [reasonExpanded, setReasonExpanded] = useState(false)
 
   const { play, searchAndPlay, connect, connected } = useSpotifyContext()
 
@@ -83,8 +94,8 @@ export function BrowseView({
     onPlayingIdChange?.(track.id)
     onSignal?.({ type: 'play', track, weight: 1.0 })
     try {
-      if (track.spotify_track_id) {
-        await play(`spotify:track:${track.spotify_track_id}`)
+      if (track.spotifyTrackId) {
+        await play(`spotify:track:${track.spotifyTrackId}`)
       } else {
         const query = `${track.title} ${track.artist}`.replace(/\(.*?\)/g, '').trim()
         await searchAndPlay(query)
@@ -95,12 +106,10 @@ export function BrowseView({
     }
   }
 
-  // Built from allGenres (stable, never shrinks) so colors don't shift
-  // when a filter narrows the visible track set.
   const genreColor: Record<string, string> = {}
-  ;(allGenres ?? []).forEach((g, i) => {
-    genreColor[g] = GENRE_PALETTE[i % GENRE_PALETTE.length]
-  })
+    ; (allGenres ?? []).forEach((g, i) => {
+      genreColor[g] = GENRE_PALETTE[i % GENRE_PALETTE.length]
+    })
 
   const activeCount =
     (genreFilter !== 'all' ? 1 : 0) +
@@ -114,13 +123,10 @@ export function BrowseView({
     onContextFilter('all')
   }
 
-  // tracks IS the filtered set — filtering handled upstream in useChroma
   const filtered = tracks
 
-  // ── sync filtered tracks to parent ───────────────────────────────────
   useEffect(() => { onFilteredChange?.(filtered) }, [filtered])
 
-  // ── album art fetching ───────────────────────────────────────────────
   useEffect(() => {
     if (filtered.length === 0) return
     const missing = filtered.filter(t => !albumArtCache[t.id] && !fetchingRef.current.has(t.id))
@@ -135,7 +141,6 @@ export function BrowseView({
     })
   }, [filtered])
 
-  // ── infinite scroll ──────────────────────────────────────────────────
   useEffect(() => {
     const el = sentinelRef.current
     if (!el) return
@@ -147,7 +152,6 @@ export function BrowseView({
     return () => observer.disconnect()
   }, [loadMore])
 
-  // ── filter sheet scroll lock ─────────────────────────────────────────
   useEffect(() => {
     if (!filterOpen) return
     const prev = document.body.style.overflow
@@ -157,14 +161,18 @@ export function BrowseView({
     return () => { document.body.style.overflow = prev; window.removeEventListener('keydown', onKey) }
   }, [filterOpen])
 
-  // ── card ─────────────────────────────────────────────────────────────
+  // Collapse reason when agent finishes a new fetch
+  useEffect(() => {
+    if (ambientStatus === 'idle' && ambientLastReason) setReasonExpanded(false)
+  }, [ambientLastReason])
+
   const renderCard = (track: Track) => {
     const accentColor = hashColor(track.id)
-    const primaryGenre = track.genres[0] ?? null
-    const primaryGenreColor = primaryGenre ? (genreColor[primaryGenre] ?? accentColor) : accentColor
+    // const primaryGenre = track.genres[0] ?? null
+    const primaryGenreColor = accentColor
     const isThisPlaying = playingId === track.id
-    const durationStr = track.duration_ms
-      ? `${Math.floor(track.duration_ms / 60000)}:${String(Math.floor((track.duration_ms % 60000) / 1000)).padStart(2, '0')}`
+    const durationStr = track.durationMs
+      ? `${Math.floor(track.durationMs / 60000)}:${String(Math.floor((track.durationMs % 60000) / 1000)).padStart(2, '0')}`
       : null
 
     return (
@@ -186,8 +194,8 @@ export function BrowseView({
             style={{ background: primaryGenreColor, border: 'none', cursor: 'pointer' }}
           >
             {isThisPlaying
-              ? <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><rect x="5" y="4" width="4" height="16" rx="1"/><rect x="15" y="4" width="4" height="16" rx="1"/></svg>
-              : <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+              ? <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><rect x="5" y="4" width="4" height="16" rx="1" /><rect x="15" y="4" width="4" height="16" rx="1" /></svg>
+              : <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
             }
           </button>
         </div>
@@ -199,7 +207,7 @@ export function BrowseView({
             {track.year !== null && <span className="tg-year"> · {track.year}</span>}
             {durationStr && <span className="tg-year"> · {durationStr}</span>}
           </div>
-
+          {/* 
           {track.genres.length > 0 && (
             <div className="tg-meta tg-meta--genres">
               {track.genres.slice(0, 3).map(g => (
@@ -233,7 +241,7 @@ export function BrowseView({
                 <span key={t} className="tg-genre tg-genre--theme">{t}</span>
               ))}
             </div>
-          )}
+          )} */}
         </div>
       </div>
     )
@@ -272,6 +280,10 @@ export function BrowseView({
     </section>
   )
 
+  const showAmbientBar = ambientStatus !== undefined
+  const isFetching = ambientStatus === 'fetching'
+  const isError = ambientStatus === 'error'
+
   return (
     <div className="browse-view">
       <div className="browse-toolbar">
@@ -293,12 +305,73 @@ export function BrowseView({
           aria-label="Open filters"
         >
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-            <path d="M3 6h18M6 12h12M10 18h4"/>
+            <path d="M3 6h18M6 12h12M10 18h4" />
           </svg>
           <span>Filter</span>
           {hasActiveFilter && <span className="bv-filter-badge">{activeCount}</span>}
         </button>
       </div>
+
+      {/* Ambient agent status bar — Window-mode saliency surface */}
+      {showAmbientBar && (
+        <div
+          style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            padding: '6px 12px', margin: '0 0 8px',
+            borderRadius: reasonExpanded ? '6px 6px 0 0' : 6,
+            fontSize: 11, letterSpacing: '0.04em',
+            background: isError ? 'rgba(248,113,113,0.07)' : 'rgba(167,139,250,0.07)',
+            border: `1px solid ${isError ? 'rgba(248,113,113,0.18)' : 'rgba(167,139,250,0.18)'}`,
+            color: isError ? '#f87171' : '#a78bfa',
+            transition: 'all 0.25s ease',
+          }}
+        >
+          <span style={{
+            width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
+            background: isError ? '#f87171' : isFetching ? '#a78bfa' : '#34d399',
+            boxShadow: isFetching ? '0 0 6px #a78bfa88' : undefined,
+            animation: isFetching ? 'ambientPulse 1.2s ease-in-out infinite' : undefined,
+          }} />
+          <span style={{ flex: 1, opacity: 0.85 }}>
+            {isError
+              ? 'agent · fetch failed'
+              : isFetching
+                ? 'agent · listening…'
+                : `agent · ${ambientQueueSize ?? 0} queued`
+            }
+          </span>
+          {ambientLastReason && !isError && (
+            <button
+              onClick={() => setReasonExpanded(v => !v)}
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                color: 'inherit', fontSize: 10, opacity: 0.65, padding: '0 2px',
+                letterSpacing: '0.06em', textTransform: 'uppercase',
+              }}
+              title="Why did the agent queue these?"
+            >
+              {reasonExpanded ? 'hide' : 'why?'}
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Expanded reason panel — the agent's saliency explanation */}
+      {showAmbientBar && reasonExpanded && ambientLastReason && (
+        <div style={{
+          margin: '-8px 0 8px',
+          padding: '8px 12px',
+          borderRadius: '0 0 6px 6px',
+          background: 'rgba(167,139,250,0.05)',
+          border: '1px solid rgba(167,139,250,0.12)',
+          borderTop: 'none',
+          fontSize: 11, lineHeight: 1.6,
+          color: 'var(--fg3, #c4b5fd)',
+          fontStyle: 'italic',
+        }}>
+          {ambientLastReason}
+        </div>
+      )}
 
       {hasActiveFilter && (
         <div className="bv-active-chips">
@@ -420,6 +493,13 @@ export function BrowseView({
           </div>
         </div>
       )}
+
+      <style>{`
+        @keyframes ambientPulse {
+          0%, 100% { opacity: 0.4; transform: scale(1); }
+          50% { opacity: 1; transform: scale(1.3); }
+        }
+      `}</style>
     </div>
   )
 }

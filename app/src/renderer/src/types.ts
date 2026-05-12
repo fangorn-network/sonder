@@ -1,28 +1,67 @@
 import type { CSSProperties } from 'react'
 
-export interface Track {
-  // Fangorn manifest fields
-  id: string                  // manifestStateId / Chroma doc id
-  manifestStateId: string
-  datasourceName: string
+export interface JoinedRecord {
+  // Fangorn envelope
+  id: string
+  trackId: string
   owner: string
-  name: string                // raw name field from manifest
-  embedding: any
+  manifestCid: string
+  // Joined fields — shape driven by schemas
+  fields: Record<string, FieldValue>
+  // Kernel
+  embedding?: number[]
+  score?: number
+  distance?: number
+}
 
-  // Corpus fields (from fetch.py output)
-  spotify_track_id: string
-  spotify_artist_id: string | null
+export interface FieldValueObject {
+  [key: string]: FieldValue
+}
+
+export type FieldValue =
+  | string | number | boolean | null
+  | FieldValue[]
+  | FieldValueObject
+
+export function asTrack(r: JoinedRecord): Track {
+  const f = r.fields
+  const contributors = Array.isArray(f.contributors)
+    ? (f.contributors as any[]).map(c => ({
+      role: c.role ?? null,
+      name: c.name ?? null,
+      id: c.id ?? null,
+    }))
+    : []
+
+  return {
+    id: r.id,
+    trackId: r.trackId,
+    owner: r.owner,
+    manifestCid: r.manifestCid,
+    title: (f.title as string) ?? 'Unknown',
+    artist: (f.byArtist as string) ?? '',
+    year: typeof f.datePublished === 'string' && f.datePublished
+      ? parseInt(f.datePublished.slice(0, 4)) || null
+      : null,
+    durationMs: (f.durationMs as number) ?? null,
+    spotifyTrackId: (f.externalId as string) ?? null,
+    contributors,
+    embedding: r.embedding,
+  }
+}
+
+export interface Track {
+  id: string
+  trackId: string
+  owner: string
+  manifestCid: string
   title: string
   artist: string
   year: number | null
-  rank: number | null
-  duration_ms: number | null
-
-  // Taxonomy
-  genres: string[]
-  moods: string[]
-  themes: string[]
-  contexts: string[]
+  durationMs: number | null
+  spotifyTrackId: string | null
+  contributors?: { role: string | null; name: string | null; id: string | null }[]
+  embedding?: number[]
 }
 
 export type PlayState = 'idle' | 'loading' | 'playing' | 'error'

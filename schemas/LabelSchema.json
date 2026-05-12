@@ -1,18 +1,9 @@
 {
-    "spotify_track_id": {
-        "@type": "string"
-    },
-    "spotify_artist_id": {
-        "@type": "string"
-    },
-    "isrcCode": {
-        "@type": "string"
-    },
-    "rank": {
+    "schemaVersion": {
         "@type": "number"
     },
-    "duration_ms": {
-        "@type": "number"
+    "trackId": {
+        "@type": "string"
     },
     "genres": {
         "@type": "array",

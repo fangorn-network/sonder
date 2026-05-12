@@ -30,3 +30,4 @@ deploy.sh
 
 .env
 **/venv
+**/db/*

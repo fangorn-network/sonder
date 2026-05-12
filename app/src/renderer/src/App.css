@@ -284,7 +284,7 @@ textarea {
   backdrop-filter: var(--blur-sm);
   -webkit-backdrop-filter: var(--blur-sm);
   transition: border-color var(--t1), background var(--t1); */
-  margin-left: auto;
+  /* margin-left: auto; */
 }
 
 .wallet-chip.connected {

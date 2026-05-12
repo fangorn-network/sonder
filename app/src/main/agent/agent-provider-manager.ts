@@ -11,7 +11,7 @@ export interface AgentProviderConfig {
   ollamaBaseUrl?: string;
   claudeApiKey?: string;
   claudeModel?: string;
-  defaultModel?: string;
+  ollamaModel?: string;
   unloadModelsOnNone?: boolean;
   systemPrompt?: string;
 }

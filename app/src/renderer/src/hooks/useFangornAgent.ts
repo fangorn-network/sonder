@@ -1,13 +1,6 @@
 // hooks/useFangornAgent.ts
 import { useState, useCallback, useRef } from "react";
 
-const agentEnabled = import.meta.env.VITE_USE_AGENT ?? false;
-const apiUrl = import.meta.env.VITE_PUBLIC_AGENT_URL || "http://localhost:3001";
-
-export function agentIsEnabled() {
-  return agentEnabled;
-}
-
 export interface AgentMcpResult {
   resultType?: string;
   mcpResults?: unknown;
@@ -16,6 +9,7 @@ export interface AgentMcpResult {
 
 interface QueueEntry {
   message: string;
+  toolNames?: string[];
   resolve: (result: AgentMcpResult | null) => void;
   reject: (err: unknown) => void;
 }
@@ -24,11 +18,10 @@ export function useFangornAgent() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Queue of pending jobs and a flag to prevent concurrent draining
   const queue = useRef<QueueEntry[]>([]);
   const draining = useRef(false);
 
-  const toolNameList = ["search_datasources"];
+  const defaultToolNames = ["search_datasources"];
 
   const drainQueue = useCallback(async () => {
     if (draining.current) return;
@@ -38,28 +31,26 @@ export function useFangornAgent() {
     while (queue.current.length > 0) {
       const entry = queue.current.shift()!;
       try {
-        const res = await fetch(`${apiUrl}/chat`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message: entry.message, toolNameList }),
-        });
-
-        if (!res.ok) throw new Error(`Agent returned ${res.status}`);
-
-        const data = await res.json();
-
-        // Wait for 'done' status if the endpoint streams job state
-        if (data.status && data.status !== "done") {
-          throw new Error(`Unexpected job status: ${data.status}`);
+        const isReady = await window.agentAPI.isReady();
+        if (!isReady) {
+          throw new Error("Agent is not initialised. Configure a provider in the Agent tab.");
         }
 
-        const result: AgentMcpResult = {
-          mcpResults: data.mcpResults,
-          agentMessage: data.response,
+        const toolNames = entry.toolNames ?? defaultToolNames;
+        const result = toolNames.length > 0
+          ? await window.agentAPI.chatScoped(entry.message, toolNames)
+          : await window.agentAPI.chat(entry.message);
+
+        if (!result.success) {
+          throw new Error(result.error ?? "Agent request failed");
+        }
+
+        const agentResult: AgentMcpResult = {
+          mcpResults: result.response?.mcpResults,
+          agentMessage: result.response?.text,
         };
 
-        console.log(`agentResponse: ${JSON.stringify(result, null, 2)}`);
-        entry.resolve(result.mcpResults ? result : null);
+        entry.resolve(agentResult.mcpResults ? agentResult : null);
         setError(null);
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : "Agent request failed";
@@ -74,14 +65,9 @@ export function useFangornAgent() {
   }, []);
 
   const sendMessage = useCallback(
-    (message: string): Promise<AgentMcpResult | null> => {
-      if (!agentEnabled) {
-        console.warn("Agent is not enabled");
-        return Promise.resolve(null);
-      }
-
+    (message: string, toolNames?: string[]): Promise<AgentMcpResult | null> => {
       return new Promise<AgentMcpResult | null>((resolve, reject) => {
-        queue.current.push({ message, resolve, reject });
+        queue.current.push({ message, toolNames, resolve, reject });
         drainQueue();
       });
     },

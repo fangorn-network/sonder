@@ -66,8 +66,8 @@ export class AgentBridge {
         process.env.OLLAMA_PORT = "11434";
       }
 
-      if (config.defaultModel) {
-        this.llmModel= config.defaultModel;
+      if (config.ollamaModel) {
+        this.llmModel= config.ollamaModel;
       }
     } else if (config.provider === LLMProvider.Anthropic) {
 

@@ -44,12 +44,19 @@ export function AgentView() {
       setProviderStatus(status)
       setModels(modelList)
 
+      console.log(modelList)
+
+      let defaultModel = modelList[0]
+
       if (config) {
-        setSelectedModel(
-          config.provider === LLMProvider.Anthropic
-            ? (config.claudeModel ?? 'claude-sonnet-4-6')
-            : (config.defaultModel ?? '')
-        )
+        if (!defaultModel) {
+          defaultModel = config.provider === LLMProvider.Anthropic
+            ? (config.claudeModel ?? "-")
+            : (config.ollamaModel ?? "-")
+          setSelectedModel(defaultModel)
+        } else {
+          setSelectedModel(defaultModel)
+        }
       }
 
       if (toolboxResult?.success && toolboxResult.toolboxes) {

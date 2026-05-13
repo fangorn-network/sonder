@@ -72,8 +72,8 @@ export function AgentManager({ providerStatus, models, selectedModel, onStateCha
         setStopOllama(config.unloadModelsOnNone ?? true)
         setLocalModel(
           config.provider === LLMProvider.Anthropic
-            ? (config.claudeModel ?? 'claude-sonnet-4-6')
-            : (config.defaultModel ?? 'qwen3.5:4b')
+            ? (config.claudeModel ?? "-")
+            : (config.ollamaModel ?? "-")
         )
       }
       setOllamaStatus(ollStatus)
@@ -105,8 +105,9 @@ export function AgentManager({ providerStatus, models, selectedModel, onStateCha
 
   const handleProviderSelect = (p: Provider) => {
     setSelectedProvider(p)
-    if (p === LLMProvider.Anthropic) setLocalModel('claude-sonnet-4-6')
-    else if (p === LLMProvider.Ollama) setLocalModel(selectedModel || 'qwen3.5:4b')
+    console.log(selectedModel)
+    if (p === LLMProvider.Anthropic) setLocalModel(selectedModel || "-")
+    else if (p === LLMProvider.Ollama) setLocalModel(selectedModel || "-")
     else setLocalModel('')
     setDirty(true)
     setSaveError(null)
@@ -130,7 +131,7 @@ export function AgentManager({ providerStatus, models, selectedModel, onStateCha
         config.claudeApiKey = claudeKey.trim()
         config.claudeModel = localModel
       } else if (selectedProvider === LLMProvider.Ollama && localModel) {
-        config.defaultModel = localModel
+        config.ollamaModel = localModel
       }
 
       const status = await window.agentAPI.setProvider(config)

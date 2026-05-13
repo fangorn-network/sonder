@@ -530,7 +530,7 @@ export function NowPlaying({
                     <div className="np-right-body">
 
                         {/* ── Track Tags ── */}
-                        {tagTrackId && (
+                        {!showPublish && tagTrackId && (
                             <div className="np-tag-section">
                                 {tagged && allTags.length > 0 ? (
                                     <div className="np-tag-row">

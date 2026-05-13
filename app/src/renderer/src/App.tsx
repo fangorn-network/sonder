@@ -21,6 +21,7 @@ import { useAmbientAgent } from './hooks/useAmbientAgent'
 import type { KernelSnapshot } from './hooks/useAmbientAgent'
 import type { TasteSignal } from './types'
 import { ConnectWallet } from './components/ConnectWallet'
+import { useChromaSync } from './hooks/useChromaSync'
 
 const SNAPSHOT_HISTORY_DEPTH = 5
 const SCROLL_THRESHOLD = 10
@@ -38,15 +39,15 @@ export default function App() {
   const [entropy, setEntropy] = useState(0.2)
   const kernel = useSessionKernel({ entropy })
 
-  const [booted, setBooted]         = useState(() => localStorage.getItem('booted') === 'true')
+  const [booted, setBooted] = useState(() => localStorage.getItem('booted') === 'true')
   const [showConnectors, setShowConnectors] = useState(false)
   const [nudgeDismissed, setNudgeDismissed] = useState(() => localStorage.getItem('sond3r:nudge:spotify') === '1')
-  const [view, setView]             = useState<ViewName>('Discover')
+  const [view, setView] = useState<ViewName>('Discover')
 
   const [nowPlaying, setNowPlaying] = useState<null | 'player' | { track: Track; color: string }>(null)
 
-  const [genreFilter,   setGenreFilter]   = useState('all')
-  const [moodFilter,    setMoodFilter]    = useState('all')
+  const [genreFilter, setGenreFilter] = useState('all')
+  const [moodFilter, setMoodFilter] = useState('all')
   const [contextFilter, setContextFilter] = useState('all')
 
   const {
@@ -56,15 +57,15 @@ export default function App() {
   } = useChroma({ genreFilter, moodFilter, contextFilter })
 
   const [recommendedTracks, setRecommendedTracks] = useState<RecommendedTracks | null>(null)
-  const [recommendLoading, setRecommendLoading]   = useState(false)
+  const [recommendLoading, setRecommendLoading] = useState(false)
   const { sendMessage } = useFangornAgent()
 
   type AutoplayMode = 'none' | 'sequential' | 'agent' | 'similar'
   const [autoplayMode, setAutoplayMode] = useState<AutoplayMode>('agent')
   const filteredTracksRef = useRef<Track[]>([])
-  const playingIdRef      = useRef<string | null>(null)
-  const spotifyRef        = useRef<ReturnType<typeof useSpotify> | null>(null)
-  const seededRef         = useRef(false)
+  const playingIdRef = useRef<string | null>(null)
+  const spotifyRef = useRef<ReturnType<typeof useSpotify> | null>(null)
+  const seededRef = useRef(false)
 
   const recentPlaysRef = useRef<string[]>([])
   const recentSkipsRef = useRef<string[]>([])
@@ -79,9 +80,9 @@ export default function App() {
 
   const kernelSnapshot = useMemo<KernelSnapshot>(() => ({
     entropy,
-    centroidLabel:   (() => { const d = kernel.getDiagnostics(); return typeof d === 'string' ? d : JSON.stringify(d) })(),
-    recentPlays:     [...recentPlaysRef.current],
-    recentSkips:     [...recentSkipsRef.current],
+    centroidLabel: (() => { const d = kernel.getDiagnostics(); return typeof d === 'string' ? d : JSON.stringify(d) })(),
+    recentPlays: [...recentPlaysRef.current],
+    recentSkips: [...recentSkipsRef.current],
     uncertaintyHint: undefined,
   }), [entropy, kernel])
 
@@ -89,6 +90,16 @@ export default function App() {
     kernel: kernelSnapshot,
     enabled: autoplayMode === 'agent',
   })
+
+  // sync the chroma db periodically
+  const [visible, setVisible] = useState(true)
+  useEffect(() => {
+    const handler = () => setVisible(document.visibilityState === 'visible')
+    document.addEventListener('visibilitychange', handler)
+    return () => document.removeEventListener('visibilitychange', handler)
+  }, [])
+
+  useChromaSync({ enabled: visible })
 
   useEffect(() => {
     if (autoplayMode === 'agent') ambientAgent.prime()
@@ -98,7 +109,7 @@ export default function App() {
 
   const handleNext = useCallback(() => {
     const tracks = filteredTracksRef.current
-    const idx  = tracks.findIndex(t => t.id === playingIdRef.current)
+    const idx = tracks.findIndex(t => t.id === playingIdRef.current)
     const next = tracks[idx + 1]
     if (next) {
       playingIdRef.current = next.id
@@ -108,7 +119,7 @@ export default function App() {
 
   const handlePrev = useCallback(() => {
     const tracks = filteredTracksRef.current
-    const idx  = tracks.findIndex(t => t.id === playingIdRef.current)
+    const idx = tracks.findIndex(t => t.id === playingIdRef.current)
     const prev = tracks[idx - 1]
     if (prev) {
       playingIdRef.current = prev.id
@@ -214,8 +225,8 @@ export default function App() {
   const scrollToTop = useCallback(() => window.scrollTo({ top: 0, behavior: 'smooth' }), [])
 
   const handleFilter = useCallback((type: 'genre' | 'mood' | 'context', value: string) => {
-    if (type === 'genre')   setGenreFilter(value)
-    if (type === 'mood')    setMoodFilter(value)
+    if (type === 'genre') setGenreFilter(value)
+    if (type === 'mood') setMoodFilter(value)
     if (type === 'context') setContextFilter(value)
   }, [])
 
@@ -246,7 +257,7 @@ export default function App() {
             <div className="header-brand">
               <span className="brand-name">SOND3R</span>
 
-              <nav style={{ display: 'flex', gap: '16px', marginLeft: '24px'}}>
+              <nav style={{ display: 'flex', gap: '16px', marginLeft: '24px' }}>
                 {(['Discover', 'Agent'] as ViewName[]).map((v) => (
                   <button
                     key={v}

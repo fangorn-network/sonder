@@ -48,34 +48,6 @@ export function ConnectWallet() {
 
   const embeddedWallet = wallets.find((w) => w.walletClientType === 'privy')
 
-  const handlePublish = async () => {
-    if (!embeddedWallet || !address) return
-
-    try {
-      const provider = await embeddedWallet.getEthereumProvider()
-      const walletClient = createWalletClient({
-        account: address,
-        chain: arbitrumSepolia,
-        transport: custom(provider) 
-      })
-
-      const hash = await walletClient.writeContract({
-        address: TARGET_CONTRACT,
-        abi: CONTRACT_ABI,
-        functionName: 'publish',
-        args: [
-          'bafkreidyfq3aq4pcalvj7hptynlpkkpth3ju4bqg3b5hau34wwr5ivzmda',
-          '0xdd2ff7c1afae71333aac86f18316093fb017e4a47e7c6ef2b1c37b8ca62d53a6',
-          '2gY3Z3f1Qe4vWnw15dBkSw',
-          0n
-        ],
-      })
-      console.log("Success:", hash)
-    } catch (error) {
-      console.error("Write Error:", error)
-    }
-  }
-
   function handleCopyAddress() {
     if (!address || hidden) return
     navigator.clipboard.writeText(address)
@@ -112,7 +84,6 @@ export function ConnectWallet() {
         <button className="wallet-hide-btn" onClick={() => setHidden(h => !h)}>
           <EyeIcon hidden={hidden} />
         </button>
-        {!hidden && <button onClick={handlePublish}>Publish</button>}
         <button className="wallet-logout" onClick={logout}>✕</button>
       </div>
     )

@@ -32,7 +32,7 @@ def parse_args():
     parser.add_argument("--primary", "-p", metavar="NAME", default=None)
     parser.add_argument(
         "--subgraph-url",
-        default="https://api.studio.thegraph.com/query/1745244/fangorn-data-discovery/version/latest",
+        default="https://api.studio.thegraph.com/query/1748219/sond-3-r/0.0.1",
     )
     parser.add_argument("--ipfs-gateway",      default="https://ipfs.io/ipfs")
     parser.add_argument("--chroma-path",        default="./db/sond3r")
@@ -372,7 +372,7 @@ def join_records(entries_by_schema: dict[str, list[dict]], primary: str) -> list
     print(f"  [join] primary entries ({len(primary_entries)}):")
     for item in primary_entries:
         track_id = _track_id(item["entry"])
-        print(f"    primary track_id={track_id!r}")
+        # print(f"    primary track_id={track_id!r}")
         if not track_id:
             continue
 
@@ -415,7 +415,7 @@ async def ingest():
 
     print(f"\n{'='*60}")
     print(f"Ingesting {len(schemas)} schema(s): {list(schemas.keys())}")
-    print(f"Primary: '{primary}'")
+    # print(f"Primary: '{primary}'")
     print(f"{'='*60}")
 
     results = await asyncio.gather(*[

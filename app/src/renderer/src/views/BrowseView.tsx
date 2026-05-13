@@ -3,6 +3,9 @@ import type { RecommendedTracks, TasteSignal, Track } from '../types'
 import './mobile.css'
 import './Browse-Filters.css'
 import { useSpotifyContext } from '../providers/SpotifyProvider'
+import { PublishModal } from '../components/PublishModal'
+import type { Fangorn } from '@fangorn-network/sdk'
+import type { Hex } from 'viem'
 
 const GENRE_PALETTE = [
   '#a78bfa', '#60a5fa', '#f472b6', '#22c55e',
@@ -15,6 +18,8 @@ function hashColor(str: string): string {
   return GENRE_PALETTE[Math.abs(h) % GENRE_PALETTE.length]
 }
 
+type SearchTab = 'library' | 'mb'
+
 interface BrowseViewProps {
   tracks: Track[]
   loading: boolean
@@ -24,6 +29,9 @@ interface BrowseViewProps {
   loadMore: () => void
   search: string
   setSearch: (s: string) => void
+  chromaReady?: boolean
+  seeding?: boolean
+  retryConnect?: () => void
   recommendedTracks?: RecommendedTracks | null
   recommendLoading?: boolean
   onClearRecommendations?: () => void
@@ -41,14 +49,18 @@ interface BrowseViewProps {
   allGenres: string[]
   allMoods: string[]
   allContexts: string[]
-  // Ambient agent — Window-mode saliency surface
   ambientStatus?: 'idle' | 'fetching' | 'error'
   ambientQueueSize?: number
   ambientLastReason?: string
-  // Spotify nudge — non-blocking prompt when Spotify isn't configured
   showSpotifyNudge?: boolean
   onSpotifyNudgeConnect?: () => void
   onSpotifyNudgeDismiss?: () => void
+  fallbackTracks?: Track[]
+  fallbackLoading?: boolean
+  onFallbackSearch?: (query: string) => void
+  onFallbackClear?: () => void
+  fangorn?: Fangorn | null
+  publisherAddress?: Hex | null
 }
 
 async function fetchAlbumArt(title: string, artist: string): Promise<string | null> {
@@ -75,19 +87,45 @@ async function fetchAlbumArt(title: string, artist: string): Promise<string | nu
 
 export function BrowseView({
   tracks, loading, loadingMore, error, hasMore, loadMore, search, setSearch,
+  chromaReady = false,   // safe default — show connecting state until explicitly ready
+  seeding = false,
+  retryConnect,
   recommendedTracks, recommendLoading, onClearRecommendations, onCallAgent,
   onFilteredChange, onPlayingIdChange, onSignal, onTrackClick,
-  genreFilter, moodFilter, contextFilter, onGenreFilter, onMoodFilter, onContextFilter,
-  allGenres, allMoods, allContexts,
   ambientStatus, ambientQueueSize, ambientLastReason,
   showSpotifyNudge, onSpotifyNudgeConnect, onSpotifyNudgeDismiss,
+  fallbackTracks, fallbackLoading, onFallbackSearch, onFallbackClear,
+  fangorn, publisherAddress,
 }: BrowseViewProps) {
   const sentinelRef = useRef<HTMLDivElement>(null)
-  const [filterOpen, setFilterOpen] = useState(false)
   const [playingId, setPlayingId] = useState<string | null>(null)
   const [albumArtCache, setAlbumArtCache] = useState<Record<string, string>>({})
   const fetchingRef = useRef<Set<string>>(new Set())
   const [reasonExpanded, setReasonExpanded] = useState(false)
+  const [publishingTrack, setPublishingTrack] = useState<{ track: Track; color: string } | null>(null)
+
+  const [activeTab, setActiveTab] = useState<SearchTab>('library')
+  const mbFetchedRef = useRef<string>('')
+
+  const prevSearchRef = useRef(search)
+  useEffect(() => {
+    if (prevSearchRef.current !== search) {
+      prevSearchRef.current = search
+      setActiveTab('library')
+      mbFetchedRef.current = ''
+      onFallbackClear?.()
+    }
+  }, [search])
+
+  const handleTabSwitch = (tab: SearchTab) => {
+    setActiveTab(tab)
+    if (tab === 'mb' && onFallbackSearch && mbFetchedRef.current !== search.trim()) {
+      mbFetchedRef.current = search.trim()
+      onFallbackSearch(search.trim())
+    }
+  }
+
+  const showTabs = !!search.trim() && !!onFallbackSearch
 
   const { play, searchAndPlay, connect, connected } = useSpotifyContext()
 
@@ -97,10 +135,8 @@ export function BrowseView({
     setPlayingId(track.id)
     onPlayingIdChange?.(track.id)
     onSignal?.({ type: 'play', track, weight: 1.0 })
-
     try {
       if (track.spotifyTrackId) {
-        console.log(track.spotifyTrackId)
         await play(`spotify:track:${track.spotifyTrackId}`)
       } else {
         const query = `${track.title} ${track.artist}`.replace(/\(.*?\)/g, '').trim()
@@ -110,23 +146,6 @@ export function BrowseView({
       console.error('play failed:', err)
       setPlayingId(null)
     }
-  }
-
-  const genreColor: Record<string, string> = {}
-  ;(allGenres ?? []).forEach((g, i) => {
-    genreColor[g] = GENRE_PALETTE[i % GENRE_PALETTE.length]
-  })
-
-  const activeCount =
-    (genreFilter !== 'all' ? 1 : 0) +
-    (moodFilter !== 'all' ? 1 : 0) +
-    (contextFilter !== 'all' ? 1 : 0)
-  const hasActiveFilter = activeCount > 0
-
-  const clearAll = () => {
-    onGenreFilter('all')
-    onMoodFilter('all')
-    onContextFilter('all')
   }
 
   const filtered = tracks
@@ -148,33 +167,42 @@ export function BrowseView({
   }, [filtered])
 
   useEffect(() => {
+    if (!fallbackTracks || fallbackTracks.length === 0) return
+    const missing = fallbackTracks.filter(t => !albumArtCache[t.id] && !fetchingRef.current.has(t.id))
+    if (missing.length === 0) return
+    missing.slice(0, 20).forEach((track, i) => {
+      fetchingRef.current.add(track.id)
+      setTimeout(async () => {
+        const art = await fetchAlbumArt(track.title, track.artist)
+        fetchingRef.current.delete(track.id)
+        if (art) setAlbumArtCache(prev => ({ ...prev, [track.id]: art }))
+      }, i * 50)
+    })
+  }, [fallbackTracks])
+
+  useEffect(() => {
     const el = sentinelRef.current
     if (!el) return
     const observer = new IntersectionObserver(
-      entries => { if (entries[0].isIntersecting) loadMore() },
+      entries => { if (entries[0].isIntersecting && activeTab === 'library') loadMore() },
       { rootMargin: '-100px' }
     )
     observer.observe(el)
     return () => observer.disconnect()
-  }, [loadMore])
-
-  useEffect(() => {
-    if (!filterOpen) return
-    const prev = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setFilterOpen(false) }
-    window.addEventListener('keydown', onKey)
-    return () => { document.body.style.overflow = prev; window.removeEventListener('keydown', onKey) }
-  }, [filterOpen])
+  }, [loadMore, activeTab])
 
   useEffect(() => {
     if (ambientStatus === 'idle' && ambientLastReason) setReasonExpanded(false)
   }, [ambientLastReason])
 
+  const showAmbientBar = ambientStatus !== undefined
+  const isFetching = ambientStatus === 'fetching'
+  const isAmbientError = ambientStatus === 'error'
+
   const renderCard = (track: Track) => {
     const accentColor = hashColor(track.id)
-    const primaryGenreColor = accentColor
     const isThisPlaying = playingId === track.id
+    const isMbTrack = !track.manifestCid
     const durationStr = track.durationMs
       ? `${Math.floor(track.durationMs / 60000)}:${String(Math.floor((track.durationMs % 60000) / 1000)).padStart(2, '0')}`
       : null
@@ -183,7 +211,7 @@ export function BrowseView({
       <div
         key={track.id}
         className="tg-card"
-        onClick={() => onTrackClick(track, primaryGenreColor)}
+        onClick={() => onTrackClick(track, accentColor)}
       >
         <div className="tg-art">
           {albumArtCache[track.id]
@@ -195,7 +223,7 @@ export function BrowseView({
             aria-label="Play on Spotify"
             title={connected ? 'Play on Spotify' : 'Connect Spotify to play'}
             onClick={e => handlePlay(e, track)}
-            style={{ background: primaryGenreColor, border: 'none', cursor: 'pointer' }}
+            style={{ background: accentColor, border: 'none', cursor: 'pointer' }}
           >
             {isThisPlaying
               ? <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><rect x="5" y="4" width="4" height="16" rx="1" /><rect x="15" y="4" width="4" height="16" rx="1" /></svg>
@@ -203,7 +231,6 @@ export function BrowseView({
             }
           </button>
         </div>
-
         <div className="tg-body">
           <div className="tg-title">{track.title}</div>
           <div className="tg-artist">
@@ -211,52 +238,102 @@ export function BrowseView({
             {track.year !== null && <span className="tg-year"> · {track.year}</span>}
             {durationStr && <span className="tg-year"> · {durationStr}</span>}
           </div>
+          {isMbTrack && fangorn && (
+            <button
+              onClick={e => { e.stopPropagation(); setPublishingTrack({ track, color: accentColor }) }}
+              style={{
+                marginTop: 6, display: 'inline-flex', alignItems: 'center', gap: 4,
+                background: 'none', border: `1px solid ${accentColor}44`,
+                borderRadius: 4, color: accentColor, opacity: 0.7,
+                fontSize: 9, letterSpacing: '0.07em', textTransform: 'uppercase',
+                padding: '2px 7px', cursor: 'pointer', transition: 'all 0.15s ease',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.borderColor = accentColor + 'aa' }}
+              onMouseLeave={e => { e.currentTarget.style.opacity = '0.7'; e.currentTarget.style.borderColor = accentColor + '44' }}
+            >
+              <svg viewBox="0 0 12 12" width="9" height="9" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                <path d="M6 8V2M3 5l3-3 3 3M2 10h8" />
+              </svg>
+              publish
+            </button>
+          )}
         </div>
       </div>
     )
   }
 
-  const renderSheetSection = (
-    label: string,
-    values: string[],
-    current: string,
-    setCurrent: (v: string) => void,
-    colorize?: (v: string) => string,
-  ) => (
-    <section className="bv-sheet-section">
-      <div className="bv-sheet-section-head">
-        <span className="bv-sheet-section-label">{label}</span>
-        <span className="bv-sheet-section-count">{values.length}</span>
+  const renderSkeleton = (n = 12) =>
+    Array.from({ length: n }).map((_, i) => (
+      <div key={i} className="tg-card tg-card--skeleton">
+        <div className="tg-skel" />
+        <div className="tg-body">
+          <div className="tg-skel tg-skel--title" />
+          <div className="tg-skel tg-skel--sub" />
+        </div>
       </div>
-      <div className="bv-sheet-pills">
-        <button
-          className={`bf-pill ${current === 'all' ? 'bf-pill--active' : ''}`}
-          onClick={() => setCurrent('all')}
-        >All</button>
-        {values.map(v => {
-          const c = colorize?.(v)
-          const active = current === v
-          return (
-            <button
-              key={v}
-              className={`bf-pill ${active ? 'bf-pill--active' : ''}`}
-              onClick={() => setCurrent(v)}
-              style={active && c ? { background: c + '22', borderColor: c + '88', color: c } : undefined}
-            >{v}</button>
-          )
-        })}
-      </div>
-    </section>
-  )
+    ))
 
-  const showAmbientBar = ambientStatus !== undefined
-  const isFetching = ambientStatus === 'fetching'
-  const isError = ambientStatus === 'error'
+  // ── Connecting / error splash ───────────────────────────────────────────────
+  // Shown until chromaReady flips true. If the backend is just slow to start,
+  // the spinner shows and the view transitions automatically once it's up.
+  // If it times out, the error state offers a retry button.
+
+  if (!chromaReady) {
+    const timedOut = !!error  // health check exhausted max attempts
+    return (
+      <div className="browse-view" style={{
+        display: 'flex', flexDirection: 'column', alignItems: 'center',
+        justifyContent: 'center', minHeight: 360, gap: 16,
+      }}>
+        {!timedOut ? (
+          <>
+            <div style={{
+              width: 28, height: 28, borderRadius: '50%',
+              border: '2px solid rgba(167,139,250,0.12)',
+              borderTop: '2px solid rgba(167,139,250,0.65)',
+              animation: 'chromaSpin 0.9s linear infinite',
+            }} />
+            <div style={{
+              fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase',
+              color: 'rgba(167,139,250,0.45)',
+            }}>
+              connecting to catalog
+            </div>
+          </>
+        ) : (
+          <>
+            <div style={{ fontSize: 13, color: 'rgba(248,113,113,0.8)', textAlign: 'center', maxWidth: 280, lineHeight: 1.5 }}>
+              {error}
+            </div>
+            {retryConnect && (
+              <button
+                onClick={retryConnect}
+                style={{
+                  marginTop: 4, padding: '7px 20px', borderRadius: 5, cursor: 'pointer',
+                  background: 'rgba(167,139,250,0.1)', border: '1px solid rgba(167,139,250,0.25)',
+                  color: 'rgba(167,139,250,0.8)', fontSize: 11, letterSpacing: '0.08em',
+                  textTransform: 'uppercase', transition: 'all 0.15s ease', fontFamily: 'inherit',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(167,139,250,0.18)'; e.currentTarget.style.borderColor = 'rgba(167,139,250,0.45)' }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'rgba(167,139,250,0.1)'; e.currentTarget.style.borderColor = 'rgba(167,139,250,0.25)' }}
+              >
+                retry
+              </button>
+            )}
+          </>
+        )}
+        <style>{`@keyframes chromaSpin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    )
+  }
+
+  // ── Main view ──────────────────────────────────────────────────────────────
 
   return (
     <div className="browse-view">
+
       <div className="browse-toolbar">
-        <div className="search-box">
+        <div className="search-box" style={{ flex: 1 }}>
           <span className="search-icon">⌕</span>
           <input
             className="search-input"
@@ -268,266 +345,207 @@ export function BrowseView({
           />
           {search && <button className="search-clear" onClick={() => setSearch('')}>✕</button>}
         </div>
-        <button
-          className={`bv-filter-btn${hasActiveFilter ? ' bv-filter-btn--active' : ''}`}
-          onClick={() => setFilterOpen(true)}
-          aria-label="Open filters"
-        >
-          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-            <path d="M3 6h18M6 12h12M10 18h4" />
-          </svg>
-          <span>Filter</span>
-          {hasActiveFilter && <span className="bv-filter-badge">{activeCount}</span>}
-        </button>
       </div>
 
-      {/* ── Spotify nudge ─────────────────────────────────────────────────────────
-          Non-blocking. Shown only when Spotify isn't configured and user hasn't
-          dismissed. Sits above the track grid so it never prevents content from
-          rendering. The ✕ dismisses permanently (localStorage flag). */}
+      {seeding && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          padding: '6px 12px', marginBottom: 8, borderRadius: 6,
+          background: 'rgba(167,139,250,0.06)', border: '1px solid rgba(167,139,250,0.15)',
+          fontSize: 11, letterSpacing: '0.05em', color: 'rgba(167,139,250,0.7)',
+        }}>
+          <span style={{
+            width: 6, height: 6, borderRadius: '50%', flexShrink: 0, background: '#a78bfa',
+            boxShadow: '0 0 6px #a78bfa88', animation: 'ambientPulse 1.2s ease-in-out infinite',
+          }} />
+          personalizing your view…
+        </div>
+      )}
+
+      {showTabs && (
+        <div style={{ display: 'flex', gap: 4, marginBottom: 14, borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+          {([
+            { id: 'library' as SearchTab, label: 'Library' },
+            { id: 'mb' as SearchTab, label: 'MusicBrainz', icon: <MbIcon size={10} /> },
+          ]).map(({ id, label, icon }) => {
+            const active = activeTab === id
+            return (
+              <button
+                key={id}
+                onClick={() => handleTabSwitch(id)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px',
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  fontSize: 11, letterSpacing: '0.05em', textTransform: 'uppercase',
+                  color: active ? '#a78bfa' : 'var(--fg3, #666)',
+                  borderBottom: active ? '2px solid #a78bfa' : '2px solid transparent',
+                  marginBottom: -1, transition: 'all 0.15s ease', fontFamily: 'inherit',
+                }}
+              >
+                {icon}{label}
+                {id === 'mb' && fallbackLoading && (
+                  <span className="upload-spinner" style={{ width: 8, height: 8, borderWidth: 1.5, marginLeft: 2 }} />
+                )}
+              </button>
+            )
+          })}
+        </div>
+      )}
+
       {showSpotifyNudge && (
         <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 10,
-          padding: '8px 12px',
-          marginBottom: 10,
-          borderRadius: 6,
-          background: 'rgba(30,215,96,0.06)',
-          border: '1px solid rgba(30,215,96,0.18)',
-          fontSize: 11,
-          letterSpacing: '0.03em',
-          color: 'var(--fg3, #a3a3a3)',
+          display: 'flex', alignItems: 'center', gap: 10,
+          padding: '8px 12px', marginBottom: 10, borderRadius: 6,
+          background: 'rgba(30,215,96,0.06)', border: '1px solid rgba(30,215,96,0.18)',
+          fontSize: 11, letterSpacing: '0.03em', color: 'var(--fg3, #a3a3a3)',
         }}>
-          {/* Spotify logomark — svg inline to avoid dep */}
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, opacity: 0.7 }}>
-            <circle cx="12" cy="12" r="12" fill="#1DB954" />
-            <path d="M17.25 16.5a.75.75 0 01-.41-.12C14.67 15 11.5 14.6 7.81 15.43a.75.75 0 01-.32-1.46c4.07-.9 7.57-.45 10.18 1.14a.75.75 0 01-.42 1.39zm1.26-2.89a.94.94 0 01-.52-.15c-2.66-1.63-6.71-2.1-9.85-1.15a.94.94 0 11-.54-1.8c3.57-1.07 8.01-.56 11.05 1.32a.94.94 0 01-.53 1.73l-.61.05zm.12-3a.94.94 0 01-.47-.12C15.31 8.81 10.22 8.6 7.18 9.52a.94.94 0 01-.56-1.79c3.47-1.08 9.23-.87 12.87 1.28a.94.94 0 01-.47 1.76l-.37-.27z" fill="white"/>
-          </svg>
-          <span style={{ flex: 1 }}>
-            Connect Spotify to enable playback
-          </span>
+          <SpotifyIcon width={14} height={14} style={{ flexShrink: 0, opacity: 0.7 }} />
+          <span style={{ flex: 1 }}>Connect Spotify to enable playback</span>
           <button
             onClick={onSpotifyNudgeConnect}
             style={{
-              background: 'rgba(30,215,96,0.12)',
-              border: '1px solid rgba(30,215,96,0.3)',
-              borderRadius: 4,
-              color: '#1DB954',
-              fontFamily: 'var(--font-mono, monospace)',
-              fontSize: 10,
-              letterSpacing: '0.08em',
-              padding: '3px 10px',
-              cursor: 'pointer',
-              transition: 'all 0.15s ease',
-              flexShrink: 0,
+              background: 'rgba(30,215,96,0.12)', border: '1px solid rgba(30,215,96,0.3)',
+              borderRadius: 4, color: '#1DB954', fontFamily: 'var(--font-mono, monospace)',
+              fontSize: 10, letterSpacing: '0.08em', padding: '3px 10px',
+              cursor: 'pointer', flexShrink: 0,
             }}
             onMouseEnter={e => (e.currentTarget.style.background = 'rgba(30,215,96,0.22)')}
             onMouseLeave={e => (e.currentTarget.style.background = 'rgba(30,215,96,0.12)')}
-          >
-            SET UP
-          </button>
+          >SET UP</button>
           <button
             onClick={onSpotifyNudgeDismiss}
             aria-label="Dismiss"
-            style={{
-              background: 'none', border: 'none', cursor: 'pointer',
-              color: 'var(--fg3, #a3a3a3)', fontSize: 12, padding: '0 2px',
-              lineHeight: 1, opacity: 0.5, flexShrink: 0,
-            }}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--fg3, #a3a3a3)', fontSize: 12, padding: '0 2px', lineHeight: 1, opacity: 0.5, flexShrink: 0 }}
             onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
             onMouseLeave={e => (e.currentTarget.style.opacity = '0.5')}
           >✕</button>
         </div>
       )}
 
-      {/* Ambient agent status bar */}
       {showAmbientBar && (
-        <div
-          style={{
-            display: 'flex', alignItems: 'center', gap: 8,
-            padding: '6px 12px', margin: '0 0 8px',
-            borderRadius: reasonExpanded ? '6px 6px 0 0' : 6,
-            fontSize: 11, letterSpacing: '0.04em',
-            background: isError ? 'rgba(248,113,113,0.07)' : 'rgba(167,139,250,0.07)',
-            border: `1px solid ${isError ? 'rgba(248,113,113,0.18)' : 'rgba(167,139,250,0.18)'}`,
-            color: isError ? '#f87171' : '#a78bfa',
-            transition: 'all 0.25s ease',
-          }}
-        >
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', margin: '0 0 8px',
+          borderRadius: reasonExpanded ? '6px 6px 0 0' : 6, fontSize: 11, letterSpacing: '0.04em',
+          background: isAmbientError ? 'rgba(248,113,113,0.07)' : 'rgba(167,139,250,0.07)',
+          border: `1px solid ${isAmbientError ? 'rgba(248,113,113,0.18)' : 'rgba(167,139,250,0.18)'}`,
+          color: isAmbientError ? '#f87171' : '#a78bfa', transition: 'all 0.25s ease',
+        }}>
           <span style={{
             width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
-            background: isError ? '#f87171' : isFetching ? '#a78bfa' : '#34d399',
+            background: isAmbientError ? '#f87171' : isFetching ? '#a78bfa' : '#34d399',
             boxShadow: isFetching ? '0 0 6px #a78bfa88' : undefined,
             animation: isFetching ? 'ambientPulse 1.2s ease-in-out infinite' : undefined,
           }} />
           <span style={{ flex: 1, opacity: 0.85 }}>
-            {isError
-              ? 'agent · fetch failed'
-              : isFetching
-                ? 'agent · listening…'
-                : `agent · ${ambientQueueSize ?? 0} queued`
-            }
+            {isAmbientError ? 'agent · fetch failed' : isFetching ? 'agent · listening…' : `agent · ${ambientQueueSize ?? 0} queued`}
           </span>
-          {ambientLastReason && !isError && (
+          {ambientLastReason && !isAmbientError && (
             <button
               onClick={() => setReasonExpanded(v => !v)}
-              style={{
-                background: 'none', border: 'none', cursor: 'pointer',
-                color: 'inherit', fontSize: 10, opacity: 0.65, padding: '0 2px',
-                letterSpacing: '0.06em', textTransform: 'uppercase',
-              }}
-              title="Why did the agent queue these?"
-            >
-              {reasonExpanded ? 'hide' : 'why?'}
-            </button>
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', fontSize: 10, opacity: 0.65, padding: '0 2px', letterSpacing: '0.06em', textTransform: 'uppercase' }}
+            >{reasonExpanded ? 'hide' : 'why?'}</button>
           )}
         </div>
       )}
-
       {showAmbientBar && reasonExpanded && ambientLastReason && (
         <div style={{
-          margin: '-8px 0 8px',
-          padding: '8px 12px',
-          borderRadius: '0 0 6px 6px',
-          background: 'rgba(167,139,250,0.05)',
-          border: '1px solid rgba(167,139,250,0.12)',
-          borderTop: 'none',
-          fontSize: 11, lineHeight: 1.6,
-          color: 'var(--fg3, #c4b5fd)',
-          fontStyle: 'italic',
-        }}>
-          {ambientLastReason}
-        </div>
+          margin: '-8px 0 8px', padding: '8px 12px', borderRadius: '0 0 6px 6px',
+          background: 'rgba(167,139,250,0.05)', border: '1px solid rgba(167,139,250,0.12)', borderTop: 'none',
+          fontSize: 11, lineHeight: 1.6, color: 'var(--fg3, #c4b5fd)', fontStyle: 'italic',
+        }}>{ambientLastReason}</div>
       )}
 
-      {hasActiveFilter && (
-        <div className="bv-active-chips">
-          {genreFilter !== 'all' && (
-            <button
-              className="bv-active-chip"
-              style={{ color: genreColor[genreFilter], borderColor: `${genreColor[genreFilter] ?? '#888'}55`, background: `${genreColor[genreFilter] ?? '#888'}12` }}
-              onClick={() => onGenreFilter('all')}
-              aria-label={`Remove genre: ${genreFilter}`}
-            >
-              <span className="bv-active-chip-cat">genre</span>
-              <span className="bv-active-chip-val">{genreFilter}</span>
-              <span className="bv-active-chip-x" aria-hidden="true">✕</span>
-            </button>
-          )}
-          {moodFilter !== 'all' && (
-            <button
-              className="bv-active-chip"
-              onClick={() => onMoodFilter('all')}
-              aria-label={`Remove mood: ${moodFilter}`}
-            >
-              <span className="bv-active-chip-cat">mood</span>
-              <span className="bv-active-chip-val">{moodFilter}</span>
-              <span className="bv-active-chip-x" aria-hidden="true">✕</span>
-            </button>
-          )}
-          {contextFilter !== 'all' && (
-            <button
-              className="bv-active-chip"
-              onClick={() => onContextFilter('all')}
-              aria-label={`Remove context: ${contextFilter}`}
-            >
-              <span className="bv-active-chip-cat">context</span>
-              <span className="bv-active-chip-val">{contextFilter}</span>
-              <span className="bv-active-chip-x" aria-hidden="true">✕</span>
-            </button>
-          )}
-          <button className="bv-clear-link" onClick={clearAll}>Clear all</button>
-        </div>
-      )}
-
-      {error && <div className="upload-error">{error}</div>}
-
-      {!loading && filtered.length === 0 && (
-        <div className="empty-state">
-          <div className="empty-icon">♪</div>
-          <p>{search || hasActiveFilter ? 'No tracks match your filters.' : 'No tracks published yet.'}</p>
-        </div>
-      )}
-
-      {recommendedTracks?.tracks && recommendedTracks.tracks.length > 0 && !recommendLoading && (
-        <div className="rec-section">
-          <div className="rec-banner">
-            <div className="rec-banner-left">
-              <span className="rec-banner-icon">✦</span>
-              <span>Made for you</span>
-            </div>
-            <button className="rec-banner-clear" onClick={onClearRecommendations}>✕ Clear</button>
-          </div>
-          <div className="track-grid">
-            {recommendedTracks.tracks.filter(t => t.id !== recommendedTracks.sourceId).map(renderCard)}
-          </div>
-        </div>
-      )}
-
-      {(loading || filtered.length > 0) && (
-        <div className="track-grid">
-          {loading
-            ? Array.from({ length: 12 }).map((_, i) => (
-              <div key={i} className="tg-card tg-card--skeleton">
-                <div className="tg-skel" />
-                <div className="tg-body">
-                  <div className="tg-skel tg-skel--title" />
-                  <div className="tg-skel tg-skel--sub" />
-                  <div className="tg-meta">
-                    <div className="tg-skel tg-skel--tag" />
-                    <div className="tg-skel tg-skel--tag" />
-                  </div>
-                </div>
+      {/* Library tab */}
+      {activeTab === 'library' && (
+        <>
+          {recommendedTracks?.tracks && recommendedTracks.tracks.length > 0 && !recommendLoading && (
+            <div className="rec-section">
+              <div className="rec-banner">
+                <div className="rec-banner-left"><span className="rec-banner-icon">✦</span><span>Made for you</span></div>
+                <button className="rec-banner-clear" onClick={onClearRecommendations}>✕ Clear</button>
               </div>
-            ))
-            : filtered.map(renderCard)
-          }
-        </div>
-      )}
-
-      <div style={{ height: 200 }} />
-      <div ref={sentinelRef} style={{ height: 1 }} />
-
-      {loadingMore && (
-        <div className="chain-loading" style={{ padding: '20px 0' }}>
-          <span className="upload-spinner" />Loading more…
-        </div>
-      )}
-
-      {!hasMore && !search && !hasActiveFilter && tracks.length > 0 && (
-        <div className="end-of-list">that's everything ✦</div>
-      )}
-
-      {filterOpen && (
-        <div className="bv-sheet-backdrop" onClick={() => setFilterOpen(false)} role="presentation">
-          <div className="bv-sheet" role="dialog" aria-modal="true" aria-label="Filters" onClick={e => e.stopPropagation()}>
-            <div className="bv-sheet-handle" aria-hidden="true" />
-            <header className="bv-sheet-header">
-              <h2 className="bv-sheet-title">Filters</h2>
-              <button className="bv-sheet-close" onClick={() => setFilterOpen(false)} aria-label="Close filters">✕</button>
-            </header>
-            <div className="bv-sheet-body">
-              {renderSheetSection('Genre', allGenres ?? [], genreFilter, onGenreFilter, g => genreColor[g])}
-              {renderSheetSection('Mood', allMoods ?? [], moodFilter, onMoodFilter)}
-              {renderSheetSection('Context', allContexts ?? [], contextFilter, onContextFilter)}
+              <div className="track-grid">
+                {recommendedTracks.tracks.filter(t => t.id !== recommendedTracks.sourceId).map(renderCard)}
+              </div>
             </div>
-            <footer className="bv-sheet-footer">
-              <button className="bv-sheet-btn bv-sheet-btn--ghost" onClick={clearAll} disabled={!hasActiveFilter}>Clear all</button>
-              <button className="bv-sheet-btn bv-sheet-btn--primary" onClick={() => setFilterOpen(false)}>
-                Show {filtered.length} {filtered.length === 1 ? 'track' : 'tracks'}
-              </button>
-            </footer>
-          </div>
-        </div>
+          )}
+
+          {!loading && filtered.length === 0 && (
+            <div className="empty-state">
+              <div className="empty-icon">♪</div>
+              <p>{search ? 'No tracks in your library match.' : 'No tracks published yet.'}</p>
+            </div>
+          )}
+
+          {(loading || filtered.length > 0) && (
+            <div className="track-grid">
+              {loading ? renderSkeleton(12) : filtered.map(renderCard)}
+            </div>
+          )}
+
+          <div style={{ height: 200 }} />
+          <div ref={sentinelRef} style={{ height: 1 }} />
+
+          {loadingMore && (
+            <div className="chain-loading" style={{ padding: '20px 0' }}>
+              <span className="upload-spinner" />Loading more…
+            </div>
+          )}
+          {!hasMore && !search && tracks.length > 0 && (
+            <div className="end-of-list">that's everything ✦</div>
+          )}
+        </>
+      )}
+
+      {/* MusicBrainz tab */}
+      {activeTab === 'mb' && (
+        <>
+          {fallbackLoading && <div className="track-grid">{renderSkeleton(6)}</div>}
+          {!fallbackLoading && fallbackTracks && fallbackTracks.length > 0 && (
+            <div className="track-grid">{fallbackTracks.map(renderCard)}</div>
+          )}
+          {!fallbackLoading && (!fallbackTracks || fallbackTracks.length === 0) && (
+            <div className="empty-state">
+              <div className="empty-icon">♪</div>
+              <p>No results on MusicBrainz.</p>
+            </div>
+          )}
+          <div style={{ height: 200 }} />
+        </>
       )}
 
       <style>{`
-        @keyframes ambientPulse {
-          0%, 100% { opacity: 0.4; transform: scale(1); }
-          50% { opacity: 1; transform: scale(1.3); }
-        }
+        @keyframes ambientPulse { 0%,100%{opacity:.4;transform:scale(1)} 50%{opacity:1;transform:scale(1.3)} }
       `}</style>
+
+      {publishingTrack && (
+        <PublishModal
+          track={publishingTrack.track}
+          accentColor={publishingTrack.color}
+          fangorn={fangorn ?? null}
+          publisherAddress={publisherAddress ?? null}
+          onClose={() => setPublishingTrack(null)}
+          onPublished={() => setPublishingTrack(null)}
+        />
+      )}
     </div>
+  )
+}
+
+function MbIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 20 20" fill="none" style={{ flexShrink: 0 }}>
+      <rect width="20" height="20" rx="3" fill="rgba(167,139,250,0.2)" />
+      <text x="2" y="14" fontSize="11" fontWeight="700" fill="rgba(167,139,250,0.9)" fontFamily="monospace">mb</text>
+    </svg>
+  )
+}
+
+function SpotifyIcon({ width = 14, height = 14, style }: { width?: number; height?: number; style?: React.CSSProperties }) {
+  return (
+    <svg width={width} height={height} viewBox="0 0 24 24" fill="none" style={style}>
+      <circle cx="12" cy="12" r="12" fill="#1DB954" />
+      <path d="M17.25 16.5a.75.75 0 01-.41-.12C14.67 15 11.5 14.6 7.81 15.43a.75.75 0 01-.32-1.46c4.07-.9 7.57-.45 10.18 1.14a.75.75 0 01-.42 1.39zm1.26-2.89a.94.94 0 01-.52-.15c-2.66-1.63-6.71-2.1-9.85-1.15a.94.94 0 11-.54-1.8c3.57-1.07 8.01-.56 11.05 1.32a.94.94 0 01-.53 1.73l-.61.05zm.12-3a.94.94 0 01-.47-.12C15.31 8.81 10.22 8.6 7.18 9.52a.94.94 0 01-.56-1.79c3.47-1.08 9.23-.87 12.87 1.28a.94.94 0 01-.47 1.76l-.37-.27z" fill="white" />
+    </svg>
   )
 }

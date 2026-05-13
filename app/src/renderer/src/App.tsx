@@ -25,6 +25,7 @@ import { useChromaSync } from './hooks/useChromaSync'
 
 const SNAPSHOT_HISTORY_DEPTH = 5
 const SCROLL_THRESHOLD = 10
+const MB_USER_AGENT = 'SOND3R/1.0.0 (https://fangorn.network)'
 
 window.addEventListener('scroll', () => {
   document.querySelector('.header')!
@@ -54,7 +55,92 @@ export default function App() {
     tracks, loading, loadingMore, error, hasMore, loadMore,
     applyKernelQuery, search, setSearch,
     allGenres, allMoods, allContexts,
+    chromaReady, seeding, retryConnect,
   } = useChroma({ genreFilter, moodFilter, contextFilter })
+
+  // ─── MusicBrainz augmented search ─────────────────────────────────────────
+
+  const [fallbackTracks, setFallbackTracks] = useState<Track[]>([])
+  const [fallbackLoading, setFallbackLoading] = useState(false)
+
+  const handleSetSearch = useCallback((q: string) => {
+    setSearch(q)
+    if (!q.trim()) {
+      setFallbackTracks([])
+      setFallbackLoading(false)
+    }
+  }, [setSearch])
+
+  const handleFallbackClear = useCallback(() => {
+    setFallbackTracks([])
+    setFallbackLoading(false)
+  }, [])
+
+  const handleMusicBrainzSearch = useCallback(async (query: string) => {
+    if (!query.trim()) return
+    setFallbackLoading(true)
+    setFallbackTracks([])
+    try {
+      const headers = { 'User-Agent': MB_USER_AGENT }
+
+      const [artistResp, generalResp] = await Promise.all([
+        fetch(
+          `https://musicbrainz.org/ws/2/recording?query=artist:%22${encodeURIComponent(query)}%22&limit=25&fmt=json`,
+          { headers }
+        ),
+        fetch(
+          `https://musicbrainz.org/ws/2/recording?query=${encodeURIComponent(query)}&limit=10&fmt=json`,
+          { headers }
+        ),
+      ])
+
+      const [artistData, generalData] = await Promise.all([
+        artistResp.ok ? artistResp.json() : { recordings: [] },
+        generalResp.ok ? generalResp.json() : { recordings: [] },
+      ])
+
+      const toTrack = (rec: any): Track => {
+        const artist = (rec['artist-credit'] ?? [])
+          .map((c: any) => c.name ?? c.artist?.name ?? '')
+          .filter(Boolean)
+          .join(', ') || 'Unknown Artist'
+        const releaseDate = rec.releases?.[0]?.date ?? ''
+        const yearInt = releaseDate ? parseInt(releaseDate.split('-')[0], 10) : NaN
+        return {
+          id: rec.id,
+          trackId: rec.id,
+          owner: '',
+          manifestCid: '',
+          title: rec.title,
+          artist,
+          spotifyTrackId: null,
+          year: isNaN(yearInt) ? null : yearInt,
+          durationMs: rec.length ?? null,
+        }
+      }
+
+      const seen = new Set<string>()
+      const merged: Track[] = []
+      for (const rec of [
+        ...(artistData.recordings ?? []),
+        ...(generalData.recordings ?? []),
+      ]) {
+        if (!seen.has(rec.id)) {
+          seen.add(rec.id)
+          merged.push(toTrack(rec))
+        }
+      }
+
+      setFallbackTracks(merged)
+    } catch (e) {
+      console.warn('[mb-fallback] search failed:', e)
+      setFallbackTracks([])
+    } finally {
+      setFallbackLoading(false)
+    }
+  }, [])
+
+  // ─── end MusicBrainz augment ───────────────────────────────────────────────
 
   const [recommendedTracks, setRecommendedTracks] = useState<RecommendedTracks | null>(null)
   const [recommendLoading, setRecommendLoading] = useState(false)
@@ -91,7 +177,6 @@ export default function App() {
     enabled: autoplayMode === 'agent',
   })
 
-  // sync the chroma db periodically
   const [visible, setVisible] = useState(true)
   useEffect(() => {
     const handler = () => setVisible(document.visibilityState === 'visible')
@@ -105,7 +190,7 @@ export default function App() {
     if (autoplayMode === 'agent') ambientAgent.prime()
   }, [autoplayMode]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ─── Playback ────────────────────────────────────────────────────────────────
+  // ─── Playback ─────────────────────────────────────────────────────────────
 
   const handleNext = useCallback(() => {
     const tracks = filteredTracksRef.current
@@ -129,9 +214,7 @@ export default function App() {
 
   const handleTrackEnd = useCallback(() => {
     if (autoplayMode === 'none') return
-
     if (autoplayMode === 'sequential') { handleNext(); return }
-
     if (autoplayMode === 'agent') {
       const next = ambientAgent.consume()
       if (next) {
@@ -157,7 +240,7 @@ export default function App() {
     })
   }, [spotify.connected]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ─── Signals ─────────────────────────────────────────────────────────────────
+  // ─── Signals ──────────────────────────────────────────────────────────────
 
   const handleSignal = useCallback(async (signal: TasteSignal) => {
     const { type, track } = signal
@@ -174,21 +257,18 @@ export default function App() {
     }
   }, [kernel, pushPlay, pushSkip])
 
-  // ─── Connectors callbacks ─────────────────────────────────────────────────────
-  // ConnectorsView manages its own localStorage, but we still call saveConfig
-  // so useSpotifyConfig's hasConfig reactive flag updates in-session.
+  // ─── Connectors callbacks ──────────────────────────────────────────────────
 
   const handleSpotifyConfigSaved = useCallback((cfg: { clientId: string; clientSecret: string }) => {
-    saveConfig(cfg)           // keeps useSpotifyConfig in sync
+    saveConfig(cfg)
     setBooted(true)
-    // setShowConnectors(false)
   }, [saveConfig])
 
   const handleConnectorsBack = useCallback(() => {
     setShowConnectors(false)
   }, [])
 
-  // ─── Misc ─────────────────────────────────────────────────────────────────────
+  // ─── Misc ──────────────────────────────────────────────────────────────────
 
   const handleBooted = useCallback(() => { setBooted(true) }, [])
 
@@ -230,7 +310,7 @@ export default function App() {
     if (type === 'context') setContextFilter(value)
   }, [])
 
-  // ─── Guards ───────────────────────────────────────────────────────────────────
+  // ─── Guards ────────────────────────────────────────────────────────────────
 
   if (!booted) {
     return (
@@ -256,7 +336,6 @@ export default function App() {
           <header className="header">
             <div className="header-brand">
               <span className="brand-name">SOND3R</span>
-
               <nav style={{ display: 'flex', gap: '16px', marginLeft: '24px' }}>
                 {(['Discover', 'Agent'] as ViewName[]).map((v) => (
                   <button
@@ -270,7 +349,6 @@ export default function App() {
                   className={`app-nav-tab ${showConnectors ? 'active' : ''}`}
                 >Connectors</button>
               </nav>
-
               <ConnectWallet />
             </div>
           </header>
@@ -288,7 +366,10 @@ export default function App() {
                 hasMore={hasMore}
                 loadMore={loadMore}
                 search={search}
-                setSearch={setSearch}
+                setSearch={handleSetSearch}
+                chromaReady={chromaReady}
+                seeding={seeding}
+                retryConnect={retryConnect}
                 recommendedTracks={recommendedTracks}
                 recommendLoading={recommendLoading}
                 onClearRecommendations={clearRecommendations}
@@ -309,10 +390,13 @@ export default function App() {
                 ambientStatus={ambientAgent.status}
                 ambientQueueSize={ambientAgent.queue.length}
                 ambientLastReason={ambientAgent.lastReason ?? undefined}
-                // Spotify nudge — shown only when not configured and not dismissed
                 showSpotifyNudge={!hasConfig && !nudgeDismissed}
                 onSpotifyNudgeConnect={() => setShowConnectors(true)}
                 onSpotifyNudgeDismiss={dismissNudge}
+                fallbackTracks={fallbackTracks}
+                fallbackLoading={fallbackLoading}
+                onFallbackSearch={handleMusicBrainzSearch}
+                onFallbackClear={handleFallbackClear}
               />
             )}
             {!showConnectors && view === 'Agent' && <AgentView />}

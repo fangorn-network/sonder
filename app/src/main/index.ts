@@ -29,33 +29,37 @@ function startPython() {
   // inside server.py resolve the same way they do when you run it by hand.
   const [bin, args, cwd]: [string, string[], string] = app.isPackaged
     ? [
-        path.join(root, 'server'),
-        [
-          '-s',
-          'tony.test.invariants.track.2=0xdd2ff7c1afae71333aac86f18316093fb017e4a47e7c6ef2b1c37b8ca62d53a6',
-          '--primary',
-          'tony.test.invariants.track.2',
-          '--reset',
-        ],
-        root,
-      ]
+      path.join(root, 'server'),
+      [
+        '-s',
+        'tony.test.invariants.track.2=0xdd2ff7c1afae71333aac86f18316093fb017e4a47e7c6ef2b1c37b8ca62d53a6',
+        '-s',
+        'tony.test.tags.track.0=0x43a911728ed43457b145f5c4c0d89145b7c8d352b2c6ba0d86fff1f005166935',
+        '--primary',
+        'tony.test.invariants.track.2',
+        '--reset',
+      ],
+      root,
+    ]
     : [
-        path.join(root, 'vectordb/venv/bin/python'),
-        [
-          path.join(root, 'vectordb/server.py'),
-          '-s',
-          'tony.test.invariants.track.2=0xdd2ff7c1afae71333aac86f18316093fb017e4a47e7c6ef2b1c37b8ca62d53a6',
-          '--primary',
-          'tony.test.invariants.track.2',
-          '--reset',
-        ],
-        path.join(root, 'vectordb'),   // ← the fix: match the manual-run cwd
-      ]
+      path.join(root, 'vectordb/venv/bin/python'),
+      [
+        path.join(root, 'vectordb/server.py'),
+        '-s',
+        'tony.test.invariants.track.2=0xdd2ff7c1afae71333aac86f18316093fb017e4a47e7c6ef2b1c37b8ca62d53a6',
+        '-s',
+        'tony.test.tags.track.0=0x43a911728ed43457b145f5c4c0d89145b7c8d352b2c6ba0d86fff1f005166935',
+        '--primary',
+        'tony.test.invariants.track.2',
+        '--reset',
+      ],
+      path.join(root, 'vectordb'),   // ← the fix: match the manual-run cwd
+    ]
 
   pyProcess = spawn(bin, args, {
     cwd,
     env: {
-      ...process.env,
+      ...process.env, 
       CHROMA_PATH: path.join(app.getPath('userData'), 'chroma_db'),
     },
   })

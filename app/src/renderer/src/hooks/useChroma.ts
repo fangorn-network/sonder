@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import type { Track, JoinedRecord, FieldValue } from '../types'
+import type { Track, JoinedRecord } from '../types'
 import { asTrack } from '../types'
 
 const CHROMA_URL = (import.meta as any).env.VITE_CHROMA_URL ?? 'http://localhost:8080'
@@ -29,6 +29,17 @@ function dedup(tracks: Track[]): Track[] {
     if (!seen.has(key)) seen.set(key, t)
   }
   return Array.from(seen.values())
+}
+
+// ── tag filter helpers ────────────────────────────────────────────────────────
+
+type TagFilter = string | string[] | undefined
+
+/** Normalise a TagFilter to a string[] ready for query building */
+function resolveFilter(f: TagFilter): string[] {
+  if (!f) return []
+  if (Array.isArray(f)) return f.filter(v => v && v !== 'all')
+  return f === 'all' ? [] : [f]
 }
 
 // ── api ───────────────────────────────────────────────────────────────────────
@@ -63,9 +74,11 @@ async function chromaSearchVector(embedding: number[], nResults = 100): Promise<
 // ── hook ──────────────────────────────────────────────────────────────────────
 
 export interface UseChromaOptions {
-  genreFilter?:   string
-  moodFilter?:    string
-  contextFilter?: string
+  /** Any of these can be a single value 'rock' or an array ['rock', 'metal'] or 'all'/undefined to skip */
+  genreFilter?:   TagFilter
+  moodFilter?:    TagFilter
+  contextFilter?: TagFilter
+  themeFilter?:   TagFilter
 }
 
 export interface UseChromaResult {
@@ -84,9 +97,10 @@ export interface UseChromaResult {
 }
 
 export function useChroma({
-  genreFilter   = 'all',
-  moodFilter    = 'all',
-  contextFilter = 'all',
+  genreFilter,
+  moodFilter,
+  contextFilter,
+  themeFilter,
 }: UseChromaOptions = {}): UseChromaResult {
   const [tracks,      setTracks]      = useState<Track[]>([])
   const [loading,     setLoading]     = useState(true)
@@ -106,36 +120,40 @@ export function useChroma({
   const genreRef        = useRef(genreFilter)
   const moodRef         = useRef(moodFilter)
   const contextRef      = useRef(contextFilter)
+  const themeRef        = useRef(themeFilter)
   const offsetRef       = useRef(0)
   const activeQueryRef  = useRef('')
   const kernelActiveRef = useRef(false)
   const debounceRef     = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  useEffect(() => { searchRef.current  = search },        [search])
-  useEffect(() => { genreRef.current   = genreFilter },   [genreFilter])
-  useEffect(() => { moodRef.current    = moodFilter },    [moodFilter])
+  useEffect(() => { searchRef.current  = search        }, [search])
+  useEffect(() => { genreRef.current   = genreFilter   }, [genreFilter])
+  useEffect(() => { moodRef.current    = moodFilter    }, [moodFilter])
   useEffect(() => { contextRef.current = contextFilter }, [contextFilter])
+  useEffect(() => { themeRef.current   = themeFilter   }, [themeFilter])
 
   const accumulateTags = useCallback((newTracks: Track[]) => {
-    let gd = false, md = false, cd = false
-    // for (const t of newTracks) {
-    //   t.genres.forEach(g   => { if (!knownGenres.current.has(g))   { knownGenres.current.add(g);   gd = true } })
-    //   t.moods.forEach(m    => { if (!knownMoods.current.has(m))    { knownMoods.current.add(m);    md = true } })
-    //   t.contexts.forEach(c => { if (!knownContexts.current.has(c)) { knownContexts.current.add(c); cd = true } })
-    // }
-    // if (gd) setAllGenres(Array.from(knownGenres.current).sort())
-    // if (md) setAllMoods(Array.from(knownMoods.current).sort())
-    // if (cd) setAllContexts(Array.from(knownContexts.current).sort())
+    // tag accumulation wired up when Track type exposes genre/mood/context arrays
   }, [])
+
+  // ── query builder ─────────────────────────────────────────────────────────
+  // Flattens all active tag filters + freetext search into a single string.
+  // Returns null when nothing is active → falls back to /browse.
 
   const buildQuery = useCallback((text: string): string | null => {
     const parts: string[] = []
+
     if (text.trim()) parts.push(text.trim())
-    if (genreRef.current   !== 'all') parts.push(genreRef.current)
-    if (moodRef.current    !== 'all') parts.push(moodRef.current)
-    if (contextRef.current !== 'all') parts.push(contextRef.current)
-    return parts.length > 0 ? parts.join(' ') : null  // null = use /browse
+
+    resolveFilter(genreRef.current).forEach(v   => parts.push(v))
+    resolveFilter(moodRef.current).forEach(v    => parts.push(v))
+    resolveFilter(contextRef.current).forEach(v => parts.push(v))
+    resolveFilter(themeRef.current).forEach(v   => parts.push(v))
+
+    return parts.length > 0 ? parts.join(' ') : null
   }, [])
+
+  // ── fetch ─────────────────────────────────────────────────────────────────
 
   const fetchPage = useCallback(async (
     query: string | null,
@@ -163,6 +181,7 @@ export function useChroma({
     }
   }, [accumulateTags, buildQuery])
 
+  // Re-fetch whenever search text or any filter changes
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current)
     const isMount = activeQueryRef.current === ''
@@ -174,7 +193,7 @@ export function useChroma({
       fetchPage(buildQuery(search), 0, true)
     }, delay)
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
-  }, [search, genreFilter, moodFilter, contextFilter]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [search, genreFilter, moodFilter, contextFilter, themeFilter]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadMore = useCallback(() => {
     if (loadingMore || !hasMore) return

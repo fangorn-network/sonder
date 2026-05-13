@@ -45,6 +45,10 @@ interface BrowseViewProps {
   ambientStatus?: 'idle' | 'fetching' | 'error'
   ambientQueueSize?: number
   ambientLastReason?: string
+  // Spotify nudge — non-blocking prompt when Spotify isn't configured
+  showSpotifyNudge?: boolean
+  onSpotifyNudgeConnect?: () => void
+  onSpotifyNudgeDismiss?: () => void
 }
 
 async function fetchAlbumArt(title: string, artist: string): Promise<string | null> {
@@ -54,13 +58,12 @@ async function fetchAlbumArt(title: string, artist: string): Promise<string | nu
       url: `https://itunes.apple.com/search?term=${q}&entity=song&limit=3`
     })
     const data = JSON.parse(body)
-
     const url = data.results?.[0]?.artworkUrl100
     if (url) return url.replace('100x100bb', '600x600bb')
   } catch { }
   try {
     const q = encodeURIComponent(`artist:"${artist}" track:"${title}"`)
-    const { body } = await (window as any).electron.ipcRenderer.invoke('deezer:api', {
+    const { body } = await (window as any).electron.ipcRenderer.invoke('fetch:proxy', {
       url: `https://api.deezer.com/search?q=${q}&limit=1`
     })
     const data = JSON.parse(body)
@@ -77,6 +80,7 @@ export function BrowseView({
   genreFilter, moodFilter, contextFilter, onGenreFilter, onMoodFilter, onContextFilter,
   allGenres, allMoods, allContexts,
   ambientStatus, ambientQueueSize, ambientLastReason,
+  showSpotifyNudge, onSpotifyNudgeConnect, onSpotifyNudgeDismiss,
 }: BrowseViewProps) {
   const sentinelRef = useRef<HTMLDivElement>(null)
   const [filterOpen, setFilterOpen] = useState(false)
@@ -93,8 +97,10 @@ export function BrowseView({
     setPlayingId(track.id)
     onPlayingIdChange?.(track.id)
     onSignal?.({ type: 'play', track, weight: 1.0 })
+
     try {
       if (track.spotifyTrackId) {
+        console.log(track.spotifyTrackId)
         await play(`spotify:track:${track.spotifyTrackId}`)
       } else {
         const query = `${track.title} ${track.artist}`.replace(/\(.*?\)/g, '').trim()
@@ -107,9 +113,9 @@ export function BrowseView({
   }
 
   const genreColor: Record<string, string> = {}
-    ; (allGenres ?? []).forEach((g, i) => {
-      genreColor[g] = GENRE_PALETTE[i % GENRE_PALETTE.length]
-    })
+  ;(allGenres ?? []).forEach((g, i) => {
+    genreColor[g] = GENRE_PALETTE[i % GENRE_PALETTE.length]
+  })
 
   const activeCount =
     (genreFilter !== 'all' ? 1 : 0) +
@@ -161,14 +167,12 @@ export function BrowseView({
     return () => { document.body.style.overflow = prev; window.removeEventListener('keydown', onKey) }
   }, [filterOpen])
 
-  // Collapse reason when agent finishes a new fetch
   useEffect(() => {
     if (ambientStatus === 'idle' && ambientLastReason) setReasonExpanded(false)
   }, [ambientLastReason])
 
   const renderCard = (track: Track) => {
     const accentColor = hashColor(track.id)
-    // const primaryGenre = track.genres[0] ?? null
     const primaryGenreColor = accentColor
     const isThisPlaying = playingId === track.id
     const durationStr = track.durationMs
@@ -207,41 +211,6 @@ export function BrowseView({
             {track.year !== null && <span className="tg-year"> · {track.year}</span>}
             {durationStr && <span className="tg-year"> · {durationStr}</span>}
           </div>
-          {/* 
-          {track.genres.length > 0 && (
-            <div className="tg-meta tg-meta--genres">
-              {track.genres.slice(0, 3).map(g => (
-                <span key={g} className="tg-genre"
-                  style={{ color: genreColor[g] ?? accentColor, background: `${genreColor[g] ?? accentColor}15`, borderColor: `${genreColor[g] ?? accentColor}30` }}
-                  onClick={e => { e.stopPropagation(); onGenreFilter(g) }}
-                >{g}</span>
-              ))}
-            </div>
-          )}
-
-          {track.moods.length > 0 && (
-            <div className="tg-meta tg-meta--moods">
-              {track.moods.slice(0, 3).map(m => (
-                <span key={m} className="tg-genre" onClick={e => { e.stopPropagation(); onMoodFilter(m) }}>{m}</span>
-              ))}
-            </div>
-          )}
-
-          {track.contexts.length > 0 && (
-            <div className="tg-meta tg-meta--moods">
-              {track.contexts.slice(0, 3).map(c => (
-                <span key={c} className="tg-genre" onClick={e => { e.stopPropagation(); onContextFilter(c) }}>{c}</span>
-              ))}
-            </div>
-          )}
-
-          {track.themes.length > 0 && (
-            <div className="tg-meta tg-meta--themes">
-              {track.themes.slice(0, 2).map(t => (
-                <span key={t} className="tg-genre tg-genre--theme">{t}</span>
-              ))}
-            </div>
-          )} */}
         </div>
       </div>
     )
@@ -312,7 +281,67 @@ export function BrowseView({
         </button>
       </div>
 
-      {/* Ambient agent status bar — Window-mode saliency surface */}
+      {/* ── Spotify nudge ─────────────────────────────────────────────────────────
+          Non-blocking. Shown only when Spotify isn't configured and user hasn't
+          dismissed. Sits above the track grid so it never prevents content from
+          rendering. The ✕ dismisses permanently (localStorage flag). */}
+      {showSpotifyNudge && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          padding: '8px 12px',
+          marginBottom: 10,
+          borderRadius: 6,
+          background: 'rgba(30,215,96,0.06)',
+          border: '1px solid rgba(30,215,96,0.18)',
+          fontSize: 11,
+          letterSpacing: '0.03em',
+          color: 'var(--fg3, #a3a3a3)',
+        }}>
+          {/* Spotify logomark — svg inline to avoid dep */}
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, opacity: 0.7 }}>
+            <circle cx="12" cy="12" r="12" fill="#1DB954" />
+            <path d="M17.25 16.5a.75.75 0 01-.41-.12C14.67 15 11.5 14.6 7.81 15.43a.75.75 0 01-.32-1.46c4.07-.9 7.57-.45 10.18 1.14a.75.75 0 01-.42 1.39zm1.26-2.89a.94.94 0 01-.52-.15c-2.66-1.63-6.71-2.1-9.85-1.15a.94.94 0 11-.54-1.8c3.57-1.07 8.01-.56 11.05 1.32a.94.94 0 01-.53 1.73l-.61.05zm.12-3a.94.94 0 01-.47-.12C15.31 8.81 10.22 8.6 7.18 9.52a.94.94 0 01-.56-1.79c3.47-1.08 9.23-.87 12.87 1.28a.94.94 0 01-.47 1.76l-.37-.27z" fill="white"/>
+          </svg>
+          <span style={{ flex: 1 }}>
+            Connect Spotify to enable playback
+          </span>
+          <button
+            onClick={onSpotifyNudgeConnect}
+            style={{
+              background: 'rgba(30,215,96,0.12)',
+              border: '1px solid rgba(30,215,96,0.3)',
+              borderRadius: 4,
+              color: '#1DB954',
+              fontFamily: 'var(--font-mono, monospace)',
+              fontSize: 10,
+              letterSpacing: '0.08em',
+              padding: '3px 10px',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+              flexShrink: 0,
+            }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'rgba(30,215,96,0.22)')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'rgba(30,215,96,0.12)')}
+          >
+            SET UP
+          </button>
+          <button
+            onClick={onSpotifyNudgeDismiss}
+            aria-label="Dismiss"
+            style={{
+              background: 'none', border: 'none', cursor: 'pointer',
+              color: 'var(--fg3, #a3a3a3)', fontSize: 12, padding: '0 2px',
+              lineHeight: 1, opacity: 0.5, flexShrink: 0,
+            }}
+            onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
+            onMouseLeave={e => (e.currentTarget.style.opacity = '0.5')}
+          >✕</button>
+        </div>
+      )}
+
+      {/* Ambient agent status bar */}
       {showAmbientBar && (
         <div
           style={{
@@ -356,7 +385,6 @@ export function BrowseView({
         </div>
       )}
 
-      {/* Expanded reason panel — the agent's saliency explanation */}
       {showAmbientBar && reasonExpanded && ambientLastReason && (
         <div style={{
           margin: '-8px 0 8px',

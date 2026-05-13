@@ -16,16 +16,13 @@ import { useSpotify } from './hooks/useSpotify'
 import { SpotifyProvider } from './providers/SpotifyProvider'
 import { useSessionKernel } from './hooks/useSessionKernel'
 import { useSpotifyConfig } from './hooks/useSpotifyConfig'
-import { SpotifyConfigView } from './views/SpotifyConfigView'
+import { ConnectorsView } from './views/ConnectorsView'
 import { useAmbientAgent } from './hooks/useAmbientAgent'
 import type { KernelSnapshot } from './hooks/useAmbientAgent'
 import type { TasteSignal } from './types'
 import { ConnectWallet } from './components/ConnectWallet'
 
-// How many recent plays/skips to carry into the kernel snapshot prompt.
-// Short by design — enough to shape a query, not a full session log.
 const SNAPSHOT_HISTORY_DEPTH = 5
-
 const SCROLL_THRESHOLD = 10
 
 window.addEventListener('scroll', () => {
@@ -41,43 +38,34 @@ export default function App() {
   const [entropy, setEntropy] = useState(0.2)
   const kernel = useSessionKernel({ entropy })
 
-  const [booted, setBooted] = useState(() => localStorage.getItem('booted') === 'true')
-  const [showConfig, setShowConfig] = useState(false)
-  const [view, setView] = useState<ViewName>('Discover')
+  const [booted, setBooted]         = useState(() => localStorage.getItem('booted') === 'true')
+  const [showConnectors, setShowConnectors] = useState(false)
+  const [nudgeDismissed, setNudgeDismissed] = useState(() => localStorage.getItem('sond3r:nudge:spotify') === '1')
+  const [view, setView]             = useState<ViewName>('Discover')
 
   const [nowPlaying, setNowPlaying] = useState<null | 'player' | { track: Track; color: string }>(null)
 
-  // active genre filters — lifted so NowPlaying can close and filter,
-  // and so useChroma can route filtered queries to /search
-  const [genreFilter, setGenreFilter] = useState('all')
-  const [moodFilter, setMoodFilter] = useState('all')
+  const [genreFilter,   setGenreFilter]   = useState('all')
+  const [moodFilter,    setMoodFilter]    = useState('all')
   const [contextFilter, setContextFilter] = useState('all')
 
   const {
     tracks, loading, loadingMore, error, hasMore, loadMore,
     applyKernelQuery, search, setSearch,
     allGenres, allMoods, allContexts,
-  } = useChroma({
-    genreFilter,
-    moodFilter,
-    contextFilter,
-  })
+  } = useChroma({ genreFilter, moodFilter, contextFilter })
 
   const [recommendedTracks, setRecommendedTracks] = useState<RecommendedTracks | null>(null)
-  const [recommendLoading, setRecommendLoading] = useState(false)
+  const [recommendLoading, setRecommendLoading]   = useState(false)
   const { sendMessage } = useFangornAgent()
 
   type AutoplayMode = 'none' | 'sequential' | 'agent' | 'similar'
   const [autoplayMode, setAutoplayMode] = useState<AutoplayMode>('agent')
   const filteredTracksRef = useRef<Track[]>([])
-  const playingIdRef = useRef<string | null>(null)
-  const spotifyRef = useRef<ReturnType<typeof useSpotify> | null>(null)
-  const seededRef = useRef(false)
+  const playingIdRef      = useRef<string | null>(null)
+  const spotifyRef        = useRef<ReturnType<typeof useSpotify> | null>(null)
+  const seededRef         = useRef(false)
 
-  // ─── Play/skip history for kernel snapshot ──────────────────────────────────
-  // useSessionKernel keeps its state in a ref by design (mutations don't
-  // re-render).  We mirror the signal labels here so the ambient agent's
-  // next fetch query knows what the listener has been doing.
   const recentPlaysRef = useRef<string[]>([])
   const recentSkipsRef = useRef<string[]>([])
 
@@ -89,39 +77,28 @@ export default function App() {
     recentSkipsRef.current = [label, ...recentSkipsRef.current].slice(0, SNAPSHOT_HISTORY_DEPTH)
   }, [])
 
-  // ─── Kernel snapshot ─────────────────────────────────────────────────────────
-  // getDiagnostics() surfaces the describe() string from SessionKernel:
-  // something like "σ=0.31 t=12 h=0.62" — used as centroidLabel so the
-  // agent prompt carries real kernel state.
-  //
-  // The memo is keyed on entropy so it rebuilds whenever the listener
-  // adjusts exploration pressure.  recentPlays/Skips are read from refs
-  // at memo-time — they won't trigger a rebuild on every signal (that's
-  // fine; the agent's buildQuery() reads kernelRef.current directly at
-  // fetch time so it always gets the freshest state).
   const kernelSnapshot = useMemo<KernelSnapshot>(() => ({
     entropy,
     centroidLabel:   (() => { const d = kernel.getDiagnostics(); return typeof d === 'string' ? d : JSON.stringify(d) })(),
     recentPlays:     [...recentPlaysRef.current],
     recentSkips:     [...recentSkipsRef.current],
-    uncertaintyHint: undefined,   // future: derive from high-sigma boundary regions
+    uncertaintyHint: undefined,
   }), [entropy, kernel])
 
-  // ─── Ambient agent loop ─────────────────────────────────────────────────────
   const ambientAgent = useAmbientAgent({
     kernel: kernelSnapshot,
     enabled: autoplayMode === 'agent',
   })
 
-  // Prime the queue the moment the listener switches into agent autoplay mode
   useEffect(() => {
     if (autoplayMode === 'agent') ambientAgent.prime()
   }, [autoplayMode]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ─── Playback handlers ──────────────────────────────────────────────────────
+  // ─── Playback ────────────────────────────────────────────────────────────────
+
   const handleNext = useCallback(() => {
     const tracks = filteredTracksRef.current
-    const idx = tracks.findIndex(t => t.id === playingIdRef.current)
+    const idx  = tracks.findIndex(t => t.id === playingIdRef.current)
     const next = tracks[idx + 1]
     if (next) {
       playingIdRef.current = next.id
@@ -131,7 +108,7 @@ export default function App() {
 
   const handlePrev = useCallback(() => {
     const tracks = filteredTracksRef.current
-    const idx = tracks.findIndex(t => t.id === playingIdRef.current)
+    const idx  = tracks.findIndex(t => t.id === playingIdRef.current)
     const prev = tracks[idx - 1]
     if (prev) {
       playingIdRef.current = prev.id
@@ -142,10 +119,7 @@ export default function App() {
   const handleTrackEnd = useCallback(() => {
     if (autoplayMode === 'none') return
 
-    if (autoplayMode === 'sequential') {
-      handleNext()
-      return
-    }
+    if (autoplayMode === 'sequential') { handleNext(); return }
 
     if (autoplayMode === 'agent') {
       const next = ambientAgent.consume()
@@ -153,60 +127,64 @@ export default function App() {
         playingIdRef.current = next.id
         spotifyRef.current?.searchAndPlay(`${next.title} ${next.artist}`)
       } else {
-        // Queue empty (agent still fetching) — degrade gracefully, never die silently
         console.warn('[ambient] queue empty on track end, falling back to sequential')
         handleNext()
       }
       return
     }
-
-    // 'similar' — reserved for future implementation
   }, [autoplayMode, handleNext, ambientAgent])
 
   const spotify = useSpotify({ onTrackEnd: handleTrackEnd })
-
   useEffect(() => { spotifyRef.current = spotify }, [spotify])
 
-  // seed taste profile from spotify
   useEffect(() => {
     if (!spotify.connected || seededRef.current) return
     seededRef.current = true
-    console.log('[kernel] spotify connected, seeding...')
     kernel.seedFromSpotify(spotify.spotifyFetch).then((q) => {
-      console.log('[kernel] seed result:', q ? `vector length ${Array.from(q).length}` : 'null')
       if (!q) return
       applyKernelQuery(Array.from(q))
     })
   }, [spotify.connected]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ─── Signal handler ─── ───────────────────────────────────────────────────────
-  // Feeds play/skip events into the kernel AND into the local history refs
-  // so the ambient agent's next query is shaped by recent behaviour.
+  // ─── Signals ─────────────────────────────────────────────────────────────────
+
   const handleSignal = useCallback(async (signal: TasteSignal) => {
     const { type, track } = signal
     if (type !== 'play' && type !== 'skip') return
-
     const label = `${track.artist} - ${track.title}`
-
     try {
       const embedding = (track as any).embedding
         ? new Float32Array((track as any).embedding)
         : await kernel.embedText(label)
-
-      if (type === 'play') {
-        kernel.onTrackPlay(embedding)
-        pushPlay(label)
-      }
-      if (type === 'skip') {
-        kernel.onTrackSkip(embedding)
-        pushSkip(label)
-      }
+      if (type === 'play') { kernel.onTrackPlay(embedding); pushPlay(label) }
+      if (type === 'skip') { kernel.onTrackSkip(embedding); pushSkip(label) }
     } catch (e) {
       console.warn('[app] kernel signal failed:', e)
     }
   }, [kernel, pushPlay, pushSkip])
 
+  // ─── Connectors callbacks ─────────────────────────────────────────────────────
+  // ConnectorsView manages its own localStorage, but we still call saveConfig
+  // so useSpotifyConfig's hasConfig reactive flag updates in-session.
+
+  const handleSpotifyConfigSaved = useCallback((cfg: { clientId: string; clientSecret: string }) => {
+    saveConfig(cfg)           // keeps useSpotifyConfig in sync
+    setBooted(true)
+    // setShowConnectors(false)
+  }, [saveConfig])
+
+  const handleConnectorsBack = useCallback(() => {
+    setShowConnectors(false)
+  }, [])
+
+  // ─── Misc ─────────────────────────────────────────────────────────────────────
+
   const handleBooted = useCallback(() => { setBooted(true) }, [])
+
+  const dismissNudge = useCallback(() => {
+    localStorage.setItem('sond3r:nudge:spotify', '1')
+    setNudgeDismissed(true)
+  }, [])
 
   const handleFindSimilar = useCallback(async (query?: string) => {
     setView('Discover')
@@ -236,21 +214,12 @@ export default function App() {
   const scrollToTop = useCallback(() => window.scrollTo({ top: 0, behavior: 'smooth' }), [])
 
   const handleFilter = useCallback((type: 'genre' | 'mood' | 'context', value: string) => {
-    if (type === 'genre') setGenreFilter(value)
-    if (type === 'mood') setMoodFilter(value)
+    if (type === 'genre')   setGenreFilter(value)
+    if (type === 'mood')    setMoodFilter(value)
     if (type === 'context') setContextFilter(value)
   }, [])
 
-  // ─── Guards ──────────────────────────────────────────────────────────────────
-  if ((booted && !hasConfig) || showConfig) {
-    return (
-      <SpotifyConfigView
-        initial={config}
-        onSave={(cfg) => { saveConfig(cfg); setShowConfig(false); setBooted(true) }}
-        onBack={hasConfig ? () => setShowConfig(false) : undefined}
-      />
-    )
-  }
+  // ─── Guards ───────────────────────────────────────────────────────────────────
 
   if (!booted) {
     return (
@@ -276,34 +245,30 @@ export default function App() {
           <header className="header">
             <div className="header-brand">
               <span className="brand-name">SOND3R</span>
-              <nav style={{ display: 'flex', gap: '16px', marginLeft: '24px' }}>
+
+              <nav style={{ display: 'flex', gap: '16px', marginLeft: '24px'}}>
                 {(['Discover', 'Agent'] as ViewName[]).map((v) => (
                   <button
                     key={v}
-                    onClick={() => setView(v)}
-                    className={`app-nav-tab ${view === v ? 'active' : ''}`}
-                  >
-                    {v}
-                  </button>
+                    onClick={() => { setView(v); setShowConnectors(false) }}
+                    className={`app-nav-tab ${view === v && !showConnectors ? 'active' : ''}`}
+                  >{v}</button>
                 ))}
+                <button
+                  onClick={() => setShowConnectors(true)}
+                  className={`app-nav-tab ${showConnectors ? 'active' : ''}`}
+                >Connectors</button>
               </nav>
-              <button
-                onClick={() => setShowConfig(true)}
-                title="Spotify settings"
-                style={{
-                  background: 'none', border: 'none', color: 'var(--fg4)',
-                  fontSize: '16px', cursor: 'pointer', padding: '4px 8px',
-                  lineHeight: 1, transition: 'color var(--t1)',
-                }}
-                onMouseEnter={e => (e.currentTarget.style.color = 'var(--fg2)')}
-                onMouseLeave={e => (e.currentTarget.style.color = 'var(--fg4)')}
-              >⚙</button>
+
               <ConnectWallet />
             </div>
           </header>
 
           <main className="main">
-            {view === 'Discover' && (
+            {showConnectors && (
+              <ConnectorsView onSpotifyConfigSaved={handleSpotifyConfigSaved} />
+            )}
+            {!showConnectors && view === 'Discover' && (
               <BrowseView
                 tracks={tracks}
                 loading={loading}
@@ -330,13 +295,16 @@ export default function App() {
                 allGenres={allGenres}
                 allMoods={allMoods}
                 allContexts={allContexts}
-                // Ambient agent status — for Window-mode saliency surface in BrowseView
                 ambientStatus={ambientAgent.status}
                 ambientQueueSize={ambientAgent.queue.length}
                 ambientLastReason={ambientAgent.lastReason ?? undefined}
+                // Spotify nudge — shown only when not configured and not dismissed
+                showSpotifyNudge={!hasConfig && !nudgeDismissed}
+                onSpotifyNudgeConnect={() => setShowConnectors(true)}
+                onSpotifyNudgeDismiss={dismissNudge}
               />
             )}
-            {view === 'Agent' && (<AgentView />)}
+            {!showConnectors && view === 'Agent' && <AgentView />}
           </main>
 
           <PlayerBar

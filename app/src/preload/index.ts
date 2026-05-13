@@ -27,13 +27,31 @@ const api = {
 // just add to the DOM global.
 if (process.contextIsolated) {
   try {
-    // contextBridge.exposeInMainWorld('electron', electronAPI)
-    // contextBridge.exposeInMainWorld('api', api)
-
     contextBridge.exposeInMainWorld('electron', electronAPI)
     contextBridge.exposeInMainWorld('api', {
       spotifyApi: (args: any) => ipcRenderer.invoke('spotify:api', args)
     })
+
+    // for handling external (i.e. Spotify) oauth 
+    contextBridge.exposeInMainWorld('electronAPI', {
+      // Opens a URL in the system browser (whitelisted in main)
+      openExternal: (url: string) =>
+        ipcRenderer.invoke('shell:open-external', url),
+
+      // Registers a one-time callback for when Spotify redirects back
+      onSpotifyCallback: (cb: (callbackUrl: string) => void) => {
+        // Remove any stale listener first to avoid duplicates across re-renders
+        ipcRenderer.removeAllListeners('spotify:callback')
+        ipcRenderer.on('spotify:callback', (_event, url: string) => cb(url))
+      },
+
+      // Cleanup — called in the useEffect return
+      offSpotifyCallback: () => {
+        ipcRenderer.removeAllListeners('spotify:callback')
+      },
+    })
+
+
 
   } catch (error) {
     console.error(error)

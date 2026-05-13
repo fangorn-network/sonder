@@ -5,7 +5,7 @@
    ─────────────────────────────────────────────────────────────────────────── */
 :root {
   /* base */
-  --bg: #08080a;
+  --bg: #000000;
   --bg1: #0d0d10;
   --bg2: #121215;
   --bg3: #18181c;
@@ -3132,7 +3132,7 @@ textarea {
   font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.2em;
-  text-transform: uppercase;
+  text-transform: uppercase; 
   cursor: pointer;
   padding: 4px 0;
   color: var(--fg4);

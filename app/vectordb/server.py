@@ -2,6 +2,7 @@ import argparse
 import asyncio
 import aiohttp
 import chromadb
+import hashlib
 import json
 import requests
 import uvicorn
@@ -36,7 +37,7 @@ def parse_args():
     parser.add_argument("--ipfs-gateway",      default="https://ipfs.io/ipfs")
     parser.add_argument("--chroma-path",        default="./db/sond3r")
     parser.add_argument("--collection",         default="fangorn")
-    parser.add_argument("--searchable-fields",  default="title,byArtist,genres,moods,themes,contexts")
+    parser.add_argument("--searchable-fields",  default="trackId,title,byArtist,genres,moods,themes,contexts")
     parser.add_argument("--page-size",          type=int, default=100)
     parser.add_argument("--ipfs-timeout",       type=int, default=20)
     parser.add_argument("--concurrency",        type=int, default=32)
@@ -74,7 +75,7 @@ def get_searchable_fields() -> set[str]:
 
 ef_global:       object | None = None
 collection:      object | None = None
-debug_secondary: dict         = {}   # populated during ingest, readable via /debug
+debug_secondary: dict         = {}
 
 # ---------------------------------------------------------------------------
 # MODELS
@@ -88,6 +89,50 @@ class VectorSearchRequest(BaseModel):
     embedding: list[float]
     n_results: int        = 20
     owner:     str | None = None
+
+# ---------------------------------------------------------------------------
+# TRACK ID
+# ---------------------------------------------------------------------------
+
+def _compute_track_id(artist: str, title: str) -> str:
+    """
+    Canonical join key: SHA256(artist:title)[:24]
+    Must match exactly how track IDs were generated during data collection.
+    """
+    return hashlib.sha256(f"{artist}:{title}".encode()).hexdigest()[:24]
+
+def _track_id(entry: dict) -> str:
+    """
+    Resolve the join key for an entry.
+
+    Rule: trust whatever is stored in fields.trackId if it is present — both
+    schemas must agree on the value, so we never second-guess it based on
+    format or length. The secondary schema has no byArtist/title to derive
+    from, so discarding its stored trackId would leave it with no key at all
+    and silently break every join.
+
+    Only fall back to computing from byArtist:title when trackId is completely
+    absent from the entry (e.g. a primary entry published without the field).
+    """
+    fields = entry.get("fields", {})
+    tid    = fields.get("trackId", "")
+    stored = tid.strip() if isinstance(tid, str) else ""
+    stored = stored.removeprefix("track:")   # strip legacy bad publishes
+
+    if stored:
+        return stored
+
+    artist = str(fields.get("byArtist", "")).strip()
+    title  = str(fields.get("title",    "")).strip()
+    if artist and title:
+        derived = _compute_track_id(artist, title)
+        print(f"  [warn] trackId missing, derived {derived!r} from '{artist}:{title}'")
+        return derived
+
+    name = entry.get("name", "").strip().removeprefix("track:")
+    if name:
+        print(f"  [warn] no trackId or content fields — falling back to entry name {name!r}")
+    return name
 
 # ---------------------------------------------------------------------------
 # SUBGRAPH
@@ -191,7 +236,7 @@ def _build_seen_cids(publishes: list, updates: list) -> dict[str, dict]:
             seen[cid] = {
                 "owner":          u["owner"],
                 "nameHash":       u["nameHash"],
-                "name":           u["nameHash"],
+                "name":           u.get("name", u["nameHash"]),
                 "manifestCid":    cid,
                 "version":        int(u["version"]),
                 "blockTimestamp": ts,
@@ -199,17 +244,27 @@ def _build_seen_cids(publishes: list, updates: list) -> dict[str, dict]:
     return seen
 
 def _dedup_entries(all_entries: list) -> list:
-    best:    dict[str, dict] = {}
-    unnamed: list[dict]      = []
+    """
+    Keep the most recent entry per canonical track ID.
+
+    Uses _track_id as the dedup key — NOT entry.name. Entry names are
+    arbitrary strings that differ between schemas and carry no join semantics;
+    using them as a dedup key would incorrectly collapse or preserve entries
+    based on publisher convention rather than track identity.
+
+    Entries with no resolvable track ID are kept as-is (no dedup possible).
+    """
+    best:   dict[str, dict] = {}
+    no_key: list[dict]      = []
     for item in all_entries:
-        name = item["entry"].get("name", "")
-        if not name:
-            unnamed.append(item)
+        key = _track_id(item["entry"])
+        if not key:
+            no_key.append(item)
             continue
         ts = item["meta"]["blockTimestamp"]
-        if name not in best or ts > best[name]["meta"]["blockTimestamp"]:
-            best[name] = item
-    return list(best.values()) + unnamed
+        if key not in best or ts > best[key]["meta"]["blockTimestamp"]:
+            best[key] = item
+    return list(best.values()) + no_key
 
 async def fetch_schema_entries(schema_name: str, schema_id: str, loop) -> list[dict]:
     publishes, updates = await loop.run_in_executor(None, _fetch_all_events, schema_id)
@@ -235,8 +290,8 @@ async def fetch_schema_entries(schema_name: str, schema_id: str, loop) -> list[d
     deduped = _dedup_entries(all_entries)
     print(f"  [{schema_name}] entries: {len(all_entries)} raw → {len(deduped)} after dedup")
     for item in deduped:
-        name = item["entry"].get("name", "<unnamed>")
-        print(f"    entry name={name!r}")
+        tid = _track_id(item["entry"])
+        # print(f"    track_id={tid!r}")
 
     return deduped
 
@@ -253,17 +308,12 @@ def _flatten_fields(fields: dict) -> dict:
             out[k] = v
     return out
 
-# Tag fields get their own section in the document, repeated to boost
-# their weight in the embedding. Without this, a track with 30 words of
-# metadata and 3 genre tags has those tags nearly washed out by everything
-# else, making single-word tag searches unreliable.
 TAG_FIELDS   = {"genres", "moods", "themes", "contexts"}
 TRACK_FIELDS = {"title", "byArtist"}
 
 def _build_searchable_text(fields: dict) -> str:
     searchable = get_searchable_fields()
 
-    # Tags first — collect all tag terms across the four dimensions
     tag_terms: list[str] = []
     for key in TAG_FIELDS & searchable:
         val = fields.get(key)
@@ -272,7 +322,6 @@ def _build_searchable_text(fields: dict) -> str:
         elif val:
             tag_terms.append(str(val))
 
-    # Track identity (title, artist, etc.)
     track_terms: list[str] = []
     for key in (searchable - TAG_FIELDS):
         val = fields.get(key)
@@ -291,23 +340,13 @@ def _build_searchable_text(fields: dict) -> str:
 
     return " ".join(parts) or "music"
 
-def _track_id(entry: dict) -> str:
-    """
-    Canonical join key: fields.trackId (Spotify ID), falling back to entry.name.
-    Both the track schema and tag schema set fields.trackId to the Spotify track ID.
-    """
-    tid = entry.get("fields", {}).get("trackId", "")
-    if isinstance(tid, str) and tid.strip():
-        return tid.strip()
-    return entry.get("name", "").strip()
-
 def join_records(entries_by_schema: dict[str, list[dict]], primary: str) -> list[dict]:
     primary_entries = entries_by_schema.get(primary, [])
     if not primary_entries:
         print(f"  [warn] primary schema '{primary}' has no entries — nothing to join")
         return []
 
-    # Index secondary (tag) entries by fields.trackId
+    # Index secondary (tag) entries by canonical track ID
     secondary_fields: dict[str, dict] = {}
     for schema_name, entries in entries_by_schema.items():
         if schema_name == primary:
@@ -315,7 +354,7 @@ def join_records(entries_by_schema: dict[str, list[dict]], primary: str) -> list
         for item in entries:
             key = _track_id(item["entry"])
             if not key:
-                print(f"  [warn] secondary entry has no trackId or name — skipping")
+                print(f"  [warn] secondary entry has no resolvable track ID — skipping")
                 continue
             flat = _flatten_fields(item["entry"].get("fields", {}))
             if key not in secondary_fields:
@@ -340,15 +379,12 @@ def join_records(entries_by_schema: dict[str, list[dict]], primary: str) -> list
         core_fields = _flatten_fields(item["entry"].get("fields", {}))
         tag_fields  = secondary_fields.get(track_id, {})
         fields      = {**core_fields, **tag_fields}
-        fields["trackId"] = track_id
+        fields["trackId"] = track_id  # ensure canonical ID is always stored
 
         doc = _build_searchable_text(fields)
 
         if tag_fields:
             matched += 1
-            print(f"  [join] ✓ {track_id}: doc={doc!r}")
-        else:
-            print(f"  [join] · {track_id}: no tags")
 
         joined.append({
             "id":       f"track:{track_id}",
@@ -531,7 +567,6 @@ async def debug():
     schemas = get_schemas()
     primary = get_primary(schemas)
     loop    = asyncio.get_event_loop()
-    # Grab all primary track_ids from ChromaDB
     results = await loop.run_in_executor(
         None,
         lambda: collection.get(include=["metadatas"]),
@@ -539,12 +574,20 @@ async def debug():
     metas = results.get("metadatas") or []
     primary_ids = [m.get("trackId", "") for m in metas if m]
     return {
-        "primary_track_ids": sorted(primary_ids),
+        "primary_track_ids":  sorted(primary_ids),
         "secondary_tag_keys": sorted(debug_secondary.keys()),
-        "matched": sorted(set(primary_ids) & set(debug_secondary.keys())),
-        "unmatched_primary": sorted(set(primary_ids) - set(debug_secondary.keys())),
-        "unmatched_tags": sorted(set(debug_secondary.keys()) - set(primary_ids)),
-        "tag_details": {k: {"genres": v.get("genres"), "moods": v.get("moods"), "themes": v.get("themes"), "contexts": v.get("contexts")} for k, v in debug_secondary.items()},
+        "matched":            sorted(set(primary_ids) & set(debug_secondary.keys())),
+        "unmatched_primary":  sorted(set(primary_ids) - set(debug_secondary.keys())),
+        "unmatched_tags":     sorted(set(debug_secondary.keys()) - set(primary_ids)),
+        "tag_details": {
+            k: {
+                "genres":   v.get("genres"),
+                "moods":    v.get("moods"),
+                "themes":   v.get("themes"),
+                "contexts": v.get("contexts"),
+            }
+            for k, v in debug_secondary.items()
+        },
     }
 
 @app.get("/health")

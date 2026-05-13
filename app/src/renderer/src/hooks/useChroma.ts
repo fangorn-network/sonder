@@ -6,18 +6,17 @@ const CHROMA_URL = (import.meta as any).env.VITE_CHROMA_URL ?? 'http://localhost
 const PAGE_SIZE = 20
 
 // ── normalization ─────────────────────────────────────────────────────────────
-
 function normalizeHit(hit: any): Track | null {
   if (!hit?.fields) return null
   const record: JoinedRecord = {
-    id:          hit.id,
-    trackId:     hit.trackId  ?? hit.fields?.trackId ?? hit.id,
-    owner:       hit.owner    ?? '',
+    id: hit.id,
+    trackId: hit.trackId ?? hit.fields?.trackId ?? hit.id.replace(/^track:/, ''),
+    owner: hit.owner ?? '',
     manifestCid: hit.manifestCid ?? '',
-    fields:      hit.fields,
-    embedding:   hit.embedding,
-    score:       hit.score,
-    distance:    hit.distance,
+    fields: hit.fields,
+    embedding: hit.embedding,
+    score: hit.score,
+    distance: hit.distance,
   }
   return asTrack(record)
 }
@@ -75,25 +74,25 @@ async function chromaSearchVector(embedding: number[], nResults = 100): Promise<
 
 export interface UseChromaOptions {
   /** Any of these can be a single value 'rock' or an array ['rock', 'metal'] or 'all'/undefined to skip */
-  genreFilter?:   TagFilter
-  moodFilter?:    TagFilter
+  genreFilter?: TagFilter
+  moodFilter?: TagFilter
   contextFilter?: TagFilter
-  themeFilter?:   TagFilter
+  themeFilter?: TagFilter
 }
 
 export interface UseChromaResult {
-  tracks:           Track[]
-  loading:          boolean
-  loadingMore:      boolean
-  error:            string | null
-  hasMore:          boolean
-  loadMore:         () => void
-  search:           string
-  setSearch:        (s: string) => void
+  tracks: Track[]
+  loading: boolean
+  loadingMore: boolean
+  error: string | null
+  hasMore: boolean
+  loadMore: () => void
+  search: string
+  setSearch: (s: string) => void
   applyKernelQuery: (embedding: number[]) => void
-  allGenres:        string[]
-  allMoods:         string[]
-  allContexts:      string[]
+  allGenres: string[]
+  allMoods: string[]
+  allContexts: string[]
 }
 
 export function useChroma({
@@ -102,35 +101,35 @@ export function useChroma({
   contextFilter,
   themeFilter,
 }: UseChromaOptions = {}): UseChromaResult {
-  const [tracks,      setTracks]      = useState<Track[]>([])
-  const [loading,     setLoading]     = useState(true)
+  const [tracks, setTracks] = useState<Track[]>([])
+  const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
-  const [error,       setError]       = useState<string | null>(null)
-  const [search,      setSearch]      = useState('')
-  const [hasMore,     setHasMore]     = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
+  const [hasMore, setHasMore] = useState(true)
 
-  const [allGenres,   setAllGenres]   = useState<string[]>([])
-  const [allMoods,    setAllMoods]    = useState<string[]>([])
+  const [allGenres, setAllGenres] = useState<string[]>([])
+  const [allMoods, setAllMoods] = useState<string[]>([])
   const [allContexts, setAllContexts] = useState<string[]>([])
-  const knownGenres   = useRef<Set<string>>(new Set())
-  const knownMoods    = useRef<Set<string>>(new Set())
+  const knownGenres = useRef<Set<string>>(new Set())
+  const knownMoods = useRef<Set<string>>(new Set())
   const knownContexts = useRef<Set<string>>(new Set())
 
-  const searchRef       = useRef(search)
-  const genreRef        = useRef(genreFilter)
-  const moodRef         = useRef(moodFilter)
-  const contextRef      = useRef(contextFilter)
-  const themeRef        = useRef(themeFilter)
-  const offsetRef       = useRef(0)
-  const activeQueryRef  = useRef('')
+  const searchRef = useRef(search)
+  const genreRef = useRef(genreFilter)
+  const moodRef = useRef(moodFilter)
+  const contextRef = useRef(contextFilter)
+  const themeRef = useRef(themeFilter)
+  const offsetRef = useRef(0)
+  const activeQueryRef = useRef('')
   const kernelActiveRef = useRef(false)
-  const debounceRef     = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  useEffect(() => { searchRef.current  = search        }, [search])
-  useEffect(() => { genreRef.current   = genreFilter   }, [genreFilter])
-  useEffect(() => { moodRef.current    = moodFilter    }, [moodFilter])
+  useEffect(() => { searchRef.current = search }, [search])
+  useEffect(() => { genreRef.current = genreFilter }, [genreFilter])
+  useEffect(() => { moodRef.current = moodFilter }, [moodFilter])
   useEffect(() => { contextRef.current = contextFilter }, [contextFilter])
-  useEffect(() => { themeRef.current   = themeFilter   }, [themeFilter])
+  useEffect(() => { themeRef.current = themeFilter }, [themeFilter])
 
   const accumulateTags = useCallback((newTracks: Track[]) => {
     // tag accumulation wired up when Track type exposes genre/mood/context arrays
@@ -145,10 +144,10 @@ export function useChroma({
 
     if (text.trim()) parts.push(text.trim())
 
-    resolveFilter(genreRef.current).forEach(v   => parts.push(v))
-    resolveFilter(moodRef.current).forEach(v    => parts.push(v))
+    resolveFilter(genreRef.current).forEach(v => parts.push(v))
+    resolveFilter(moodRef.current).forEach(v => parts.push(v))
     resolveFilter(contextRef.current).forEach(v => parts.push(v))
-    resolveFilter(themeRef.current).forEach(v   => parts.push(v))
+    resolveFilter(themeRef.current).forEach(v => parts.push(v))
 
     return parts.length > 0 ? parts.join(' ') : null
   }, [])
@@ -185,7 +184,7 @@ export function useChroma({
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current)
     const isMount = activeQueryRef.current === ''
-    const delay   = isMount ? 0 : 350
+    const delay = isMount ? 0 : 350
     debounceRef.current = setTimeout(() => {
       kernelActiveRef.current = false
       offsetRef.current = 0
@@ -207,7 +206,7 @@ export function useChroma({
     setLoading(true)
     setError(null)
     try {
-      const hits       = await chromaSearchVector(embedding, 100)
+      const hits = await chromaSearchVector(embedding, 100)
       const normalized = dedup(hits.map(normalizeHit).filter(Boolean) as Track[])
       accumulateTags(normalized)
       setTracks(normalized)

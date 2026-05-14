@@ -927,7 +927,7 @@ textarea {
    ─────────────────────────────────────────────────────────────────────────── */
 .track-grid {
   display: grid;
-  grid-template-columns: repeat(6, minmax(240px, 1fr));
+  grid-template-columns: repeat(5, minmax(240px, 1fr));
   gap: 1px;
   background: var(--glass-edge);
   border: 1px solid var(--glass-edge);

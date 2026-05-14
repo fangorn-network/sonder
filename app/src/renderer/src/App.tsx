@@ -21,7 +21,9 @@ import { useAmbientAgent } from './hooks/useAmbientAgent'
 import type { KernelSnapshot } from './hooks/useAmbientAgent'
 import type { TasteSignal } from './types'
 import { ConnectWallet } from './components/ConnectWallet'
+import { KernelVisualizer, type SessionEvent } from './kernel/Visualizer'
 import { useChromaSync } from './hooks/useChromaSync'
+import KernelDebugHUD from './kernel/HUD'
 
 const SNAPSHOT_HISTORY_DEPTH = 5
 const SCROLL_THRESHOLD = 10
@@ -33,6 +35,19 @@ window.addEventListener('scroll', () => {
 }, { passive: true })
 
 export default function App() {
+
+  const [sessionHistory, setSessionHistory] = useState<SessionEvent[]>([])
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'k' && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault()
+        // setShowKernelDebug(v => !v)
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [])
 
   const { ready, authenticated, login } = usePrivy()
   const { config, hasConfig, saveConfig } = useSpotifyConfig()
@@ -220,23 +235,82 @@ export default function App() {
     return () => document.removeEventListener('visibilitychange', handler)
   }, [])
 
-  // useChromaSync({ enabled: visible })
+  useChromaSync({ enabled: visible })
 
   useEffect(() => {
     if (autoplayMode === 'agent') ambientAgent.prime()
   }, [autoplayMode]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ─── Signals ──────────────────────────────────────────────────────────────
+  const handleSignal = useCallback(async (signal: TasteSignal) => {
+    const { type, track } = signal
+    if (type !== 'play' && type !== 'skip') return
+
+    const label = `${track.artist} - ${track.title}`
+    try {
+      const embedding = (track as any).embedding
+        ? new Float32Array((track as any).embedding)
+        : await kernel.embedText(label)
+
+      const meta = {
+        artistId: track.artist,
+        genres: (track as any).genres ?? [],
+        moods: (track as any).moods ?? [],
+        themes: (track as any).themes ?? [],
+        contexts: (track as any).contexts ?? [],
+        durationMs: track.durationMs ?? 0,
+      }
+
+      if (type === 'play') { kernel.onTrackPlay(embedding, meta); pushPlay(label) }
+      if (type === 'skip') { kernel.onTrackSkip(embedding, meta); pushSkip(label) }
+
+      setSessionHistory(h => [...h, {
+        type,
+        t: Date.now(),
+        trackTitle: track.title,
+        artistId: track.artist,
+        entropySnapshot: kernel.state.entropy,
+      }])
+
+      // Re-rank the browse grid against the kernel's new position
+      const q = kernel.getQueryVector()
+      applyKernelQuery(Array.from(q))
+
+    } catch (e) {
+      console.warn('[app] kernel signal failed:', e)
+    }
+  }, [kernel, pushPlay, pushSkip, applyKernelQuery])
+
   // ─── Playback ─────────────────────────────────────────────────────────────
+  const recentlyPlayedIdsRef = useRef<Set<string>>(new Set())
+  const RECENTLY_PLAYED_MAX = 8
 
   const handleNext = useCallback(() => {
     const tracks = filteredTracksRef.current
-    const idx = tracks.findIndex(t => t.id === playingIdRef.current)
-    const next = tracks[idx + 1]
-    if (next) {
-      playingIdRef.current = next.id
-      spotifyRef.current?.searchAndPlay(`${next.title} ${next.artist}`)
+    if (!tracks.length) return
+
+    // prefer: kernel-ordered, not current, not recently played
+    const next =
+      tracks.find(t =>
+        t.id !== playingIdRef.current &&
+        !recentlyPlayedIdsRef.current.has(t.id)
+      ) ??
+      // fallback: just not current (all candidates were recently played)
+      tracks.find(t => t.id !== playingIdRef.current)
+
+    if (!next) return
+
+    // add to recency window, evict oldest when full
+    recentlyPlayedIdsRef.current.add(next.id)
+    if (recentlyPlayedIdsRef.current.size > RECENTLY_PLAYED_MAX) {
+      const oldest = recentlyPlayedIdsRef.current.values().next().value
+      recentlyPlayedIdsRef.current.delete(oldest!)
     }
-  }, [])
+
+    playingIdRef.current = next.id
+    handleSignal({ type: 'play', track: next, weight: 1.0 })
+    spotifyRef.current?.searchAndPlay(`${next.title} ${next.artist}`)
+  }, [handleSignal])
 
   const handlePrev = useCallback(() => {
     const tracks = filteredTracksRef.current
@@ -250,19 +324,24 @@ export default function App() {
 
   const handleTrackEnd = useCallback(() => {
     if (autoplayMode === 'none') return
-    if (autoplayMode === 'sequential') { handleNext(); return }
-    if (autoplayMode === 'agent') {
-      const next = ambientAgent.consume()
-      if (next) {
-        playingIdRef.current = next.id
-        spotifyRef.current?.searchAndPlay(`${next.title} ${next.artist}`)
-      } else {
-        console.warn('[ambient] queue empty on track end, falling back to sequential')
-        handleNext()
-      }
-      return
-    }
-  }, [autoplayMode, handleNext, ambientAgent])
+    handleNext()
+  }, [autoplayMode, handleNext])
+
+  // const handleTrackEnd = useCallback(() => {
+  //   if (autoplayMode === 'none') return
+  //   if (autoplayMode === 'sequential') { handleNext(); return }
+  //   if (autoplayMode === 'agent') {
+  //     const next = ambientAgent.consume()
+  //     if (next) {
+  //       playingIdRef.current = next.id
+  //       spotifyRef.current?.searchAndPlay(`${next.title} ${next.artist}`)
+  //     } else {
+  //       console.warn('[ambient] queue empty on track end, falling back to sequential')
+  //       handleNext()
+  //     }
+  //     return
+  //   }
+  // }, [autoplayMode, handleNext, ambientAgent])
 
   const spotify = useSpotify({ onTrackEnd: handleTrackEnd })
   useEffect(() => { spotifyRef.current = spotify }, [spotify])
@@ -276,24 +355,13 @@ export default function App() {
     })
   }, [spotify.connected]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ─── Signals ──────────────────────────────────────────────────────────────
-
-  const handleSignal = useCallback(async (signal: TasteSignal) => {
-    const { type, track } = signal
-    if (type !== 'play' && type !== 'skip') return
-    const label = `${track.artist} - ${track.title}`
-    try {
-      const embedding = (track as any).embedding
-        ? new Float32Array((track as any).embedding)
-        : await kernel.embedText(label)
-      if (type === 'play') { kernel.onTrackPlay(embedding); pushPlay(label) }
-      if (type === 'skip') { kernel.onTrackSkip(embedding); pushSkip(label) }
-    } catch (e) {
-      console.warn('[app] kernel signal failed:', e)
-    }
-  }, [kernel, pushPlay, pushSkip])
 
   // ─── Connectors callbacks ──────────────────────────────────────────────────
+
+  const handleTrackClick = useCallback((track: Track, color: string) => {
+    recentlyPlayedIdsRef.current.clear()
+    setNowPlaying({ track, color })
+  }, [])
 
   const handleSpotifyConfigSaved = useCallback((cfg: { clientId: string; clientSecret: string }) => {
     saveConfig(cfg)
@@ -389,10 +457,37 @@ export default function App() {
             </div>
           </header>
 
+          <KernelDebugHUD
+            state={kernel.state}
+            history={sessionHistory}
+          />
+
+
           <main className="main">
             {showConnectors && (
               <ConnectorsView onSpotifyConfigSaved={handleSpotifyConfigSaved} />
             )}
+            {/* {showKernelDebug && createPortal(
+              <div style={{
+                position: 'fixed',
+                bottom: 72,          // clear the PlayerBar
+                right: 16,
+                width: 440,
+                maxHeight: 'calc(100vh - 100px)',
+                zIndex: 200,
+                borderRadius: 12,
+                overflow: 'hidden',
+                boxShadow: '0 8px 40px rgba(0,0,0,0.6), 0 0 0 1px #1a2540',
+                backdropFilter: 'blur(12px)',
+              }}>
+                <KernelVisualizer
+                  state={kernel.state}
+                  history={sessionHistory}
+                  style={{ height: '100%', borderRadius: 12 }}
+                />
+              </div>,
+              document.body
+            )} */}
             {!showConnectors && view === 'Discover' && (
               <BrowseView
                 tracks={tracks}
@@ -413,7 +508,8 @@ export default function App() {
                 onFilteredChange={f => { filteredTracksRef.current = f }}
                 onPlayingIdChange={id => { playingIdRef.current = id }}
                 onSignal={handleSignal}
-                onTrackClick={(track, color) => setNowPlaying({ track, color })}
+                // onTrackClick={(track, color) => setNowPlaying({ track, color })}
+                onTrackClick={handleTrackClick}
                 genreFilter={genreFilter}
                 moodFilter={moodFilter}
                 contextFilter={contextFilter}

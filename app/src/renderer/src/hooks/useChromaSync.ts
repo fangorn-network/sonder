@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 
 const CHROMA_URL = (import.meta as any).env.VITE_CHROMA_URL ?? 'http://localhost:8080'
-const SYNC_INTERVAL_MS = 60_000
+const SYNC_INTERVAL_MS = 90_000
 
 export interface UseChromaSyncOptions {
   /** Called after a reingest is successfully triggered */

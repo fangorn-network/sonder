@@ -21,7 +21,16 @@ function normalizeHit(hit: any): Track | null {
     score: hit.score,
     distance: hit.distance,
   }
-  return asTrack(record)
+  const track = asTrack(record)
+  if (!track) return null
+
+  return {
+    ...track,
+    genres: Array.isArray(hit.fields.genres) ? hit.fields.genres : [],
+    moods: Array.isArray(hit.fields.moods) ? hit.fields.moods : [],
+    themes: Array.isArray(hit.fields.themes) ? hit.fields.themes : [],
+    contexts: Array.isArray(hit.fields.contexts) ? hit.fields.contexts : [],
+  }
 }
 
 function dedup(tracks: Track[]): Track[] {
@@ -37,7 +46,7 @@ function shuffle<T>(arr: T[]): T[] {
   const a = [...arr]
   for (let i = a.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1))
-    ;[a[i], a[j]] = [a[j], a[i]]
+      ;[a[i], a[j]] = [a[j], a[i]]
   }
   return a
 }
@@ -253,8 +262,9 @@ export function useChroma({
 
   // ── Kernel query ──────────────────────────────────────────────────────────
 
-  const applyKernelQuery = useCallback(async (embedding: number[]) => {
+  const applyKernelQuery = useCallback(async (embedding: number[], silent = false) => {
     kernelActiveRef.current = true
+    if (!silent) setSeeding(true)
     setSeeding(true)
     setError(null)
     try {
@@ -268,6 +278,7 @@ export function useChroma({
       kernelActiveRef.current = false
     } finally {
       setSeeding(false)
+      if (!silent) setSeeding(false)
     }
   }, [])
 

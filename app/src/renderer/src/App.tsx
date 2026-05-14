@@ -220,7 +220,7 @@ export default function App() {
     return () => document.removeEventListener('visibilitychange', handler)
   }, [])
 
-  useChromaSync({ enabled: visible })
+  // useChromaSync({ enabled: visible })
 
   useEffect(() => {
     if (autoplayMode === 'agent') ambientAgent.prime()

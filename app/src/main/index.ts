@@ -37,7 +37,7 @@ function startPython() {
         'tony.test.tags.track.0=0x43a911728ed43457b145f5c4c0d89145b7c8d352b2c6ba0d86fff1f005166935',
         '--primary',
         'tony.test.invariants.track.2',
-        '--reset',
+        // '--reset',
       ],
       root,
     ]
@@ -51,7 +51,7 @@ function startPython() {
         'tony.test.tags.track.0=0x43a911728ed43457b145f5c4c0d89145b7c8d352b2c6ba0d86fff1f005166935',
         '--primary',
         'tony.test.invariants.track.2',
-        '--reset',
+        // '--reset',
       ],
       path.join(root, 'vectordb'),   // ← the fix: match the manual-run cwd
     ]

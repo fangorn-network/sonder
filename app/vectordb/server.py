@@ -32,7 +32,7 @@ def parse_args():
     parser.add_argument("--primary", "-p", metavar="NAME", default=None)
     parser.add_argument(
         "--subgraph-url",
-        default="https://api.studio.thegraph.com/query/1748219/sond-3-r/0.0.1",
+        default="https://api.studio.thegraph.com/query/1745244/fangorn-data-discovery/version/latest",
     )
     parser.add_argument("--ipfs-gateway",      default="https://ipfs.io/ipfs")
     parser.add_argument("--chroma-path",        default="./db/sond3r")

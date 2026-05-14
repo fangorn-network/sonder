@@ -78,25 +78,56 @@ export default function App() {
 
   const handleMusicBrainzSearch = useCallback(async (query: string) => {
     if (!query.trim()) return
+
     setFallbackLoading(true)
     setFallbackTracks([])
-    try {
-      const headers = { 'User-Agent': MB_USER_AGENT }
 
-      const [artistResp, generalResp] = await Promise.all([
+    try {
+      const headers = {
+        'User-Agent': MB_USER_AGENT,
+      }
+
+      const buildRecordingQuery = (input: string) => {
+        const q = input.trim()
+        const parts = q.split(/\s+/)
+
+        // Heuristic:
+        // if query is long enough, assume the last 2 words are the artist
+        // e.g. "daylight aesop rock"
+        // => recording:"daylight" AND artist:"aesop rock"
+        if (parts.length >= 3) {
+          const artist = parts.slice(-2).join(' ')
+          const title = parts.slice(0, -2).join(' ')
+
+          return `recording:"${title}" AND artist:"${artist}"`
+        }
+
+        // fallback to recording title search
+        return `recording:"${q}"`
+      }
+
+      const structuredQuery = buildRecordingQuery(query)
+      const fallbackQuery = `recording:"${query.trim()}"`
+
+      const [structuredResp, fallbackResp] = await Promise.all([
         fetch(
-          `https://musicbrainz.org/ws/2/recording?query=artist:%22${encodeURIComponent(query)}%22&limit=25&fmt=json`,
+          `https://musicbrainz.org/ws/2/recording?query=${encodeURIComponent(structuredQuery)}&limit=25&fmt=json`,
           { headers }
         ),
         fetch(
-          `https://musicbrainz.org/ws/2/recording?query=${encodeURIComponent(query)}&limit=10&fmt=json`,
+          `https://musicbrainz.org/ws/2/recording?query=${encodeURIComponent(fallbackQuery)}&limit=10&fmt=json`,
           { headers }
         ),
       ])
 
-      const [artistData, generalData] = await Promise.all([
-        artistResp.ok ? artistResp.json() : { recordings: [] },
-        generalResp.ok ? generalResp.json() : { recordings: [] },
+      const [structuredData, fallbackData] = await Promise.all([
+        structuredResp.ok
+          ? structuredResp.json()
+          : { recordings: [] },
+
+        fallbackResp.ok
+          ? fallbackResp.json()
+          : { recordings: [] },
       ])
 
       const toTrack = (rec: any): Track => {
@@ -104,8 +135,12 @@ export default function App() {
           .map((c: any) => c.name ?? c.artist?.name ?? '')
           .filter(Boolean)
           .join(', ') || 'Unknown Artist'
+
         const releaseDate = rec.releases?.[0]?.date ?? ''
-        const yearInt = releaseDate ? parseInt(releaseDate.split('-')[0], 10) : NaN
+        const yearInt = releaseDate
+          ? parseInt(releaseDate.split('-')[0], 10)
+          : NaN
+
         return {
           id: rec.id,
           trackId: rec.id,
@@ -121,9 +156,10 @@ export default function App() {
 
       const seen = new Set<string>()
       const merged: Track[] = []
+
       for (const rec of [
-        ...(artistData.recordings ?? []),
-        ...(generalData.recordings ?? []),
+        ...(structuredData.recordings ?? []),
+        ...(fallbackData.recordings ?? []),
       ]) {
         if (!seen.has(rec.id)) {
           seen.add(rec.id)

@@ -422,7 +422,7 @@ export function BrowseView({
         </div>
       )}
 
-      {showAmbientBar && (
+      {/* {showAmbientBar && (
         <div style={{
           display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', margin: '0 0 8px',
           borderRadius: reasonExpanded ? '6px 6px 0 0' : 6, fontSize: 11, letterSpacing: '0.04em',
@@ -453,7 +453,7 @@ export function BrowseView({
           background: 'rgba(167,139,250,0.05)', border: '1px solid rgba(167,139,250,0.12)', borderTop: 'none',
           fontSize: 11, lineHeight: 1.6, color: 'var(--fg3, #c4b5fd)', fontStyle: 'italic',
         }}>{ambientLastReason}</div>
-      )}
+      )} */}
 
       {/* Library tab */}
       {activeTab === 'library' && (

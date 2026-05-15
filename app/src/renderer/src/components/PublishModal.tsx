@@ -119,6 +119,9 @@ export function PublishModal({ track, onClose, onPublished, fangorn, accentColor
                         <div className="pm-title">Publish to SOND3R</div>
                         <div className="pm-subtitle">{track.artist} — {track.title}</div>
                     </div>
+                    <div>
+                        
+                    </div>
                     <button className="pm-close" onClick={onClose}>×</button>
                 </div>
 

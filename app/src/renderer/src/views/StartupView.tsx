@@ -199,8 +199,8 @@ export function StartupView({ onReady, children }: StartupViewProps) {
       </div>
 
       {/* Footer */}
-      <div style={{ position: 'relative', zIndex: 10, width: '100%', display: 'flex', justifyContent: 'space-between', padding: '16px 32px', borderTop: '1px solid rgba(255,255,255,0.05)', fontFamily: '"DM Mono", monospace', fontSize: '9px', letterSpacing: '0.1em', color: 'rgba(228,226,236,0.1)' }}>
-        <div>BUILT BY FANGORN NETWORK</div>
+      <div style={{ position: 'relative', zIndex: 10, width: '100%', display: 'flex', justifyContent: 'space-between', padding: '16px 32px', borderTop: '1px solid rgba(255,255,255,0.05)', fontFamily: '"DM Mono", monospace', fontSize: '12px', letterSpacing: '0.1em', color: 'rgba(255, 255, 255, 1)' }}>
+        <div>BUILT BY FANGORN</div>
         <div>v0.1.0</div>
       </div>
 

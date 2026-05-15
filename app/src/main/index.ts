@@ -59,7 +59,7 @@ function startPython() {
   pyProcess = spawn(bin, args, {
     cwd,
     env: {
-      ...process.env, 
+      ...process.env,
       CHROMA_PATH: path.join(app.getPath('userData'), 'chroma_db'),
     },
   })
@@ -146,6 +146,7 @@ function createWindow(): void {
       nodeIntegration: false,
       webSecurity: true,
       partition: 'persist:main',
+      webviewTag: true
     },
   })
 
@@ -169,6 +170,7 @@ function createWindow(): void {
 
 function registerIpcHandlers() {
 
+  // generic proxy
   ipcMain.handle('fetch:proxy', async (_event, { url, options }) => {
     const res = await fetch(url, options ?? {})
     const text = await res.text()
@@ -341,6 +343,9 @@ async function bootstrap() {
 // ─────────────────────────────────────────────────────────────
 // App lifecycle
 // ─────────────────────────────────────────────────────────────
+
+app.commandLine.appendSwitch('enable-unsafe-swiftshader')
+app.commandLine.appendSwitch('use-gl', 'swiftshader')
 
 app.whenReady().then(async () => {
   electronApp.setAppUserModelId('com.electron')

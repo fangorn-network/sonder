@@ -6,6 +6,7 @@ import { useSpotifyContext } from '../providers/SpotifyProvider'
 import { PublishModal } from '../components/PublishModal'
 import type { Fangorn } from '@fangorn-network/sdk'
 import type { Hex } from 'viem'
+import { PlaybackState } from '../types/playback'
 
 const GENRE_PALETTE = [
   '#a78bfa', '#60a5fa', '#f472b6', '#22c55e',
@@ -34,6 +35,10 @@ interface BrowseViewProps {
   retryConnect?: () => void
   recommendedTracks?: RecommendedTracks | null
   recommendLoading?: boolean
+
+  playbackState?: PlaybackState
+  onPlay?: (track: Track) => void
+
   onClearRecommendations?: () => void
   onCallAgent: (query?: string) => void
   onFilteredChange?: (tracks: Track[]) => void
@@ -97,6 +102,7 @@ export function BrowseView({
   chromaReady = false,   // safe default — show connecting state until explicitly ready
   seeding = false,
   retryConnect,
+  playbackState, onPlay,
   recommendedTracks, recommendLoading, onClearRecommendations, onCallAgent,
   onFilteredChange, onPlayingIdChange, onSignal, onTrackClick,
   ambientStatus, ambientQueueSize, ambientLastReason,
@@ -124,9 +130,9 @@ export function BrowseView({
       prevSearchRef.current = search
       setActiveTab('library')
       mbFetchedRef.current = ''
-      ytFetchedRef.current = ''   // ← add
+      ytFetchedRef.current = ''
       onFallbackClear?.()
-      onYtClear?.()               // ← add
+      onYtClear?.()
     }
   }, [search])
 
@@ -138,7 +144,7 @@ export function BrowseView({
     }
     if (tab === 'yt' && onYtSearch && ytFetchedRef.current !== search.trim()) {
       ytFetchedRef.current = search.trim()
-      onYtSearch(search.trim())   // ← add
+      onYtSearch(search.trim())
     }
   }
 
@@ -146,12 +152,21 @@ export function BrowseView({
 
   const { play, searchAndPlay, connect, connected } = useSpotifyContext()
 
+
   const handlePlay = async (e: React.MouseEvent, track: Track) => {
     e.stopPropagation()
-    if (!connected) { await connect(); return }
     setPlayingId(track.id)
     onPlayingIdChange?.(track.id)
     onSignal?.({ type: 'play', track, weight: 1.0 })
+
+    if (onPlay) {
+      // Router handles source selection — Spotify, YouTube, fallback, etc.
+      await onPlay(track)
+      return
+    }
+
+    // ── Legacy fallback (no router wired) ──────────────────────────────────────
+    if (!connected) { await connect(); return }
     try {
       if (track.spotifyTrackId) {
         await play(`spotify:track:${track.spotifyTrackId}`)
@@ -164,6 +179,8 @@ export function BrowseView({
       setPlayingId(null)
     }
   }
+
+
 
   const filtered = tracks
 
@@ -228,7 +245,7 @@ export function BrowseView({
 
   const renderCard = (track: Track) => {
     const accentColor = hashColor(track.id)
-    const isThisPlaying = playingId === track.id
+    const isThisPlaying = playbackState?.trackId === track.id && playbackState?.playing
     const isMbTrack = !track.manifestCid
     const durationStr = track.durationMs
       ? `${Math.floor(track.durationMs / 60000)}:${String(Math.floor((track.durationMs % 60000) / 1000)).padStart(2, '0')}`
@@ -454,7 +471,7 @@ export function BrowseView({
         </div>
       )}
 
-      {/* {showAmbientBar && (
+      {showAmbientBar && (
         <div style={{
           display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', margin: '0 0 8px',
           borderRadius: reasonExpanded ? '6px 6px 0 0' : 6, fontSize: 11, letterSpacing: '0.04em',
@@ -485,7 +502,7 @@ export function BrowseView({
           background: 'rgba(167,139,250,0.05)', border: '1px solid rgba(167,139,250,0.12)', borderTop: 'none',
           fontSize: 11, lineHeight: 1.6, color: 'var(--fg3, #c4b5fd)', fontStyle: 'italic',
         }}>{ambientLastReason}</div>
-      )} */}
+      )}
 
       {/* Library tab */}
       {activeTab === 'library' && (
@@ -506,6 +523,23 @@ export function BrowseView({
             <div className="empty-state">
               <div className="empty-icon">♪</div>
               <p>{search ? 'No tracks in your library match.' : 'No tracks published yet.'}</p>
+              {search && onYtSearch && (
+                <button
+                  onClick={() => handleTabSwitch('yt')}
+                  style={{
+                    marginTop: 10, background: 'none', border: '1px solid rgba(248,113,113,0.25)',
+                    borderRadius: 4, color: 'rgba(248,113,113,0.7)', fontSize: 10,
+                    letterSpacing: '0.07em', textTransform: 'uppercase', padding: '4px 12px',
+                    cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5,
+                    transition: 'all 0.15s ease', fontFamily: 'inherit',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(248,113,113,0.5)'; e.currentTarget.style.color = 'rgba(248,113,113,1)' }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(248,113,113,0.25)'; e.currentTarget.style.color = 'rgba(248,113,113,0.7)' }}
+                >
+                  <YtIcon size={9} />
+                  search youtube
+                </button>
+              )}
             </div>
           )}
 

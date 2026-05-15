@@ -185,7 +185,7 @@ textarea {
 
 .header {
   height: var(--header-h);
-  -webkit-app-region: drag;
+  display: contents;
 }
 
 .header button,
@@ -203,6 +203,7 @@ textarea {
   height: var(--header-h);
   display: flex;
   align-items: center;
+  -webkit-app-region: drag;
 }
 
 .header-brand {
@@ -616,21 +617,12 @@ textarea {
 
 .browse-toolbar {
   display: flex;
-  align-items: center;
-  gap: var(--sp-4);
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sp-3);
   margin-bottom: var(--sp-2);
   padding-bottom: var(--sp-4);
   border-bottom: 1px solid var(--glass-edge);
-}
-
-.browse-count {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--fg4);
-  flex-shrink: 0;
-  margin-left: auto;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
 }
 
 .search-box {
@@ -638,7 +630,7 @@ textarea {
   align-items: center;
   gap: var(--sp-2);
   flex: 1;
-  max-width: 320px;
+  /* remove max-width: 320px */
   border-bottom: 1px solid var(--glass-edge);
   padding-bottom: 4px;
   transition: border-color var(--t1);
@@ -927,7 +919,7 @@ textarea {
    ─────────────────────────────────────────────────────────────────────────── */
 .track-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(240px, 1fr));
+  grid-template-columns: repeat(4, minmax(240px, 1fr));
   gap: 1px;
   background: var(--glass-edge);
   border: 1px solid var(--glass-edge);

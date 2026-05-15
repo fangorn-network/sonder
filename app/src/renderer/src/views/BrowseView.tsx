@@ -61,6 +61,7 @@ interface BrowseViewProps {
   onFallbackClear?: () => void
   fangorn?: Fangorn | null
   publisherAddress?: Hex | null
+  contextBar?: React.ReactNode
 }
 
 async function fetchAlbumArt(title: string, artist: string): Promise<string | null> {
@@ -95,7 +96,7 @@ export function BrowseView({
   ambientStatus, ambientQueueSize, ambientLastReason,
   showSpotifyNudge, onSpotifyNudgeConnect, onSpotifyNudgeDismiss,
   fallbackTracks, fallbackLoading, onFallbackSearch, onFallbackClear,
-  fangorn, publisherAddress,
+  fangorn, publisherAddress, contextBar
 }: BrowseViewProps) {
   const sentinelRef = useRef<HTMLDivElement>(null)
   const [playingId, setPlayingId] = useState<string | null>(null)
@@ -333,7 +334,7 @@ export function BrowseView({
     <div className="browse-view">
 
       <div className="browse-toolbar">
-        <div className="search-box" style={{ flex: 1 }}>
+        <div className="search-box">
           <span className="search-icon">⌕</span>
           <input
             className="search-input"
@@ -345,6 +346,7 @@ export function BrowseView({
           />
           {search && <button className="search-clear" onClick={() => setSearch('')}>✕</button>}
         </div>
+        {contextBar}
       </div>
 
       {seeding && (

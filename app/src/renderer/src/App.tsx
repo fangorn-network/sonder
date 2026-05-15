@@ -21,12 +21,16 @@ import { useAmbientAgent } from './hooks/useAmbientAgent'
 import type { KernelSnapshot } from './hooks/useAmbientAgent'
 import type { TasteSignal } from './types'
 import { ConnectWallet } from './components/ConnectWallet'
-import { KernelVisualizer, type SessionEvent } from './kernel/Visualizer'
+import { type SessionEvent } from './kernel/Visualizer'
 import { useChromaSync } from './hooks/useChromaSync'
 import KernelDebugHUD from './kernel/HUD'
+import { AgentContext, useAgentContext } from './context/useAgentContext'
+import { rankWithContext } from './context/ContextScoring'
+import { ContextBar } from './views/ContextBar'
 
 const SNAPSHOT_HISTORY_DEPTH = 5
 const SCROLL_THRESHOLD = 10
+const RECENTLY_PLAYED_MAX = 8
 const MB_USER_AGENT = 'SOND3R/1.0.0 (https://fangorn.network)'
 
 window.addEventListener('scroll', () => {
@@ -37,17 +41,6 @@ window.addEventListener('scroll', () => {
 export default function App() {
 
   const [sessionHistory, setSessionHistory] = useState<SessionEvent[]>([])
-
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'k' && (e.metaKey || e.ctrlKey)) {
-        e.preventDefault()
-        // setShowKernelDebug(v => !v)
-      }
-    }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [])
 
   const { ready, authenticated, login } = usePrivy()
   const { config, hasConfig, saveConfig } = useSpotifyConfig()
@@ -69,9 +62,22 @@ export default function App() {
   const {
     tracks, loading, loadingMore, error, hasMore, loadMore,
     applyKernelQuery, search, setSearch,
-    allGenres, allMoods, allContexts,
+    allGenres, allMoods, allContexts, allThemes,
     chromaReady, seeding, retryConnect,
   } = useChroma({ genreFilter, moodFilter, contextFilter })
+
+  // ─── Agent context ─────────────────────────────────────────────────────────
+
+  const { sendMessage } = useFangornAgent()
+
+  const contextHints = useMemo(() => ({
+    moods: allMoods,
+    contexts: allContexts,
+    genres: allGenres,
+    themes: allThemes,
+  }), [allMoods, allContexts, allGenres, allThemes])
+
+  const agentContext = useAgentContext(sendMessage, contextHints)
 
   // ─── MusicBrainz augmented search ─────────────────────────────────────────
 
@@ -98,26 +104,16 @@ export default function App() {
     setFallbackTracks([])
 
     try {
-      const headers = {
-        'User-Agent': MB_USER_AGENT,
-      }
+      const headers = { 'User-Agent': MB_USER_AGENT }
 
       const buildRecordingQuery = (input: string) => {
         const q = input.trim()
         const parts = q.split(/\s+/)
-
-        // Heuristic:
-        // if query is long enough, assume the last 2 words are the artist
-        // e.g. "daylight aesop rock"
-        // => recording:"daylight" AND artist:"aesop rock"
         if (parts.length >= 3) {
           const artist = parts.slice(-2).join(' ')
           const title = parts.slice(0, -2).join(' ')
-
           return `recording:"${title}" AND artist:"${artist}"`
         }
-
-        // fallback to recording title search
         return `recording:"${q}"`
       }
 
@@ -125,24 +121,13 @@ export default function App() {
       const fallbackQuery = `recording:"${query.trim()}"`
 
       const [structuredResp, fallbackResp] = await Promise.all([
-        fetch(
-          `https://musicbrainz.org/ws/2/recording?query=${encodeURIComponent(structuredQuery)}&limit=25&fmt=json`,
-          { headers }
-        ),
-        fetch(
-          `https://musicbrainz.org/ws/2/recording?query=${encodeURIComponent(fallbackQuery)}&limit=10&fmt=json`,
-          { headers }
-        ),
+        fetch(`https://musicbrainz.org/ws/2/recording?query=${encodeURIComponent(structuredQuery)}&limit=25&fmt=json`, { headers }),
+        fetch(`https://musicbrainz.org/ws/2/recording?query=${encodeURIComponent(fallbackQuery)}&limit=10&fmt=json`, { headers }),
       ])
 
       const [structuredData, fallbackData] = await Promise.all([
-        structuredResp.ok
-          ? structuredResp.json()
-          : { recordings: [] },
-
-        fallbackResp.ok
-          ? fallbackResp.json()
-          : { recordings: [] },
+        structuredResp.ok ? structuredResp.json() : { recordings: [] },
+        fallbackResp.ok ? fallbackResp.json() : { recordings: [] },
       ])
 
       const toTrack = (rec: any): Track => {
@@ -150,19 +135,11 @@ export default function App() {
           .map((c: any) => c.name ?? c.artist?.name ?? '')
           .filter(Boolean)
           .join(', ') || 'Unknown Artist'
-
         const releaseDate = rec.releases?.[0]?.date ?? ''
-        const yearInt = releaseDate
-          ? parseInt(releaseDate.split('-')[0], 10)
-          : NaN
-
+        const yearInt = releaseDate ? parseInt(releaseDate.split('-')[0], 10) : NaN
         return {
-          id: rec.id,
-          trackId: rec.id,
-          owner: '',
-          manifestCid: '',
-          title: rec.title,
-          artist,
+          id: rec.id, trackId: rec.id, owner: '', manifestCid: '',
+          title: rec.title, artist,
           spotifyTrackId: null,
           year: isNaN(yearInt) ? null : yearInt,
           durationMs: rec.length ?? null,
@@ -171,17 +148,9 @@ export default function App() {
 
       const seen = new Set<string>()
       const merged: Track[] = []
-
-      for (const rec of [
-        ...(structuredData.recordings ?? []),
-        ...(fallbackData.recordings ?? []),
-      ]) {
-        if (!seen.has(rec.id)) {
-          seen.add(rec.id)
-          merged.push(toTrack(rec))
-        }
+      for (const rec of [...(structuredData.recordings ?? []), ...(fallbackData.recordings ?? [])]) {
+        if (!seen.has(rec.id)) { seen.add(rec.id); merged.push(toTrack(rec)) }
       }
-
       setFallbackTracks(merged)
     } catch (e) {
       console.warn('[mb-fallback] search failed:', e)
@@ -191,11 +160,10 @@ export default function App() {
     }
   }, [])
 
-  // ─── end MusicBrainz augment ───────────────────────────────────────────────
+  // ─── Recommendations ───────────────────────────────────────────────────────
 
   const [recommendedTracks, setRecommendedTracks] = useState<RecommendedTracks | null>(null)
   const [recommendLoading, setRecommendLoading] = useState(false)
-  const { sendMessage } = useFangornAgent()
 
   type AutoplayMode = 'none' | 'sequential' | 'agent' | 'similar'
   const [autoplayMode, setAutoplayMode] = useState<AutoplayMode>('agent')
@@ -223,10 +191,10 @@ export default function App() {
     uncertaintyHint: undefined,
   }), [entropy, kernel])
 
-  const ambientAgent = useAmbientAgent({
-    kernel: kernelSnapshot,
-    enabled: autoplayMode === 'agent',
-  })
+  // const ambientAgent = useAmbientAgent({
+  //   kernel: kernelSnapshot,
+  //   enabled: autoplayMode === 'agent',
+  // })
 
   const [visible, setVisible] = useState(true)
   useEffect(() => {
@@ -237,11 +205,12 @@ export default function App() {
 
   useChromaSync({ enabled: visible })
 
-  useEffect(() => {
-    if (autoplayMode === 'agent') ambientAgent.prime()
-  }, [autoplayMode]) // eslint-disable-line react-hooks/exhaustive-deps
+  // useEffect(() => {
+  //   if (autoplayMode === 'agent') ambientAgent.prime()
+  // }, [autoplayMode]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ─── Signals ──────────────────────────────────────────────────────────────
+  // ─── Signals ───────────────────────────────────────────────────────────────
+
   const handleSignal = useCallback(async (signal: TasteSignal) => {
     const { type, track } = signal
     if (type !== 'play' && type !== 'skip') return
@@ -253,6 +222,7 @@ export default function App() {
         : await kernel.embedText(label)
 
       const meta = {
+        trackId: track.id,
         artistId: track.artist,
         genres: (track as any).genres ?? [],
         moods: (track as any).moods ?? [],
@@ -272,45 +242,79 @@ export default function App() {
         entropySnapshot: kernel.state.entropy,
       }])
 
-      // Re-rank the browse grid against the kernel's new position
       const q = kernel.getQueryVector()
-      applyKernelQuery(Array.from(q))
+      applyKernelQuery(Array.from(q), true)   // silent = no seeding banner
 
     } catch (e) {
       console.warn('[app] kernel signal failed:', e)
     }
   }, [kernel, pushPlay, pushSkip, applyKernelQuery])
 
-  // ─── Playback ─────────────────────────────────────────────────────────────
+  // ─── Playback ──────────────────────────────────────────────────────────────
+
   const recentlyPlayedIdsRef = useRef<Set<string>>(new Set())
-  const RECENTLY_PLAYED_MAX = 8
 
+  /**
+   * 
+   */
   const handleNext = useCallback(() => {
-    const tracks = filteredTracksRef.current
-    if (!tracks.length) return
+    const raw = filteredTracksRef.current
+    if (!raw.length) return
 
-    // prefer: kernel-ordered, not current, not recently played
+    // add currently playing to recency window before searching
+    if (playingIdRef.current) {
+      recentlyPlayedIdsRef.current.add(playingIdRef.current)
+      if (recentlyPlayedIdsRef.current.size > RECENTLY_PLAYED_MAX) {
+        const oldest = recentlyPlayedIdsRef.current.values().next().value
+        recentlyPlayedIdsRef.current.delete(oldest!)
+      }
+    }
+
+    // re-rank using active context (no-op when context is null)
+    const ranked = rankWithContext(raw, agentContext.context)
+
     const next =
-      tracks.find(t =>
+      ranked.find(t =>
         t.id !== playingIdRef.current &&
         !recentlyPlayedIdsRef.current.has(t.id)
+        // && !kernel.vetoedIds.has(t.id)
       ) ??
-      // fallback: just not current (all candidates were recently played)
-      tracks.find(t => t.id !== playingIdRef.current)
+      ranked.find(t => t.id !== playingIdRef.current)
 
     if (!next) return
-
-    // add to recency window, evict oldest when full
-    recentlyPlayedIdsRef.current.add(next.id)
-    if (recentlyPlayedIdsRef.current.size > RECENTLY_PLAYED_MAX) {
-      const oldest = recentlyPlayedIdsRef.current.values().next().value
-      recentlyPlayedIdsRef.current.delete(oldest!)
-    }
 
     playingIdRef.current = next.id
     handleSignal({ type: 'play', track: next, weight: 1.0 })
     spotifyRef.current?.searchAndPlay(`${next.title} ${next.artist}`)
-  }, [handleSignal])
+  }, [handleSignal, agentContext.context])//, kernel.vetoedIds])
+
+
+  const handleNextRef = useRef(handleNext)
+  useEffect(() => { handleNextRef.current = handleNext }, [handleNext])
+
+  // handle agentic autoplay
+  // Sync entropy from context overrides; restore default when context is cleared
+  const prevContextRef = useRef<AgentContext | null>(null)
+  useEffect(() => {
+    setEntropy(agentContext.context?.kernelOverrides?.entropy ?? 0.2)
+
+    // Auto-play top recommendation the moment context becomes active
+    if (agentContext.context !== null && prevContextRef.current === null) {
+      // be sure to call the latest closure
+      handleNextRef.current()
+    }
+
+    prevContextRef.current = agentContext.context
+  }, [agentContext.context]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleSkip = useCallback(() => {
+    // fire skip signal for currently playing track before moving on
+    const currentTrack = filteredTracksRef.current.find(t => t.id === playingIdRef.current)
+    if (currentTrack) {
+      handleSignal({ type: 'skip', track: currentTrack, weight: 1.0 })
+    }
+    handleNext()
+  }, [handleSignal, handleNext])
 
   const handlePrev = useCallback(() => {
     const tracks = filteredTracksRef.current
@@ -327,22 +331,6 @@ export default function App() {
     handleNext()
   }, [autoplayMode, handleNext])
 
-  // const handleTrackEnd = useCallback(() => {
-  //   if (autoplayMode === 'none') return
-  //   if (autoplayMode === 'sequential') { handleNext(); return }
-  //   if (autoplayMode === 'agent') {
-  //     const next = ambientAgent.consume()
-  //     if (next) {
-  //       playingIdRef.current = next.id
-  //       spotifyRef.current?.searchAndPlay(`${next.title} ${next.artist}`)
-  //     } else {
-  //       console.warn('[ambient] queue empty on track end, falling back to sequential')
-  //       handleNext()
-  //     }
-  //     return
-  //   }
-  // }, [autoplayMode, handleNext, ambientAgent])
-
   const spotify = useSpotify({ onTrackEnd: handleTrackEnd })
   useEffect(() => { spotifyRef.current = spotify }, [spotify])
 
@@ -351,12 +339,11 @@ export default function App() {
     seededRef.current = true
     kernel.seedFromSpotify(spotify.spotifyFetch).then((q) => {
       if (!q) return
-      applyKernelQuery(Array.from(q))
+      applyKernelQuery(Array.from(q), true)
     })
   }, [spotify.connected]) // eslint-disable-line react-hooks/exhaustive-deps
 
-
-  // ─── Connectors callbacks ──────────────────────────────────────────────────
+  // ─── Callbacks ─────────────────────────────────────────────────────────────
 
   const handleTrackClick = useCallback((track: Track, color: string) => {
     recentlyPlayedIdsRef.current.clear()
@@ -367,12 +354,6 @@ export default function App() {
     saveConfig(cfg)
     setBooted(true)
   }, [saveConfig])
-
-  const handleConnectorsBack = useCallback(() => {
-    setShowConnectors(false)
-  }, [])
-
-  // ─── Misc ──────────────────────────────────────────────────────────────────
 
   const handleBooted = useCallback(() => { setBooted(true) }, [])
 
@@ -434,7 +415,7 @@ export default function App() {
   const nowPlayingOpen = nowPlaying !== null
 
   return (
-    <SpotifyProvider value={{ ...spotify, onNext: handleNext, onPrev: handlePrev, onSignal: handleSignal }}>
+    <SpotifyProvider value={{ ...spotify, onNext: handleSkip, onPrev: handlePrev, onSignal: handleSignal }}>
       <PlayerProvider tracks={tracks}>
         <div className="app">
           <header className="header">
@@ -462,32 +443,10 @@ export default function App() {
             history={sessionHistory}
           />
 
-
           <main className="main">
             {showConnectors && (
               <ConnectorsView onSpotifyConfigSaved={handleSpotifyConfigSaved} />
             )}
-            {/* {showKernelDebug && createPortal(
-              <div style={{
-                position: 'fixed',
-                bottom: 72,          // clear the PlayerBar
-                right: 16,
-                width: 440,
-                maxHeight: 'calc(100vh - 100px)',
-                zIndex: 200,
-                borderRadius: 12,
-                overflow: 'hidden',
-                boxShadow: '0 8px 40px rgba(0,0,0,0.6), 0 0 0 1px #1a2540',
-                backdropFilter: 'blur(12px)',
-              }}>
-                <KernelVisualizer
-                  state={kernel.state}
-                  history={sessionHistory}
-                  style={{ height: '100%', borderRadius: 12 }}
-                />
-              </div>,
-              document.body
-            )} */}
             {!showConnectors && view === 'Discover' && (
               <BrowseView
                 tracks={tracks}
@@ -508,7 +467,6 @@ export default function App() {
                 onFilteredChange={f => { filteredTracksRef.current = f }}
                 onPlayingIdChange={id => { playingIdRef.current = id }}
                 onSignal={handleSignal}
-                // onTrackClick={(track, color) => setNowPlaying({ track, color })}
                 onTrackClick={handleTrackClick}
                 genreFilter={genreFilter}
                 moodFilter={moodFilter}
@@ -519,9 +477,9 @@ export default function App() {
                 allGenres={allGenres}
                 allMoods={allMoods}
                 allContexts={allContexts}
-                ambientStatus={ambientAgent.status}
-                ambientQueueSize={ambientAgent.queue.length}
-                ambientLastReason={ambientAgent.lastReason ?? undefined}
+                // ambientStatus={ambientAgent.status}
+                // ambientQueueSize={ambientAgent.queue.length}
+                // ambientLastReason={ambientAgent.lastReason ?? undefined}
                 showSpotifyNudge={!hasConfig && !nudgeDismissed}
                 onSpotifyNudgeConnect={() => setShowConnectors(true)}
                 onSpotifyNudgeDismiss={dismissNudge}
@@ -529,6 +487,15 @@ export default function App() {
                 fallbackLoading={fallbackLoading}
                 onFallbackSearch={handleMusicBrainzSearch}
                 onFallbackClear={handleFallbackClear}
+                contextBar={
+                  <ContextBar
+                    context={agentContext.context}
+                    loading={agentContext.loading}
+                    error={agentContext.error}
+                    onActivate={agentContext.activate}
+                    onClear={agentContext.clear}
+                  />
+                }
               />
             )}
             {!showConnectors && view === 'Agent' && <AgentView />}

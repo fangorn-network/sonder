@@ -493,7 +493,7 @@ export function onSkip(
   const artistId = track.artistId
   const artists1 = {
     ...state.artists,
-    [artistId]: beta_artist * (state.artists[artistId] ?? 0) + (1 - beta_artist) * (-0.5),
+    [artistId]: beta_artist * (state.artists[artistId] ?? 0) + (1 - beta_artist) * (-1.0),
   }
 
   // ── Entropy ───────────────────────────────────────────────────────────────

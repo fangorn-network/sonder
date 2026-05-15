@@ -114,10 +114,11 @@ export interface UseChromaResult {
   loadMore: () => void
   search: string
   setSearch: (s: string) => void
-  applyKernelQuery: (embedding: number[]) => void
+  applyKernelQuery: (embedding: number[], silent: boolean) => void
   allGenres: string[]
   allMoods: string[]
   allContexts: string[]
+  allThemes: string[]
   chromaReady: boolean
   seeding: boolean
   retryConnect: () => void
@@ -149,6 +150,11 @@ export function useChroma({
   const kernelActiveRef = useRef(false)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const readyRef = useRef(false)
+
+  const [allGenres, setAllGenres] = useState<string[]>([])
+  const [allMoods, setAllMoods] = useState<string[]>([])
+  const [allContexts, setAllContexts] = useState<string[]>([])
+  const [allThemes, setAllThemes] = useState<string[]>([])
 
   useEffect(() => { searchRef.current = search }, [search])
   useEffect(() => { genreRef.current = genreFilter }, [genreFilter])
@@ -252,6 +258,26 @@ export function useChroma({
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
   }, [search, genreFilter, moodFilter, contextFilter, themeFilter, fetchPage, buildQuery])
 
+
+  // load genres, moods, and contexts
+  useEffect(() => {
+    if (tracks.length === 0) return
+    const genres = new Set<string>()
+    const moods = new Set<string>()
+    const contexts = new Set<string>()
+    const themes = new Set<string>()
+    for (const t of tracks) {
+      for (const g of (t as any).genres ?? []) genres.add(g)
+      for (const m of (t as any).moods ?? []) moods.add(m)
+      for (const c of (t as any).contexts ?? []) contexts.add(c)
+      for (const th of (t as any).themes ?? []) themes.add(th)
+    }
+    setAllGenres([...genres].sort())
+    setAllMoods([...moods].sort())
+    setAllContexts([...contexts].sort())
+    setAllThemes([...themes].sort())
+  }, [tracks])
+
   // ── Load more ─────────────────────────────────────────────────────────────
 
   const loadMore = useCallback(() => {
@@ -294,7 +320,7 @@ export function useChroma({
   return {
     tracks, loading, loadingMore, error, hasMore, loadMore,
     search, setSearch, applyKernelQuery,
-    allGenres: [], allMoods: [], allContexts: [],
+    allGenres, allMoods, allContexts, allThemes,
     chromaReady, seeding, retryConnect,
   }
 }

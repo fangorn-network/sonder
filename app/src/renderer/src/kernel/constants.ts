@@ -18,7 +18,7 @@ export const DEFAULTS = {
     temp_max: 4.0,   // resampling temperature at entropy=1
     // Categorical taste
     alpha_taste: 0.15,   // accumulation rate per play
-    taste_decay: 0.02,   // per-play decay on all taste weights
+    taste_decay: 0.05,   // per-play decay on all taste weights
     skip_taste_pen: 0.25,  // penalty subtracted from skipped tags
 
     // Artist affinity

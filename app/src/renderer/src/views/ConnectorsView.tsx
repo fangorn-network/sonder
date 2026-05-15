@@ -48,9 +48,9 @@ type ConnectorId = 'spotify' | 'pinata'
 // ─── Storage keys ─────────────────────────────────────────────────────────────
 
 const SK = {
-  SPOTIFY_CREDS:  'sond3r:spotify:credentials',
+  SPOTIFY_CREDS: 'sond3r:spotify:credentials',
   SPOTIFY_TOKENS: 'sond3r:spotify:tokens',
-  PINATA_CONFIG:  'sond3r:pinata:config',
+  PINATA_CONFIG: 'sond3r:pinata:config',
 } as const
 
 // ─── PKCE helpers (Web Crypto API, zero deps) ─────────────────────────────────
@@ -91,7 +91,7 @@ const SPOTIFY_SCOPES = [
 
 const CONNECTOR_META: Record<ConnectorId, { label: string; hint: string }> = {
   spotify: { label: 'Spotify', hint: 'playback' },
-  pinata:  { label: 'Pinata',  hint: 'storage'  },
+  pinata: { label: 'Pinata', hint: 'storage' },
 }
 
 // ─── Root ─────────────────────────────────────────────────────────────────────
@@ -144,7 +144,7 @@ export function ConnectorsView({ onSpotifyConfigSaved }: ConnectorsViewProps) {
       {/* ── panel content ───────────────────────────────────────────────────── */}
       <div style={{ flex: 1, overflow: 'auto', padding: 'var(--sp-6)' }}>
         {active === 'spotify' && <SpotifyPanel onConfigSaved={onSpotifyConfigSaved} />}
-        {active === 'pinata'  && <PinataPanel />}
+        {active === 'pinata' && <PinataPanel />}
       </div>
 
     </div>
@@ -154,16 +154,16 @@ export function ConnectorsView({ onSpotifyConfigSaved }: ConnectorsViewProps) {
 // ─── Spotify panel ────────────────────────────────────────────────────────────
 
 function SpotifyPanel({ onConfigSaved }: { onConfigSaved?: (cfg: SpotifyCredentials) => void }) {
-  const [creds,  setCreds]  = useState<SpotifyCredentials | null>(() => safeGet(SK.SPOTIFY_CREDS))
+  const [creds, setCreds] = useState<SpotifyCredentials | null>(() => safeGet(SK.SPOTIFY_CREDS))
   const [tokens, setTokens] = useState<SpotifyTokens | null>(() => safeGet(SK.SPOTIFY_TOKENS))
 
-  const [clientId,      setClientId]      = useState(creds?.clientId      ?? '')
-  const [clientSecret,  setClientSecret]  = useState(creds?.clientSecret  ?? '')
-  const [redirectUri,   setRedirectUri]   = useState(creds?.redirectUri    ?? DEFAULT_REDIRECT_URI)
-  const [showSecret,    setShowSecret]    = useState(false)
-  const [credsOpen,    setCredsOpen]    = useState(!creds)
-  const [oauthPhase,   setOauthPhase]   = useState<'idle' | 'pending' | 'error'>('idle')
-  const [error,        setError]        = useState<string | null>(null)
+  const [clientId, setClientId] = useState(creds?.clientId ?? '')
+  const [clientSecret, setClientSecret] = useState(creds?.clientSecret ?? '')
+  const [redirectUri, setRedirectUri] = useState(creds?.redirectUri ?? DEFAULT_REDIRECT_URI)
+  const [showSecret, setShowSecret] = useState(false)
+  const [credsOpen, setCredsOpen] = useState(!creds)
+  const [oauthPhase, setOauthPhase] = useState<'idle' | 'pending' | 'error'>('idle')
+  const [error, setError] = useState<string | null>(null)
 
   // ── Token refresh ──────────────────────────────────────────────────────────
 
@@ -186,10 +186,10 @@ function SpotifyPanel({ onConfigSaved }: { onConfigSaved?: (cfg: SpotifyCredenti
     }
     const data = await res.json()
     const next: SpotifyTokens = {
-      accessToken:  data.access_token,
+      accessToken: data.access_token,
       refreshToken: data.refresh_token ?? refreshToken,
-      expiresAt:    Date.now() + data.expires_in * 1000,
-      scope:        data.scope ?? '',
+      expiresAt: Date.now() + data.expires_in * 1000,
+      scope: data.scope ?? '',
     }
     safeSave(SK.SPOTIFY_TOKENS, next)
     setTokens(next)
@@ -208,9 +208,9 @@ function SpotifyPanel({ onConfigSaved }: { onConfigSaved?: (cfg: SpotifyCredenti
   // ── Handlers ───────────────────────────────────────────────────────────────
 
   const saveCreds = () => {
-    const id     = clientId.trim()
+    const id = clientId.trim()
     const secret = clientSecret.trim()
-    const redir  = redirectUri.trim() || DEFAULT_REDIRECT_URI
+    const redir = redirectUri.trim() || DEFAULT_REDIRECT_URI
     if (!id || !secret) { setError('Both fields are required.'); return }
     const next = { clientId: id, clientSecret: secret, redirectUri: redir }
     safeSave(SK.SPOTIFY_CREDS, next)
@@ -225,10 +225,10 @@ function SpotifyPanel({ onConfigSaved }: { onConfigSaved?: (cfg: SpotifyCredenti
     setError(null)
     setOauthPhase('pending')
 
-    const verifier   = await makeVerifier()
-    const challenge  = await makeChallenge(verifier)
-    const state      = makeState()
-    const redir      = creds.redirectUri || DEFAULT_REDIRECT_URI
+    const verifier = await makeVerifier()
+    const challenge = await makeChallenge(verifier)
+    const state = makeState()
+    const redir = creds.redirectUri || DEFAULT_REDIRECT_URI
 
     const authUrl = 'https://accounts.spotify.com/authorize?' + new URLSearchParams({
       client_id: creds.clientId, response_type: 'code', redirect_uri: redir,
@@ -239,13 +239,13 @@ function SpotifyPanel({ onConfigSaved }: { onConfigSaved?: (cfg: SpotifyCredenti
       const callbackUrl: string = await (window as any).electron.ipcRenderer.invoke(
         'spotify:oauth', authUrl, redir,
       )
-      const url  = new URL(callbackUrl)
+      const url = new URL(callbackUrl)
       const code = url.searchParams.get('code')
-      const err  = url.searchParams.get('error')
+      const err = url.searchParams.get('error')
 
-      if (err)                                     throw new Error(`Spotify denied: ${err}`)
+      if (err) throw new Error(`Spotify denied: ${err}`)
       if (url.searchParams.get('state') !== state) throw new Error('State mismatch — possible CSRF')
-      if (!code)                                   throw new Error('No authorization code received')
+      if (!code) throw new Error('No authorization code received')
 
       const res = await fetch('https://accounts.spotify.com/api/token', {
         method: 'POST',
@@ -280,7 +280,7 @@ function SpotifyPanel({ onConfigSaved }: { onConfigSaved?: (cfg: SpotifyCredenti
   }
 
   const isExpired = !!tokens && tokens.expiresAt < Date.now()
-  const isActive  = !!tokens && !isExpired
+  const isActive = !!tokens && !isExpired
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -412,7 +412,7 @@ function SpotifyPanel({ onConfigSaved }: { onConfigSaved?: (cfg: SpotifyCredenti
                 overflow: 'hidden', marginBottom: 'var(--sp-4)',
               }}>
                 <StatCell label="Expires" value={new Date(tokens!.expiresAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} />
-                <StatCell label="Scopes"  value={`${tokens!.scope.split(' ').length} granted`} />
+                <StatCell label="Scopes" value={`${tokens!.scope.split(' ').length} granted`} />
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
                 <button
@@ -466,20 +466,25 @@ function SpotifyPanel({ onConfigSaved }: { onConfigSaved?: (cfg: SpotifyCredenti
 function PinataPanel() {
   const [config, setConfig] = useState<PinataConfig | null>(() => safeGet(SK.PINATA_CONFIG))
 
-  const [jwt,       setJwt]       = useState(config?.jwt     ?? '')
-  const [gateway,   setGateway]   = useState(config?.gateway ?? '')
-  const [showJwt,   setShowJwt]   = useState(false)
+  const [jwt, setJwt] = useState(config?.jwt ?? '')
+  const [gateway, setGateway] = useState(config?.gateway ?? '')
+  const [showJwt, setShowJwt] = useState(false)
   const [testPhase, setTestPhase] = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle')
-  const [error,     setError]     = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   const save = () => {
     const j = jwt.trim(); const g = gateway.trim()
-    if (!j)                     { setError('JWT is required.'); return }
-    if (!j.startsWith('eyJ'))   { setError('JWT looks malformed.'); return }
-    if (!g)                     { setError('Gateway URL is required.'); return }
+    if (!j) { setError('JWT is required.'); return }
+    if (!j.startsWith('eyJ')) { setError('JWT looks malformed.'); return }
+    if (!g) { setError('Gateway URL is required.'); return }
     if (!g.startsWith('https')) { setError('Gateway must be HTTPS.'); return }
     const next = { jwt: j, gateway: g.replace(/\/$/, '') }
     safeSave(SK.PINATA_CONFIG, next)
+    // we need to dispatch the event since we are in electron and don't have same-window reactivity
+    window.dispatchEvent(new StorageEvent('storage', { 
+      key: 'sond3r:pinata:config', 
+      newValue: JSON.stringify(next) 
+    }))
     setConfig(next); setError(null); setTestPhase('idle')
   }
 
@@ -506,12 +511,12 @@ function PinataPanel() {
 
   const testLabel =
     testPhase === 'testing' ? 'testing…' :
-    testPhase === 'ok'      ? '✓ authenticated' :
-    testPhase === 'fail'    ? '✗ failed' : 'test connection'
+      testPhase === 'ok' ? '✓ authenticated' :
+        testPhase === 'fail' ? '✗ failed' : 'test connection'
 
   const testAccent =
-    testPhase === 'ok'   ? { color: 'var(--success)' } :
-    testPhase === 'fail' ? { color: 'var(--err)' }     : {}
+    testPhase === 'ok' ? { color: 'var(--success)' } :
+      testPhase === 'fail' ? { color: 'var(--err)' } : {}
 
   return (
     <div style={{ maxWidth: 540 }}>
@@ -639,8 +644,8 @@ function ConnectionDot({ active, pending, expired, label }: {
 }) {
   const color =
     pending ? 'var(--fg3)' :
-    expired ? 'var(--err)' :
-    active  ? 'var(--success)' : 'var(--fg4)'
+      expired ? 'var(--err)' :
+        active ? 'var(--success)' : 'var(--fg4)'
 
   const text = label ??
     (pending ? 'pending…' : expired ? 'expired' : active ? 'connected' : 'not connected')

@@ -27,6 +27,7 @@ import KernelDebugHUD from './kernel/HUD'
 import { AgentContext, useAgentContext } from './context/useAgentContext'
 import { rankWithContext } from './context/ContextScoring'
 import { ContextBar } from './views/ContextBar'
+import { useYouTubeSearch } from './hooks/useYoutubeSearch'
 
 const SNAPSHOT_HISTORY_DEPTH = 5
 const SCROLL_THRESHOLD = 10
@@ -65,6 +66,9 @@ export default function App() {
     allGenres, allMoods, allContexts, allThemes,
     chromaReady, seeding, retryConnect,
   } = useChroma({ genreFilter, moodFilter, contextFilter })
+
+  // youtube search 
+  const { ytTracks, ytLoading, search: ytSearch, clear: ytClear } = useYouTubeSearch()
 
   // ─── Agent context ─────────────────────────────────────────────────────────
 
@@ -496,6 +500,10 @@ export default function App() {
                     onClear={agentContext.clear}
                   />
                 }
+                ytTracks={ytTracks}
+                ytLoading={ytLoading}
+                onYtSearch={ytSearch}
+                onYtClear={ytClear}
               />
             )}
             {!showConnectors && view === 'Agent' && <AgentView />}
@@ -514,6 +522,7 @@ export default function App() {
               trackColor={nowPlaying !== 'player' ? nowPlaying.color : undefined}
               onFilter={(type, value) => { handleFilter(type, value); setNowPlaying(null) }}
               onCallAgent={handleFindSimilar}
+              onTrackSelect={(track, color) => setNowPlaying({ track, color: color ?? '' })}  // ← add
             />,
             document.body
           )}

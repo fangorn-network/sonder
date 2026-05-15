@@ -18,7 +18,7 @@ function hashColor(str: string): string {
   return GENRE_PALETTE[Math.abs(h) % GENRE_PALETTE.length]
 }
 
-type SearchTab = 'library' | 'mb'
+type SearchTab = 'library' | 'mb' | 'yt'
 
 interface BrowseViewProps {
   tracks: Track[]
@@ -62,6 +62,12 @@ interface BrowseViewProps {
   fangorn?: Fangorn | null
   publisherAddress?: Hex | null
   contextBar?: React.ReactNode
+
+  // yt search
+  ytTracks?: Track[]
+  ytLoading?: boolean
+  onYtSearch?: (query: string) => void
+  onYtClear?: () => void
 }
 
 async function fetchAlbumArt(title: string, artist: string): Promise<string | null> {
@@ -96,7 +102,8 @@ export function BrowseView({
   ambientStatus, ambientQueueSize, ambientLastReason,
   showSpotifyNudge, onSpotifyNudgeConnect, onSpotifyNudgeDismiss,
   fallbackTracks, fallbackLoading, onFallbackSearch, onFallbackClear,
-  fangorn, publisherAddress, contextBar
+  fangorn, publisherAddress, contextBar,
+  onYtClear, onYtSearch, ytLoading, ytTracks
 }: BrowseViewProps) {
   const sentinelRef = useRef<HTMLDivElement>(null)
   const [playingId, setPlayingId] = useState<string | null>(null)
@@ -107,14 +114,19 @@ export function BrowseView({
 
   const [activeTab, setActiveTab] = useState<SearchTab>('library')
   const mbFetchedRef = useRef<string>('')
-
   const prevSearchRef = useRef(search)
+
+  const ytFetchedRef = useRef<string>('')
+
+  // In the search change effect:
   useEffect(() => {
     if (prevSearchRef.current !== search) {
       prevSearchRef.current = search
       setActiveTab('library')
       mbFetchedRef.current = ''
+      ytFetchedRef.current = ''   // ← add
       onFallbackClear?.()
+      onYtClear?.()               // ← add
     }
   }, [search])
 
@@ -123,6 +135,10 @@ export function BrowseView({
     if (tab === 'mb' && onFallbackSearch && mbFetchedRef.current !== search.trim()) {
       mbFetchedRef.current = search.trim()
       onFallbackSearch(search.trim())
+    }
+    if (tab === 'yt' && onYtSearch && ytFetchedRef.current !== search.trim()) {
+      ytFetchedRef.current = search.trim()
+      onYtSearch(search.trim())   // ← add
     }
   }
 
@@ -195,6 +211,16 @@ export function BrowseView({
   useEffect(() => {
     if (ambientStatus === 'idle' && ambientLastReason) setReasonExpanded(false)
   }, [ambientLastReason])
+
+  // thumbnails cache
+  useEffect(() => {
+    if (!ytTracks || ytTracks.length === 0) return
+    ytTracks.forEach(track => {
+      if (track.thumbnailUrl && !albumArtCache[track.id]) {
+        setAlbumArtCache(prev => ({ ...prev, [track.id]: track.thumbnailUrl! }))
+      }
+    })
+  }, [ytTracks])
 
   const showAmbientBar = ambientStatus !== undefined
   const isFetching = ambientStatus === 'fetching'
@@ -369,6 +395,7 @@ export function BrowseView({
           {([
             { id: 'library' as SearchTab, label: 'Library' },
             { id: 'mb' as SearchTab, label: 'MusicBrainz', icon: <MbIcon size={10} /> },
+            { id: 'yt' as SearchTab, label: 'YouTube', icon: <YtIcon size={10} /> },
           ]).map(({ id, label, icon }) => {
             const active = activeTab === id
             return (
@@ -386,6 +413,9 @@ export function BrowseView({
               >
                 {icon}{label}
                 {id === 'mb' && fallbackLoading && (
+                  <span className="upload-spinner" style={{ width: 8, height: 8, borderWidth: 1.5, marginLeft: 2 }} />
+                )}
+                {id === 'yt' && ytLoading && (
                   <span className="upload-spinner" style={{ width: 8, height: 8, borderWidth: 1.5, marginLeft: 2 }} />
                 )}
               </button>
@@ -516,6 +546,22 @@ export function BrowseView({
         </>
       )}
 
+      {activeTab === 'yt' && (
+        <>
+          {ytLoading && <div className="track-grid">{renderSkeleton(6)}</div>}
+          {!ytLoading && ytTracks && ytTracks.length > 0 && (
+            <div className="track-grid">{ytTracks.map(renderCard)}</div>
+          )}
+          {!ytLoading && (!ytTracks || ytTracks.length === 0) && (
+            <div className="empty-state">
+              <div className="empty-icon">♪</div>
+              <p>No results on YouTube.</p>
+            </div>
+          )}
+          <div style={{ height: 200 }} />
+        </>
+      )}
+
       <style>{`
         @keyframes ambientPulse { 0%,100%{opacity:.4;transform:scale(1)} 50%{opacity:1;transform:scale(1.3)} }
       `}</style>
@@ -548,6 +594,16 @@ function SpotifyIcon({ width = 14, height = 14, style }: { width?: number; heigh
     <svg width={width} height={height} viewBox="0 0 24 24" fill="none" style={style}>
       <circle cx="12" cy="12" r="12" fill="#1DB954" />
       <path d="M17.25 16.5a.75.75 0 01-.41-.12C14.67 15 11.5 14.6 7.81 15.43a.75.75 0 01-.32-1.46c4.07-.9 7.57-.45 10.18 1.14a.75.75 0 01-.42 1.39zm1.26-2.89a.94.94 0 01-.52-.15c-2.66-1.63-6.71-2.1-9.85-1.15a.94.94 0 11-.54-1.8c3.57-1.07 8.01-.56 11.05 1.32a.94.94 0 01-.53 1.73l-.61.05zm.12-3a.94.94 0 01-.47-.12C15.31 8.81 10.22 8.6 7.18 9.52a.94.94 0 01-.56-1.79c3.47-1.08 9.23-.87 12.87 1.28a.94.94 0 01-.47 1.76l-.37-.27z" fill="white" />
+    </svg>
+  )
+}
+
+function YtIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 20 20" fill="none" style={{ flexShrink: 0 }}>
+      <rect width="20" height="20" rx="3" fill="rgba(248,113,113,0.2)" />
+      <path d="M15.5 10s0-2-.26-2.93a1.58 1.58 0 00-1.11-1.12C13.21 5.75 10 5.75 10 5.75s-3.21 0-4.13.2a1.58 1.58 0 00-1.11 1.12C4.5 8 4.5 10 4.5 10s0 2 .26 2.93a1.58 1.58 0 001.11 1.12c.92.2 4.13.2 4.13.2s3.21 0 4.13-.2a1.58 1.58 0 001.11-1.12C15.5 12 15.5 10 15.5 10zm-6.17 2.08V7.92L12.5 10l-3.17 2.08z"
+        fill="rgba(248,113,113,0.9)" />
     </svg>
   )
 }

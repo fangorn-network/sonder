@@ -66,6 +66,8 @@ export interface Track {
   moods?: string[]
   themes?: string[]
   contexts?: string[]
+  youtubeVideoId?: string
+  thumbnailUrl?: string
 }
 
 export type PlayState = 'idle' | 'loading' | 'playing' | 'error'

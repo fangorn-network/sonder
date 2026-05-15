@@ -174,6 +174,7 @@ interface NowPlayingProps {
     trackColor?: string
     onFilter?: (type: 'genre' | 'mood' | 'context', value: string) => void
     onCallAgent?: (query?: string) => void
+    onTrackSelect?: (track: Track, color?: string) => void
 }
 
 export function NowPlaying({
@@ -182,6 +183,7 @@ export function NowPlaying({
     track: propTrack,
     trackColor,
     onFilter,
+    onTrackSelect,
 }: NowPlayingProps) {
     const {
         currentTrack, isPlaying, connecting, error,
@@ -356,7 +358,14 @@ export function NowPlaying({
             setPlayLoading(true)
             try {
                 if (focusTrack.spotifyTrackId) {
-                    await play(`spotify:track:${focusTrack.spotifyTrackId}`)
+                    try {
+                        await play(`spotify:track:${focusTrack.spotifyTrackId}`)
+                    } catch {
+                        // Device may be inactive — let searchAndPlay handle device selection
+                        await searchAndPlay(
+                            `${focusTrack.title} ${focusTrack.artist}`.replace(/\(.*?\)/g, '').trim()
+                        )
+                    }
                 } else {
                     await searchAndPlay(
                         `${focusTrack.title} ${focusTrack.artist}`.replace(/\(.*?\)/g, '').trim()
@@ -380,10 +389,10 @@ export function NowPlaying({
                 },
             })
         }
-        ;(onNext ?? next)?.()
+        ; (onNext ?? next)?.()
     }
 
-    const handlePrev = () => { ;(onPrev ?? prev)?.() }
+    const handlePrev = () => { ; (onPrev ?? prev)?.() }
 
     const handleFilterTag = (type: 'genre' | 'mood' | 'context', value: string) => {
         onFilter?.(type, value); onCollapse()
@@ -392,9 +401,30 @@ export function NowPlaying({
     const handlePlayRow = async (t: SimilarTrack) => {
         if (!connected) { await connect(); return }
         setPlayingId(t.id)
+
+        // Convert SimilarTrack → Track and tell the parent to re-focus
+        const asTrack: Track = {
+            id: t.id,
+            trackId: t.id,
+            owner: '',
+            manifestCid: '',
+            title: t.title,
+            artist: t.artist,
+            year: t.year,
+            durationMs: null,
+            spotifyTrackId: t.spotifyTrackId,
+        }
+        onTrackSelect?.(asTrack)   // ← swap NowPlaying focus first
+
         try {
             if (t.spotifyTrackId) {
-                await play(`spotify:track:${t.spotifyTrackId}`)
+                try {
+                    await play(`spotify:track:${t.spotifyTrackId}`)
+                } catch {
+                    await searchAndPlay(
+                        `${t.title} ${t.artist}`.replace(/\(.*?\)/g, '').trim()
+                    )
+                }
             } else {
                 await searchAndPlay(
                     `${t.title} ${t.artist}`.replace(/\(.*?\)/g, '').trim()

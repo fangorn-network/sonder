@@ -10,6 +10,22 @@ An Electron application with React and TypeScript
 
 ## Project Setup
 
+### Prerequisites
+
+Setup environment variables
+
+``` sh
+touch .env
+```
+
+and paste
+
+``` 
+VITE_ARBITRUM_SEPOLIA_RPC_URL=https://arb-sepolia.g.alchemy.com/v2/5-t8t4AW4wknuQUzuDb1B
+VITE_USE_AGENT=true
+VITE_YOUTUBE_API_KEY=
+```
+
 ### Install
 
 ```bash

@@ -1,0 +1,119 @@
+.hero {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 8rem 2rem 0;
+  text-align: center;
+  border-bottom: 1px solid var(--border-strong);
+}
+
+.hero-content {
+  max-width: 660px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+  margin-bottom: 4rem;
+}
+
+.hero-kicker {
+  font-size: 0.7rem;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--violet-bright);
+}
+
+.hero-headline {
+  font-size: clamp(3.2rem, 9vw, 8rem);
+  font-weight: 700;
+  line-height: 0.97;
+  letter-spacing: -0.04em;
+  color: var(--white);
+}
+
+.hero-sub {
+  font-size: clamp(0.97rem, 1.3vw, 1.08rem);
+  color: var(--muted);
+  line-height: 1.8;
+  max-width: 420px;
+  font-weight: 300;
+}
+
+.hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.85rem;
+  font-weight: 500;
+  background: var(--white);
+  color: var(--bg);
+  padding: 0.7rem 1.75rem;
+  letter-spacing: 0.01em;
+  transition: opacity 0.15s;
+}
+.btn-primary:hover { opacity: 0.88; }
+
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.85rem;
+  font-weight: 400;
+  color: var(--off-white);
+  padding: 0.7rem 1.75rem;
+  border: 1px solid var(--border-strong);
+  transition: border-color 0.15s, color 0.15s;
+}
+.btn-ghost:hover { border-color: var(--off-white); color: var(--white); }
+
+.hero-fine {
+  font-size: 0.68rem;
+  color: var(--faint);
+  letter-spacing: 0.05em;
+}
+
+.hero-screen {
+  width: 100%;
+  max-width: 960px;
+  border-top: 1px solid var(--border-strong);
+  border-left: 1px solid var(--border-strong);
+  border-right: 1px solid var(--border-strong);
+  overflow: hidden;
+}
+
+.hero-img {
+  width: 100%;
+  display: block;
+}
+
+.hero-screen-placeholder {
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  background: var(--bg2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hero-screen-placeholder span {
+  font-size: 0.68rem;
+  color: var(--faint);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+@media (max-width: 600px) {
+  .hero { padding: 7rem 1.25rem 0; }
+  .hero-headline { letter-spacing: -0.03em; }
+  .hero-actions { flex-direction: column; width: 100%; }
+  .btn-primary, .btn-ghost { width: 100%; justify-content: center; }
+}

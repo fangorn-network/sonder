@@ -1,0 +1,38 @@
+.problem {
+  padding: 7rem 2rem;
+  border-bottom: 1px solid var(--border-strong);
+}
+
+.problem-inner {
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.problem-heading {
+  font-size: clamp(1.7rem, 3.2vw, 2.6rem);
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.025em;
+  margin-bottom: 2.5rem;
+  max-width: 700px;
+}
+
+.problem-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3rem;
+  padding-top: 2.5rem;
+  border-top: 1px solid var(--border);
+}
+
+.problem-cols p {
+  font-size: 0.97rem;
+  color: var(--muted);
+  line-height: 1.85;
+  font-weight: 300;
+}
+
+@media (max-width: 680px) {
+  .problem { padding: 4rem 1.25rem; }
+  .problem-cols { grid-template-columns: 1fr; gap: 1.5rem; }
+}

@@ -4,15 +4,15 @@ import './Support.css'
 const TIERS = [
   {
     id: 'seedling',
-    name: 'Seedlinig',
+    name: 'Seedling',
     price: '$25',
     limit: null,
-    desc: 'Get in early. Support what we are building.',
+    desc: 'Back the build and get in line for beta. Requires a free Spotify developer account and Spotify Premium.',
     items: [
-      'Alpha access to SOND3R',
-      'Private Discord community',
-      'Weekly development updates',
-      'Founding supporter status',
+      'Read access: discover and play when beta opens',
+      'Kernel builds your taste profile as you listen',
+      'Founding Discord with real build updates',
+      'Listed in the genesis manifest',
     ],
     cta: 'Become a Seedling',
     href: '#',
@@ -23,15 +23,14 @@ const TIERS = [
     name: 'Sapling',
     price: '$100',
     limit: null,
-    desc: 'For people who want to be close to what gets built.',
+    desc: 'Read and write. Tag tracks, set genres, publish your data to Fangorn. Requires a free Spotify developer account and Spotify Premium.',
     items: [
       'Everything in Seedling',
-      'Reserved username',
-      'Experimental features before anyone else',
-      'Direct line to the founders',
-      'Input into what ships next',
+      'Write access: tag tracks, define genres and moods, publish to Fangorn',
+      'Direct line to the founders via Signal',
+      'Real input on what ships next',
     ],
-    cta: 'Plant your Roots',
+    cta: 'Become a Sapling',
     href: '#',
     highlight: true,
   },
@@ -39,16 +38,15 @@ const TIERS = [
     id: 'ent',
     name: 'Ent',
     price: '$250',
-    limit: '25 spots only',
-    desc: 'For builders, researchers, and serious early believers.',
+    limit: '5 spots',
+    desc: 'Use SOND3R now, before beta. No Spotify developer setup required. Spotify Premium is all you need.',
     items: [
       'Everything in Sapling',
-      'Monthly calls with the founding team',
-      'Architecture and protocol discussions',
-      'Named in the genesis documentation',
-      'Input into protocol direction',
+      'Skip the waitlist: use the app today',
+      'Monthly architecture calls with the founding team',
+      'Real input into protocol design and direction',
     ],
-    cta: 'Become an Ent',
+    cta: 'Claim an Ent Spot',
     href: '#',
     highlight: false,
   },
@@ -60,7 +58,7 @@ export default function Support() {
       <div className="support-intro">
         <h2 className="support-heading">Be here from the start.</h2>
         <p className="support-sub">
-          We are not taking VC money. We are looking for early supporters who understand what this is and want a seat at the table while it's still being built.
+          We are not taking VC money. We are looking for early supporters who understand what this is and want a seat at the table while it is still being built.
         </p>
       </div>
 

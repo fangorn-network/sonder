@@ -10,7 +10,7 @@ export default function Demo() {
     <section className="demo" id="demo">
       <div className="demo-inner">
         <p className="section-label">See it in action</p>
-        <h2 className="demo-title">Demo.</h2>
+        <h2 className="demo-title">Watch the demo.</h2>
         <div className="demo-video">
           {VIDEO_EMBED_URL ? (
             <iframe

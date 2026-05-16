@@ -10,11 +10,12 @@ export default function Footer() {
   return (
     <footer className="footer">
       <div className="footer-cta">
-        <h2 className="footer-heading">Start listening differently.</h2>
+        <p className="section-mono">05 — Get started</p>
+        <h2 className="footer-heading">Download SOND3R.</h2>
         <div className="footer-actions">
-          <a href="#" className="btn-primary">Download</a>
-          <a href={DISCORD_URL} className="btn-ghost" target="_blank" rel="noopener noreferrer">Discord</a>
-          <a href="#support" className="btn-ghost">Support us</a>
+          <a href="#" className="footer-btn-primary">Download</a>
+          <a href={DISCORD_URL} className="footer-btn-ghost" target="_blank" rel="noopener noreferrer">Discord</a>
+          <a href="#support" className="footer-btn-ghost">Support us</a>
         </div>
         <p className="footer-note">Requires Spotify Premium. Alpha release.</p>
       </div>

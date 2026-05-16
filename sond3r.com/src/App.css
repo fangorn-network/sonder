@@ -1,1 +1,13 @@
-.app { min-height: 100vh; }
+.app {
+  min-height: 100vh;
+}
+
+.section-mono {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.62rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(0, 240, 220, 0.6);
+  margin-bottom: 1.5rem;
+  display: block;
+}

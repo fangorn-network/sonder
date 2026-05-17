@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import './Nav.css'
 
-const GITHUB_URL = 'https://github.com/your-org/sond3r'
+const GITHUB_URL = 'https://github.com/fangorn-network/sonder'
 const DISCORD_URL = 'https://discord.gg/your-invite'
 
 export default function Nav() {

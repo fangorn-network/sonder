@@ -39,7 +39,7 @@ export function AgentView() {
         window.agentAPI.getStatus(),
         window.agentAPI.getConfig(),
         window.agentAPI.listToolboxes().catch(() => null),
-        window.agentAPI.ollamaListModels().catch(() => []),
+        window.agentAPI.ollamaListModels().catch((): string[] => []),
       ])
       setProviderStatus(status)
       setModels(modelList)
@@ -49,14 +49,18 @@ export function AgentView() {
       let defaultModel = modelList[0]
 
       if (config) {
-        if (!defaultModel) {
-          defaultModel = config.provider === LLMProvider.Anthropic
-            ? (config.claudeModel ?? "-")
-            : (config.ollamaModel ?? "-")
-          setSelectedModel(defaultModel)
-        } else {
-          setSelectedModel(defaultModel)
+        const savedModel = config.provider === LLMProvider.Anthropic
+          ? (config.claudeModel ?? "-")
+          : (config.ollamaModel ?? "-")
+
+        // Use the saved model if it exists in the list, otherwise fall back to first available
+        if (savedModel !== '-' && modelList.includes(savedModel)) {
+          defaultModel = savedModel
+        } else if (!defaultModel) {
+          defaultModel = "-"
         }
+
+        setSelectedModel(defaultModel)
       }
 
       if (toolboxResult?.success && toolboxResult.toolboxes) {

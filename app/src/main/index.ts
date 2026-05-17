@@ -24,16 +24,22 @@ let rendererServer: http.Server | null = null
 function startPython() {
   const root = is.dev ? app.getAppPath() : process.resourcesPath
 
-  const [bin, args]: [string, string[]] = app.isPackaged
+  // In dev the script lives at <root>/vectordb/server.py.
+  // We set cwd to that directory so any relative imports / file lookups
+  // inside server.py resolve the same way they do when you run it by hand.
+  const [bin, args, cwd]: [string, string[], string] = app.isPackaged
     ? [
       path.join(root, 'server'),
       [
         '-s',
         'tony.test.invariants.track.2=0xdd2ff7c1afae71333aac86f18316093fb017e4a47e7c6ef2b1c37b8ca62d53a6',
+        '-s',
+        'tony.test.tags.track.0=0x43a911728ed43457b145f5c4c0d89145b7c8d352b2c6ba0d86fff1f005166935',
         '--primary',
         'tony.test.invariants.track.2',
-        '--reset',
+        // '--reset',
       ],
+      root,
     ]
     : [
       path.join(root, 'vectordb/venv/bin/python'),
@@ -41,21 +47,25 @@ function startPython() {
         path.join(root, 'vectordb/server.py'),
         '-s',
         'tony.test.invariants.track.2=0xdd2ff7c1afae71333aac86f18316093fb017e4a47e7c6ef2b1c37b8ca62d53a6',
+        '-s',
+        'tony.test.tags.track.0=0x43a911728ed43457b145f5c4c0d89145b7c8d352b2c6ba0d86fff1f005166935',
         '--primary',
         'tony.test.invariants.track.2',
-        '--reset',
+        // '--reset',
       ],
+      path.join(root, 'vectordb'),   // ← the fix: match the manual-run cwd
     ]
 
   pyProcess = spawn(bin, args, {
+    cwd,
     env: {
       ...process.env,
       CHROMA_PATH: path.join(app.getPath('userData'), 'chroma_db'),
     },
   })
 
-  pyProcess.stdout?.on('data', (d) => console.log('[py]', d.toString()))
-  pyProcess.stderr?.on('data', (d) => console.error('[py]', d.toString()))
+  pyProcess.stdout?.on('data', (d) => console.log('[py]', d.toString().trimEnd()))
+  pyProcess.stderr?.on('data', (d) => console.error('[py]', d.toString().trimEnd()))
   pyProcess.on('error', (err) => console.error('[py] failed to start:', err))
   pyProcess.on('exit', (code) => console.log('[py] exited with code', code))
 }
@@ -136,6 +146,7 @@ function createWindow(): void {
       nodeIntegration: false,
       webSecurity: true,
       partition: 'persist:main',
+      webviewTag: true
     },
   })
 
@@ -159,13 +170,22 @@ function createWindow(): void {
 
 function registerIpcHandlers() {
 
+  // generic proxy
   ipcMain.handle('fetch:proxy', async (_event, { url, options }) => {
     const res = await fetch(url, options ?? {})
     const text = await res.text()
     return { status: res.status, body: text }
   })
 
-  // Spotify — proxied through main so Spotify doesn't see Electron UA
+  ipcMain.handle('deezer:api', async (_event, { url }) => {
+    const res = await fetch(url, {
+      headers: { 'Accept': 'application/json' },
+    })
+    const text = await res.text()
+    return { status: res.status, body: text }
+  })
+
+  // Spotify API calls proxied through main so Spotify doesn't see Electron UA
   ipcMain.handle('spotify:api', async (_event, { url, method, token, body }) => {
     const res = await fetch(url, {
       method: method ?? 'GET',
@@ -203,24 +223,45 @@ function registerIpcHandlers() {
     return text
   })
 
-  // // start a local HTTP RPC proxy
-  // http.createServer(async (req, res) => {
-  //   const body = await new Promise<string>((resolve) => {
-  //     let data = ''
-  //     req.on('data', chunk => data += chunk)
-  //     req.on('end', () => resolve(data))
-  //   })
-  //   const result = await net.fetch('https://sepolia-rollup.arbitrum.io/rpc', {
-  //     method: 'POST',
-  //     headers: { 'Content-Type': 'application/json' },
-  //     body,
-  //   })
-  //   const text = await result.text()
-  //   res.writeHead(200, { 'Content-Type': 'application/json' })
-  //   res.end(text)
-  // }).listen(8545, '127.0.0.1')
+  // ── Spotify OAuth ────────────────────────────────────────────────────────────
+  // Opens a dedicated BrowserWindow for the OAuth flow. Watches will-redirect
+  // and will-navigate for the callback URI, destroys the window, and resolves
+  // with the full callback URL as the invoke return value.
+  // No HTTP server needed. No IPC events. Clean req/res via invoke.
+  ipcMain.handle('spotify:oauth', (_event, authUrl: string, redirectUri: string) => {
+    return new Promise<string>((resolve, reject) => {
+      const win = new BrowserWindow({
+        width: 520,
+        height: 720,
+        title: 'Connect Spotify',
+        parent: BrowserWindow.getAllWindows()[0],
+        modal: false,
+        webPreferences: {
+          nodeIntegration: false,
+          contextIsolation: true,
+        },
+      })
+
+      win.loadURL(authUrl)
+
+      const handleUrl = (url: string) => {
+        if (url.startsWith(redirectUri)) {
+          win.destroy()
+          resolve(url)
+        }
+      }
+
+      win.webContents.on('will-redirect', (_e, url) => handleUrl(url))
+      win.webContents.on('will-navigate', (_e, url) => handleUrl(url))
+      win.on('closed', () => reject(new Error('auth_cancelled')))
+    })
+  })
 
 }
+
+// ─────────────────────────────────────────────────────────────
+// Arbitrum RPC proxy (local HTTP, port 8545)
+// ─────────────────────────────────────────────────────────────
 
 const rpcProxy = http.createServer(async (req, res) => {
   const chunks: Buffer[] = []
@@ -302,6 +343,9 @@ async function bootstrap() {
 // ─────────────────────────────────────────────────────────────
 // App lifecycle
 // ─────────────────────────────────────────────────────────────
+
+app.commandLine.appendSwitch('enable-unsafe-swiftshader')
+app.commandLine.appendSwitch('use-gl', 'swiftshader')
 
 app.whenReady().then(async () => {
   electronApp.setAppUserModelId('com.electron')

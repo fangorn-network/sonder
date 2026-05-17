@@ -4,6 +4,7 @@ import type { Track } from '../types'
 import './NowPlaying.css'
 import { PublishModal } from './PublishModal'
 import { useFangorn } from '../hooks/useFangorn'
+import { TrackTagModal, readTrackTags, isTrackTagged, type TrackTagData } from './TrackTag'
 
 const CHROMA_URL = (import.meta as any).env.VITE_CHROMA_URL ?? 'http://localhost:8080'
 
@@ -31,7 +32,6 @@ async function checkExistsInChroma(
             const f = h.fields ?? {}
             const hId = (f.externalId as string) ?? (h.id?.startsWith('track:') ? h.id.slice(6) : null)
             if (spotifyTrackId && hId === spotifyTrackId) return true
-            // fallback: title+artist match
             const hTitle = (f.title ?? f.name ?? '').toLowerCase()
             const hArtist = (f.byArtist ?? f.artist ?? '').toLowerCase()
             return hTitle === title.toLowerCase() && hArtist === artist.toLowerCase()
@@ -174,6 +174,7 @@ interface NowPlayingProps {
     trackColor?: string
     onFilter?: (type: 'genre' | 'mood' | 'context', value: string) => void
     onCallAgent?: (query?: string) => void
+    onTrackSelect?: (track: Track, color?: string) => void
 }
 
 export function NowPlaying({
@@ -182,6 +183,7 @@ export function NowPlaying({
     track: propTrack,
     trackColor,
     onFilter,
+    onTrackSelect,
 }: NowPlayingProps) {
     const {
         currentTrack, isPlaying, connecting, error,
@@ -201,8 +203,7 @@ export function NowPlaying({
             artist: currentTrack.artist,
             year: null,
             durationMs: currentTrack.durationMs ?? null,
-            spotifyTrackId: currentTrack.spotifyTrackId ?? null,  // ← was null
-            // genres: [], moods: [], themes: [], contexts: [],
+            spotifyTrackId: currentTrack.spotifyTrackId ?? null,
         } satisfies Track : null
     )
 
@@ -231,6 +232,26 @@ export function NowPlaying({
     const [existsInIndex, setExistsInIndex] = useState<boolean | null>(null)
     const [showPublish, setShowPublish] = useState(false)
 
+    // ── track tags ────────────────────────────────────────────────────────────
+
+    const tagTrackId = focusTrack?.spotifyTrackId ?? focusTrack?.id ?? null
+    const [showTagModal, setShowTagModal] = useState(false)
+    const [trackTags, setTrackTags] = useState<TrackTagData | null>(null)
+
+    // Load tags whenever track changes
+    useEffect(() => {
+        if (!tagTrackId) { setTrackTags(null); return }
+        const tags = readTrackTags(tagTrackId)
+        setTrackTags(tags)
+    }, [tagTrackId])
+
+    const tagged = trackTags !== null && isTrackTagged(tagTrackId ?? '')
+    const allTags = trackTags
+        ? [...trackTags.genres, ...trackTags.moods, ...trackTags.contexts, ...trackTags.themes]
+        : []
+
+    // ── chroma existence check ────────────────────────────────────────────────
+
     useEffect(() => {
         if (!focusTrack) return
         setExistsInIndex(null)
@@ -239,9 +260,6 @@ export function NowPlaying({
             focusTrack.title,
             focusTrack.artist,
         ).then(setExistsInIndex)
-
-        console.log("UPDATED")
-        console.log(existsInIndex)
     }, [focusTrack?.spotifyTrackId, focusTrack?.title, focusTrack?.artist])
 
     useEffect(() => { currentTrackRef.current = currentTrack }, [currentTrack])
@@ -313,23 +331,19 @@ export function NowPlaying({
     // ── keyboard + scroll lock ────────────────────────────────────────────────
 
     useEffect(() => {
-        const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onCollapse() }
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === 'Escape' && !showTagModal) onCollapse()
+        }
         window.addEventListener('keydown', onKey)
         document.body.style.overflow = 'hidden'
         return () => { window.removeEventListener('keydown', onKey); document.body.style.overflow = '' }
-    }, [onCollapse])
+    }, [onCollapse, showTagModal])
 
     if (!focusTrack) return null
 
     const durationMs = currentTrack?.durationMs ?? 0
     const progress = durationMs > 0 ? liveProgressMs / durationMs : 0
     const accentColor = trackColor ?? 'var(--accent)'
-    // const hasMeta = (
-    //     focusTrack.genres.length > 0 ||
-    //     focusTrack.moods.length > 0 ||
-    //     focusTrack.contexts.length > 0 ||
-    //     focusTrack.themes.length > 0
-    // )
 
     function scrubTo(e: React.MouseEvent<HTMLDivElement>) {
         const rect = e.currentTarget.getBoundingClientRect()
@@ -344,7 +358,14 @@ export function NowPlaying({
             setPlayLoading(true)
             try {
                 if (focusTrack.spotifyTrackId) {
-                    await play(`spotify:track:${focusTrack.spotifyTrackId}`)
+                    try {
+                        await play(`spotify:track:${focusTrack.spotifyTrackId}`)
+                    } catch {
+                        // Device may be inactive — let searchAndPlay handle device selection
+                        await searchAndPlay(
+                            `${focusTrack.title} ${focusTrack.artist}`.replace(/\(.*?\)/g, '').trim()
+                        )
+                    }
                 } else {
                     await searchAndPlay(
                         `${focusTrack.title} ${focusTrack.artist}`.replace(/\(.*?\)/g, '').trim()
@@ -362,16 +383,9 @@ export function NowPlaying({
             onSignal({
                 type: 'skip', weight: -1.0,
                 track: {
-                    id: '',
-                    trackId: '',
-                    owner: '',
-                    manifestCid: '',
-                    title: t.name,
-                    artist: t.artist,
-                    year: null,
-                    durationMs: null,
-                    spotifyTrackId: null,
-                    // genres: [], moods: [], themes: [], contexts: [],
+                    id: '', trackId: '', owner: '', manifestCid: '',
+                    title: t.name, artist: t.artist,
+                    year: null, durationMs: null, spotifyTrackId: null,
                 },
             })
         }
@@ -387,9 +401,30 @@ export function NowPlaying({
     const handlePlayRow = async (t: SimilarTrack) => {
         if (!connected) { await connect(); return }
         setPlayingId(t.id)
+
+        // Convert SimilarTrack → Track and tell the parent to re-focus
+        const asTrack: Track = {
+            id: t.id,
+            trackId: t.id,
+            owner: '',
+            manifestCid: '',
+            title: t.title,
+            artist: t.artist,
+            year: t.year,
+            durationMs: null,
+            spotifyTrackId: t.spotifyTrackId,
+        }
+        onTrackSelect?.(asTrack)   // ← swap NowPlaying focus first
+
         try {
             if (t.spotifyTrackId) {
-                await play(`spotify:track:${t.spotifyTrackId}`)
+                try {
+                    await play(`spotify:track:${t.spotifyTrackId}`)
+                } catch {
+                    await searchAndPlay(
+                        `${t.title} ${t.artist}`.replace(/\(.*?\)/g, '').trim()
+                    )
+                }
             } else {
                 await searchAndPlay(
                     `${t.title} ${t.artist}`.replace(/\(.*?\)/g, '').trim()
@@ -511,44 +546,66 @@ export function NowPlaying({
 
                 {/* ══ RIGHT COL ══ */}
                 <div className="np-col-right">
+                    {showTagModal && tagTrackId && (
+                        <TrackTagModal
+                            trackId={tagTrackId}
+                            trackTitle={focusTrack.title}
+                            fangorn={fangorn}
+                            onClose={() => setShowTagModal(false)}
+                            onSave={data => setTrackTags(data)}
+                            accentColor={accentColor}
+                        />
+                    )}
+
                     <div className="np-right-body">
 
-                        {/* {hasMeta && (
-                            <div className="np-tags-section">
-                                {focusTrack.genres.length > 0 && (
-                                    <div className="np-tags">
-                                        {focusTrack.genres.map((g, i) => (
-                                            <button key={g} className="np-tag np-tag--genre"
-                                                style={{ opacity: i === 0 ? 1 : 0.75, color: accentColor, background: `${accentColor}15`, borderColor: `${accentColor}30` }}
-                                                onClick={() => handleFilterTag('genre', g)}>{g}</button>
-                                        ))}
+                        {/* ── Track Tags ── */}
+                        {!showPublish && tagTrackId && (
+                            <div className="np-tag-section">
+                                {tagged && allTags.length > 0 ? (
+                                    <div className="np-tag-row">
+                                        <div className="np-tag-chips">
+                                            {allTags.slice(0, 6).map(tag => (
+                                                <span
+                                                    key={tag}
+                                                    className="np-tag-chip"
+                                                    style={{ color: accentColor, background: `${accentColor}14`, borderColor: `${accentColor}40` }}
+                                                >
+                                                    {tag}
+                                                </span>
+                                            ))}
+                                            {allTags.length > 6 && (
+                                                <span className="np-tag-chip np-tag-chip--overflow">
+                                                    +{allTags.length - 6}
+                                                </span>
+                                            )}
+                                        </div>
+                                        <button
+                                            className="np-tag-edit-btn"
+                                            onClick={() => setShowTagModal(true)}
+                                            title="Edit tags"
+                                            aria-label="Edit track tags"
+                                        >
+                                            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                                            </svg>
+                                        </button>
                                     </div>
-                                )}
-                                {focusTrack.moods.length > 0 && (
-                                    <div className="np-tags">
-                                        {focusTrack.moods.map(m => (
-                                            <button key={m} className="np-tag np-tag--mood"
-                                                onClick={() => handleFilterTag('mood', m)}>{m}</button>
-                                        ))}
-                                    </div>
-                                )}
-                                {focusTrack.contexts.length > 0 && (
-                                    <div className="np-tags">
-                                        {focusTrack.contexts.map(c => (
-                                            <button key={c} className="np-tag np-tag--context"
-                                                onClick={() => handleFilterTag('context', c)}>{c}</button>
-                                        ))}
-                                    </div>
-                                )}
-                                {focusTrack.themes.length > 0 && (
-                                    <div className="np-tags">
-                                        {focusTrack.themes.map(t => (
-                                            <span key={t} className="np-tag np-tag--theme">{t}</span>
-                                        ))}
-                                    </div>
+                                ) : (
+                                    <button
+                                        className="np-tag-empty-btn"
+                                        onClick={() => setShowTagModal(true)}
+                                    >
+                                        <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                                            <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
+                                            <line x1="7" y1="7" x2="7.01" y2="7" />
+                                        </svg>
+                                        tag this track
+                                    </button>
                                 )}
                             </div>
-                        )} */}
+                        )}
 
                         {(focusTrack.spotifyTrackId || focusTrack.owner) && (
                             <div className="np-fields">
@@ -641,6 +698,7 @@ export function NowPlaying({
                     </div>
                 </div>
             </div>
+
             {showPublish && focusTrack && (
                 <PublishModal
                     track={focusTrack}

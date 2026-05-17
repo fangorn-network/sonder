@@ -22,7 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-node_modules
+**/node_modules
 
 music-data/data
 music-data/ia-data

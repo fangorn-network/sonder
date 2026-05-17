@@ -1,0 +1,68 @@
+.demo {
+  padding: 7rem 2.5rem;
+  border-top: 1px solid var(--border);
+}
+
+.demo-inner {
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.demo-title {
+  font-family: var(--display);
+  font-size: clamp(2.2rem, 4vw, 3.5rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin-bottom: 2.5rem;
+}
+
+.demo-video {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.demo-video iframe {
+  width: 100%;
+  height: 100%;
+}
+
+.demo-placeholder {
+  width: 100%;
+  height: 100%;
+  min-height: 300px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.25rem;
+  border: 1.5px dashed var(--border);
+  border-radius: 12px;
+}
+
+.demo-play {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: var(--purple-dim);
+  border: 1px solid rgba(157,111,255,0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--purple-light);
+  padding-left: 3px;
+}
+
+.demo-placeholder p {
+  font-size: 0.8rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--border);
+}
+
+@media (max-width: 600px) {
+  .demo { padding: 5rem 1.5rem; }
+}

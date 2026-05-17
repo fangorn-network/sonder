@@ -2,6 +2,7 @@ import argparse
 import asyncio
 import aiohttp
 import chromadb
+import hashlib
 import json
 import requests
 import uvicorn
@@ -27,14 +28,8 @@ def parse_args():
         action="append",
         dest="schemas",
         default=[],
-        help="Schema name=id pair. Repeatable. e.g. -s core=0xabc -s labels=0xdef",
     )
-    parser.add_argument(
-        "--primary", "-p",
-        metavar="NAME",
-        default=None,
-        help="Name of the primary schema (join key). Defaults to the first --schema provided.",
-    )
+    parser.add_argument("--primary", "-p", metavar="NAME", default=None)
     parser.add_argument(
         "--subgraph-url",
         default="https://api.studio.thegraph.com/query/1745244/fangorn-data-discovery/version/latest",
@@ -42,18 +37,17 @@ def parse_args():
     parser.add_argument("--ipfs-gateway",      default="https://ipfs.io/ipfs")
     parser.add_argument("--chroma-path",        default="./db/sond3r")
     parser.add_argument("--collection",         default="fangorn")
-    parser.add_argument("--searchable-fields",  default="title,byArtist,genres,moods,themes,contexts")
+    parser.add_argument("--searchable-fields",  default="trackId,title,byArtist,genres,moods,themes,contexts")
     parser.add_argument("--page-size",          type=int, default=100)
     parser.add_argument("--ipfs-timeout",       type=int, default=20)
     parser.add_argument("--concurrency",        type=int, default=32)
     parser.add_argument("--host",               default="0.0.0.0")
     parser.add_argument("--port",               type=int, default=8080)
-    parser.add_argument("--reset",              action="store_true", default=False,
-                        help="Reset ChromaDB collection on startup")
+    parser.add_argument("--reset",              action="store_true", default=False)
     return parser.parse_args()
 
 # ---------------------------------------------------------------------------
-# CONFIG — set once at startup, read everywhere
+# CONFIG
 # ---------------------------------------------------------------------------
 
 cfg: argparse.Namespace = None
@@ -74,14 +68,14 @@ def get_primary(schemas: dict[str, str]) -> str:
         if cfg.primary not in schemas:
             raise ValueError(f"--primary '{cfg.primary}' not found in --schema keys: {list(schemas.keys())}")
         return cfg.primary
-    # Default to first schema
     return next(iter(schemas))
 
 def get_searchable_fields() -> set[str]:
     return set(f.strip() for f in cfg.searchable_fields.split(",") if f.strip())
 
-ef_global:  object | None = None
-collection: object | None = None
+ef_global:       object | None = None
+collection:      object | None = None
+debug_secondary: dict         = {}
 
 # ---------------------------------------------------------------------------
 # MODELS
@@ -95,6 +89,50 @@ class VectorSearchRequest(BaseModel):
     embedding: list[float]
     n_results: int        = 20
     owner:     str | None = None
+
+# ---------------------------------------------------------------------------
+# TRACK ID
+# ---------------------------------------------------------------------------
+
+def _compute_track_id(artist: str, title: str) -> str:
+    """
+    Canonical join key: SHA256(artist:title)[:24]
+    Must match exactly how track IDs were generated during data collection.
+    """
+    return hashlib.sha256(f"{artist}:{title}".encode()).hexdigest()[:24]
+
+def _track_id(entry: dict) -> str:
+    """
+    Resolve the join key for an entry.
+
+    Rule: trust whatever is stored in fields.trackId if it is present — both
+    schemas must agree on the value, so we never second-guess it based on
+    format or length. The secondary schema has no byArtist/title to derive
+    from, so discarding its stored trackId would leave it with no key at all
+    and silently break every join.
+
+    Only fall back to computing from byArtist:title when trackId is completely
+    absent from the entry (e.g. a primary entry published without the field).
+    """
+    fields = entry.get("fields", {})
+    tid    = fields.get("trackId", "")
+    stored = tid.strip() if isinstance(tid, str) else ""
+    stored = stored.removeprefix("track:")   # strip legacy bad publishes
+
+    if stored:
+        return stored
+
+    artist = str(fields.get("byArtist", "")).strip()
+    title  = str(fields.get("title",    "")).strip()
+    if artist and title:
+        derived = _compute_track_id(artist, title)
+        print(f"  [warn] trackId missing, derived {derived!r} from '{artist}:{title}'")
+        return derived
+
+    name = entry.get("name", "").strip().removeprefix("track:")
+    if name:
+        print(f"  [warn] no trackId or content fields — falling back to entry name {name!r}")
+    return name
 
 # ---------------------------------------------------------------------------
 # SUBGRAPH
@@ -198,7 +236,7 @@ def _build_seen_cids(publishes: list, updates: list) -> dict[str, dict]:
             seen[cid] = {
                 "owner":          u["owner"],
                 "nameHash":       u["nameHash"],
-                "name":           u["nameHash"],
+                "name":           u.get("name", u["nameHash"]),
                 "manifestCid":    cid,
                 "version":        int(u["version"]),
                 "blockTimestamp": ts,
@@ -206,32 +244,56 @@ def _build_seen_cids(publishes: list, updates: list) -> dict[str, dict]:
     return seen
 
 def _dedup_entries(all_entries: list) -> list:
-    best:    dict[str, dict] = {}
-    unnamed: list[dict]      = []
+    """
+    Keep the most recent entry per canonical track ID.
+
+    Uses _track_id as the dedup key — NOT entry.name. Entry names are
+    arbitrary strings that differ between schemas and carry no join semantics;
+    using them as a dedup key would incorrectly collapse or preserve entries
+    based on publisher convention rather than track identity.
+
+    Entries with no resolvable track ID are kept as-is (no dedup possible).
+    """
+    best:   dict[str, dict] = {}
+    no_key: list[dict]      = []
     for item in all_entries:
-        name = item["entry"].get("name", "")
-        if not name:
-            unnamed.append(item)
+        key = _track_id(item["entry"])
+        if not key:
+            no_key.append(item)
             continue
         ts = item["meta"]["blockTimestamp"]
-        if name not in best or ts > best[name]["meta"]["blockTimestamp"]:
-            best[name] = item
-    return list(best.values()) + unnamed
+        if key not in best or ts > best[key]["meta"]["blockTimestamp"]:
+            best[key] = item
+    return list(best.values()) + no_key
 
-async def fetch_schema_entries(schema_id: str, loop) -> list[dict]:
+async def fetch_schema_entries(schema_name: str, schema_id: str, loop) -> list[dict]:
     publishes, updates = await loop.run_in_executor(None, _fetch_all_events, schema_id)
+    print(f"  [{schema_name}] subgraph: {len(publishes)} publishes, {len(updates)} updates")
+
     seen_cids = _build_seen_cids(publishes, updates)
+    print(f"  [{schema_name}] unique manifest CIDs: {len(seen_cids)}")
+
     manifests = await fetch_all_ipfs(list(seen_cids.keys()))
+    ok  = sum(1 for v in manifests.values() if v is not None)
+    bad = sum(1 for v in manifests.values() if v is None)
+    print(f"  [{schema_name}] IPFS: {ok} fetched, {bad} failed")
 
     all_entries = []
     for cid, manifest_json in manifests.items():
         if not manifest_json:
             continue
         meta = seen_cids[cid]
-        for i, entry in enumerate(manifest_json.get("entries", [])):
+        entries = manifest_json.get("entries", [])
+        for i, entry in enumerate(entries):
             all_entries.append({"entry": entry, "entryIndex": i, "meta": meta})
 
-    return _dedup_entries(all_entries)
+    deduped = _dedup_entries(all_entries)
+    print(f"  [{schema_name}] entries: {len(all_entries)} raw → {len(deduped)} after dedup")
+    for item in deduped:
+        tid = _track_id(item["entry"])
+        # print(f"    track_id={tid!r}")
+
+    return deduped
 
 # ---------------------------------------------------------------------------
 # JOIN + DOCUMENT BUILD
@@ -246,16 +308,36 @@ def _flatten_fields(fields: dict) -> dict:
             out[k] = v
     return out
 
+TAG_FIELDS   = {"genres", "moods", "themes", "contexts"}
+TRACK_FIELDS = {"title", "byArtist"}
+
 def _build_searchable_text(fields: dict) -> str:
-    parts = []
-    for key in get_searchable_fields():
+    searchable = get_searchable_fields()
+
+    tag_terms: list[str] = []
+    for key in TAG_FIELDS & searchable:
         val = fields.get(key)
-        if val is None:
-            continue
         if isinstance(val, list):
-            parts.append(" ".join(str(v) for v in val if v))
+            tag_terms.extend(str(v) for v in val if v)
         elif val:
-            parts.append(str(val))
+            tag_terms.append(str(val))
+
+    track_terms: list[str] = []
+    for key in (searchable - TAG_FIELDS):
+        val = fields.get(key)
+        if isinstance(val, list):
+            track_terms.extend(str(v) for v in val if v)
+        elif val:
+            track_terms.append(str(val))
+
+    parts: list[str] = []
+    if tag_terms:
+        tag_text = " ".join(tag_terms)
+        # Repeat tag block to boost its embedding weight
+        parts.append(tag_text)
+        parts.append(tag_text)
+    parts.extend(track_terms)
+
     return " ".join(parts) or "music"
 
 def join_records(entries_by_schema: dict[str, list[dict]], primary: str) -> list[dict]:
@@ -264,43 +346,61 @@ def join_records(entries_by_schema: dict[str, list[dict]], primary: str) -> list
         print(f"  [warn] primary schema '{primary}' has no entries — nothing to join")
         return []
 
+    # Index secondary (tag) entries by canonical track ID
     secondary_fields: dict[str, dict] = {}
-    for name, entries in entries_by_schema.items():
-        if name == primary:
+    for schema_name, entries in entries_by_schema.items():
+        if schema_name == primary:
             continue
         for item in entries:
-            track_id = item["entry"].get("name", "")
-            if not track_id:
+            key = _track_id(item["entry"])
+            if not key:
+                print(f"  [warn] secondary entry has no resolvable track ID — skipping")
                 continue
             flat = _flatten_fields(item["entry"].get("fields", {}))
-            if track_id not in secondary_fields:
-                secondary_fields[track_id] = {}
-            secondary_fields[track_id].update(flat)
+            if key not in secondary_fields:
+                secondary_fields[key] = {}
+            secondary_fields[key].update(flat)
+
+    global debug_secondary
+    debug_secondary = secondary_fields
+    print(f"  [join] secondary index: {len(secondary_fields)} keys:")
+    for k, v in secondary_fields.items():
+        print(f"    tag key={k!r}  genres={v.get('genres')}  moods={v.get('moods')}")
 
     joined = []
+    matched = 0
+    print(f"  [join] primary entries ({len(primary_entries)}):")
     for item in primary_entries:
-        track_id = item["entry"].get("name", "")
+        track_id = _track_id(item["entry"])
+        # print(f"    primary track_id={track_id!r}")
         if not track_id:
             continue
 
         core_fields = _flatten_fields(item["entry"].get("fields", {}))
-        fields      = {**secondary_fields.get(track_id, {}), **core_fields}
-        fields["trackId"] = track_id
+        tag_fields  = secondary_fields.get(track_id, {})
+        fields      = {**core_fields, **tag_fields}
+        fields["trackId"] = track_id  # ensure canonical ID is always stored
+
+        doc = _build_searchable_text(fields)
+
+        if tag_fields:
+            matched += 1
 
         joined.append({
             "id":       f"track:{track_id}",
-            "document": _build_searchable_text(fields),
+            "document": doc,
             "payload":  json.dumps(fields),
             "metadata": {
                 "trackId":        track_id,
                 "owner":          item["meta"]["owner"],
                 "manifestCid":    item["meta"]["manifestCid"],
                 "blockTimestamp": item["meta"]["blockTimestamp"],
-                **{f"has_{name}": str(name == primary or track_id in secondary_fields)
-                   for name in entries_by_schema},
+                **{f"has_{n}": str(n == primary or bool(tag_fields))
+                   for n in entries_by_schema},
             },
         })
 
+    print(f"  [join] {len(joined)} records — {matched} with tags, {len(joined) - matched} without")
     return joined
 
 # ---------------------------------------------------------------------------
@@ -313,20 +413,18 @@ async def ingest():
     schemas = get_schemas()
     primary = get_primary(schemas)
 
+    print(f"\n{'='*60}")
     print(f"Ingesting {len(schemas)} schema(s): {list(schemas.keys())}")
-    print(f"Primary: '{primary}'")
+    # print(f"Primary: '{primary}'")
+    print(f"{'='*60}")
 
     results = await asyncio.gather(*[
-        fetch_schema_entries(schema_id, loop)
-        for schema_id in schemas.values()
+        fetch_schema_entries(name, schema_id, loop)
+        for name, schema_id in schemas.items()
     ])
     entries_by_schema = dict(zip(schemas.keys(), results))
 
-    for name, entries in entries_by_schema.items():
-        print(f"  {name}: {len(entries)} entries")
-
     joined = join_records(entries_by_schema, primary)
-    print(f"  {len(joined)} joined records to upsert")
 
     if not joined:
         print("  Nothing to ingest.")
@@ -374,15 +472,12 @@ def _parse_hits(results: dict, include_embeddings: bool = False) -> list[dict]:
         meta    = dict(metas[i] or {})
         payload = json.loads(meta.pop("payload", "{}"))
         hit     = {"id": doc_id, "fields": payload, **meta}
-
         if dist_list[i] is not None:
             hit["score"]    = round(1 - dist_list[i], 4)
             hit["distance"] = dist_list[i]
-
         if include_embeddings and emb_list[i] is not None:
             raw = emb_list[i]
             hit["embedding"] = raw if isinstance(raw, list) else raw.tolist()
-
         hits.append(hit)
     return hits
 
@@ -465,6 +560,35 @@ async def embed(body: EmbedRequest):
         vectors = await loop.run_in_executor(None, lambda: ef_global([body.text]))
         return {"embedding": vectors[0].tolist()}
     return {"error": "provide 'text' or 'texts'"}
+
+@app.get("/debug")
+async def debug():
+    """Shows the loaded secondary (tag) index and all primary track_ids. Use this to diagnose join mismatches."""
+    schemas = get_schemas()
+    primary = get_primary(schemas)
+    loop    = asyncio.get_event_loop()
+    results = await loop.run_in_executor(
+        None,
+        lambda: collection.get(include=["metadatas"]),
+    )
+    metas = results.get("metadatas") or []
+    primary_ids = [m.get("trackId", "") for m in metas if m]
+    return {
+        "primary_track_ids":  sorted(primary_ids),
+        "secondary_tag_keys": sorted(debug_secondary.keys()),
+        "matched":            sorted(set(primary_ids) & set(debug_secondary.keys())),
+        "unmatched_primary":  sorted(set(primary_ids) - set(debug_secondary.keys())),
+        "unmatched_tags":     sorted(set(debug_secondary.keys()) - set(primary_ids)),
+        "tag_details": {
+            k: {
+                "genres":   v.get("genres"),
+                "moods":    v.get("moods"),
+                "themes":   v.get("themes"),
+                "contexts": v.get("contexts"),
+            }
+            for k, v in debug_secondary.items()
+        },
+    }
 
 @app.get("/health")
 async def health():

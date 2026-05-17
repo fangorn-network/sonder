@@ -24,24 +24,39 @@ const SIGNING_METHODS = new Set([
   'wallet_addEthereumChain',
 ])
 
-function serializeParams(params: unknown): unknown {
-  return JSON.parse(
-    JSON.stringify(params, (_, v) =>
-      typeof v === 'bigint' ? '0x' + v.toString(16) : v
-    )
-  )
+function getPinataConfig(): { jwt: string; gateway: string } {
+  try {
+    const raw = localStorage.getItem('sond3r:pinata:config')
+    const cfg = raw ? JSON.parse(raw) : null
+    return { jwt: cfg?.jwt ?? '', gateway: cfg?.gateway ?? '' }
+  } catch {
+    return { jwt: '', gateway: '' }
+  }
 }
 
 export function useFangorn(): UseFangornResult {
   const { ready, authenticated } = usePrivy()
   const { wallets } = useWallets()
 
-  const [fangorn, setFangorn] = useState<Fangorn | null>(null)
+  const [fangorn,      setFangorn]      = useState<Fangorn | null>(null)
   const [walletClient, setWalletClient] = useState<WalletClient | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [loading,      setLoading]      = useState(false)
+  const [error,        setError]        = useState<string | null>(null)
 
-  const wallet = wallets[0]
+  // Reactive — re-initializes Fangorn when the user saves Pinata creds
+  const [pinataKey, setPinataKey] = useState(
+    () => localStorage.getItem('sond3r:pinata:config')
+  )
+
+  useEffect(() => {
+    const handler = (e: StorageEvent) => {
+      if (e.key === 'sond3r:pinata:config') setPinataKey(e.newValue)
+    }
+    window.addEventListener('storage', handler)
+    return () => window.removeEventListener('storage', handler)
+  }, [])
+
+  const wallet     = wallets[0]
   const privyReady = ready && authenticated
 
   useEffect(() => {
@@ -52,13 +67,12 @@ export function useFangorn(): UseFangornResult {
     }
 
     let cancelled = false
-
     setLoading(true)
     setError(null)
 
     const init = async () => {
       const provider = await wallet.getEthereumProvider()
-      const rpcUrl = (import.meta as any).env.VITE_ARBITRUM_SEPOLIA_RPC_URL
+      const rpcUrl   = (import.meta as any).env.VITE_ARBITRUM_SEPOLIA_RPC_URL
 
       const ipcTransport = custom({
         async request({ method, params }) {
@@ -83,9 +97,7 @@ export function useFangorn(): UseFangornResult {
         account: wallet.address as Hex,
         chain: {
           ...FangornConfig.ArbitrumSepolia.chain,
-          fees: {
-            baseFeeMultiplier: 1.5,
-          },
+          fees: { baseFeeMultiplier: 1.5 },
         },
         transport: ipcTransport,
       })
@@ -95,37 +107,32 @@ export function useFangorn(): UseFangornResult {
         chain: {
           ...FangornConfig.ArbitrumSepolia.chain,
           rpcUrls: {
-            default: { http: [(import.meta as any).env.VITE_ARBITRUM_SEPOLIA_RPC_URL] },
-            public: { http: [(import.meta as any).env.VITE_ARBITRUM_SEPOLIA_RPC_URL] },
+            default: { http: [rpcUrl] },
+            public:  { http: [rpcUrl] },
           },
         },
       }
 
       const fangornInstance = await Fangorn.create({
         walletClient: wc,
-        config: patchedConfig,
+        config:       patchedConfig,
         storage: {
-          pinata: {
-            jwt: (import.meta as any).env.VITE_PINATA_JWT ?? '',
-            gateway: (import.meta as any).env.VITE_PINATA_GATEWAY ?? '',
-          },
+          pinata: getPinataConfig(),  // reads from localStorage at init time
         },
-        // config: FangornConfig.ArbitrumSepolia,
         domain: window.location.host,
       })
 
       if (cancelled) return
-
       setWalletClient(wc)
       setFangorn(fangornInstance)
     }
 
     init()
-      .catch((e) => { if (!cancelled) setError(e.message) })
+      .catch(e => { if (!cancelled) setError(e.message) })
       .finally(() => { if (!cancelled) setLoading(false) })
 
     return () => { cancelled = true }
-  }, [privyReady, wallet?.address])
+  }, [privyReady, wallet?.address, pinataKey])  // re-runs when pinata creds change
 
   return {
     fangorn,

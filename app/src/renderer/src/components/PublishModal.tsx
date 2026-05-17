@@ -4,6 +4,7 @@ import { Fangorn } from "@fangorn-network/sdk";
 import { Hex } from "viem";
 import { Track } from "../types";
 import { usePrivy } from "@privy-io/react-auth";
+import { computeTrackId } from "../lib/trackId";
 
 interface PublishModalProps {
     track: Track
@@ -55,15 +56,15 @@ export function PublishModal({ track, onClose, onPublished, fangorn, accentColor
         console.log('jwt at signing time:', token)
 
         try {
+            const trackId = await computeTrackId(track.artist, track.title);
             await fangorn.publisher.upload(
                 {
                     records: [{
-                        name: track.spotifyTrackId
-                            ?? `${track.artist}-${track.title}`.replace(/\s+/g, '-').toLowerCase(),
+                        name: trackId,
                         fields: {
                             schemaVersion: 1,
                             isrcCode: '',
-                            trackId: track.spotifyTrackId ?? '',
+                            trackId: trackId,
                             title: track.title,
                             byArtist: track.artist,
                             datePublished: (track.year ? `${track.year}` : 0).toString(),
@@ -117,6 +118,9 @@ export function PublishModal({ track, onClose, onPublished, fangorn, accentColor
                     <div>
                         <div className="pm-title">Publish to SOND3R</div>
                         <div className="pm-subtitle">{track.artist} — {track.title}</div>
+                    </div>
+                    <div>
+                        
                     </div>
                     <button className="pm-close" onClick={onClose}>×</button>
                 </div>

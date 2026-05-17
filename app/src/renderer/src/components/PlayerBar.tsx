@@ -69,21 +69,20 @@ export function PlayerBar({ onExpand, hidden }: PlayerBarProps) {
         type: 'skip',
         weight: -1.0,
         track: {
-          id: '', title: t.name, artist: t.artist, year: null, energy: null,
+          id: '', trackId: '', title: t.name, artist: t.artist, year: null,
           genres: [], moods: [], contexts: [], themes: [],
-          owner: '', manifestStateId: '', datasourceName: '', mbid: null, name: t.name,
+          owner: '', manifestCid: '', durationMs: 0, spotifyTrackId: null,
         }
       })
     }
-    ;(onNext ?? next)?.()
+    ; (onNext ?? next)?.()
   }
 
-  const handlePrev = () => { ;(onPrev ?? prev)?.() }
+  const handlePrev = () => { ; (onPrev ?? prev)?.() }
 
   return (
     <>
       <div className="player-bar" style={hidden ? { display: 'none' } : undefined}>
-        {/* clicking art or track info expands to now playing */}
         <div className="player-track" onClick={onExpand} style={{ cursor: 'pointer' }}>
           {albumArt
             ? <img className="player-art" src={albumArt} alt={name} />
@@ -103,7 +102,7 @@ export function PlayerBar({ onExpand, hidden }: PlayerBarProps) {
           <div className="player-controls">
             <button className="player-btn player-btn--skip" onClick={handlePrev} title="Previous">
               <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
-                <path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/>
+                <path d="M6 6h2v12H6zm3.5 6 8.5 6V6z" />
               </svg>
             </button>
             <button
@@ -117,20 +116,20 @@ export function PlayerBar({ onExpand, hidden }: PlayerBarProps) {
                 : isPlaying
                   ? (
                     <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
-                      <rect x="5" y="4" width="4" height="16" rx="1"/>
-                      <rect x="15" y="4" width="4" height="16" rx="1"/>
+                      <rect x="5" y="4" width="4" height="16" rx="1" />
+                      <rect x="15" y="4" width="4" height="16" rx="1" />
                     </svg>
                   )
                   : (
                     <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
-                      <path d="M8 5.14v14l11-7-11-7z"/>
+                      <path d="M8 5.14v14l11-7-11-7z" />
                     </svg>
                   )
               }
             </button>
             <button className="player-btn player-btn--skip" onClick={handleNext} title="Next">
               <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
-                <path d="M16 6h2v12h-2zM6 18l8.5-6L6 6v12z"/>
+                <path d="M16 6h2v12h-2zM6 18l8.5-6L6 6v12z" />
               </svg>
             </button>
           </div>

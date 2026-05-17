@@ -62,6 +62,12 @@ export interface Track {
   spotifyTrackId: string | null
   contributors?: { role: string | null; name: string | null; id: string | null }[]
   embedding?: number[]
+  genres?: string[]
+  moods?: string[]
+  themes?: string[]
+  contexts?: string[]
+  youtubeVideoId?: string
+  thumbnailUrl?: string
 }
 
 export type PlayState = 'idle' | 'loading' | 'playing' | 'error'

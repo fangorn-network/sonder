@@ -16,4 +16,24 @@ export const DEFAULTS = {
     skip_window: 10,    // max skip embeddings to carry
     temp_base: 1.0,   // resampling temperature at entropy=0
     temp_max: 4.0,   // resampling temperature at entropy=1
+    // Categorical taste
+    alpha_taste: 0.15,   // accumulation rate per play
+    taste_decay: 0.05,   // per-play decay on all taste weights
+    skip_taste_pen: 0.25,  // penalty subtracted from skipped tags
+
+    // Artist affinity
+    beta_artist: 0.7,    // EMA decay (higher = slower to forget/forgive)
+
+    // Duration preference
+    rho_duration: 0.25,   // EMA toward played duration
+    dur_sigma_ms: 90_000, // ±90s preference band (1σ) — tune this to your catalog
+
+    // Reweighting signal weights
+    tau_cat: 2.0,    // categorical affinity log-weight scale
+    tau_art: 1.5,    // artist affinity log-weight scale
+    tau_dur: 0.5,    // duration affinity log-weight scale (intentionally weak)
+
+    // Floors (prevent total suppression of unexplored space)
+    cat_floor: 0.05,
+    art_floor: 0.10,
 }

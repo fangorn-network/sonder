@@ -31,3 +31,6 @@ export const CLAUDE_MODELS: LLMModelUI[] = [
   { id: 'claude-sonnet-4-6', label: 'Sonnet 4.6', desc: 'Near-Opus quality at lower cost' },
   { id: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5', desc: 'Fastest and most affordable' },
 ]
+
+export const DEFAULT_OLLAMA_MODEL="qwen3.5:4b"
+export const DEFAULT_CLAUDE_MODEL="claude-sonnet-4-6"

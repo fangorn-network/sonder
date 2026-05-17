@@ -130,7 +130,7 @@ export function AgentManager({ providerStatus, models, selectedModel, onStateCha
         }
         config.claudeApiKey = claudeKey.trim()
         config.claudeModel = localModel
-      } else if (selectedProvider === LLMProvider.Ollama && localModel) {
+      } else if (selectedProvider === LLMProvider.Ollama && localModel && localModel != '-') {
         config.ollamaModel = localModel
       }
 
@@ -297,6 +297,7 @@ export function AgentManager({ providerStatus, models, selectedModel, onStateCha
                         value={localModel}
                         onChange={(e) => { setLocalModel(e.target.value); setDirty(true) }}
                       >
+                        <option value="-">-</option>
                         {models.map((m) => (
                           <option key={m} value={m}>{m}</option>
                         ))}

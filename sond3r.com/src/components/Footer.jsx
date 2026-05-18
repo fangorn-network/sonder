@@ -1,23 +1,23 @@
 import React from 'react'
 import './Footer.css'
 
-const GITHUB_URL = 'https://github.com/your-org/sond3r'
-const DISCORD_URL = 'https://discord.gg/your-invite'
+const GITHUB_URL = 'https://github.com/fangorn-network/sonder'
+const DISCORD_URL = 'https://discord.gg/VU6vTmunCt'
 const FANGORN_URL = 'https://fangorn.network'
-const CONTACT_URL = 'mailto:hello@sond3r.app'
+const CONTACT_URL = 'mailto:fangorn@fangorn.network'
 
 export default function Footer() {
   return (
     <footer className="footer">
       <div className="footer-cta">
-        <p className="section-mono">05 — Get started</p>
-        <h2 className="footer-heading">Download SOND3R.</h2>
+        <p className="section-mono">Get started!</p>
+        <h2>Download SOND3R [coming soon].</h2>
         <div className="footer-actions">
           <a href="#" className="footer-btn-primary">Download</a>
           <a href={DISCORD_URL} className="footer-btn-ghost" target="_blank" rel="noopener noreferrer">Discord</a>
           <a href="#support" className="footer-btn-ghost">Support us</a>
         </div>
-        <p className="footer-note">Requires Spotify Premium. Alpha release.</p>
+        <p className="footer-note">Requires Spotify Premium.</p>
       </div>
 
       <div className="footer-bottom">

@@ -16,7 +16,7 @@
   z-index: 1;
   background:
     radial-gradient(ellipse 70% 55% at 50% 50%, rgba(129, 163, 255, 0.178) 0%, transparent 100%),
-    linear-gradient(to bottom, rgba(2,4,8,0.45) 0%, rgba(2,4,8,0.6) 40%, rgba(2,4,8,0.96) 88%, rgba(2,4,8,1) 100%);
+    linear-gradient(to bottom, rgba(2, 4, 8, 0.45) 0%, rgba(2, 4, 8, 0.6) 40%, rgba(2, 4, 8, 0.96) 88%, rgba(2, 4, 8, 1) 100%);
 }
 
 .hero-content {
@@ -37,7 +37,7 @@
   font-size: 0.65rem;
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: rgba(0,240,220,0.7);
+  color: rgba(0, 240, 220, 0.7);
 }
 
 .hero-headline {
@@ -75,7 +75,10 @@
   padding: 0.7rem 1.75rem;
   transition: opacity 0.15s;
 }
-.hero-btn-primary:hover { opacity: 0.85; }
+
+.hero-btn-primary:hover {
+  opacity: 0.85;
+}
 
 .hero-btn-ghost {
   font-family: var(--mono);
@@ -87,7 +90,11 @@
   border: 1px solid var(--border-strong);
   transition: border-color 0.15s, color 0.15s;
 }
-.hero-btn-ghost:hover { border-color: var(--off-white); color: var(--white); }
+
+.hero-btn-ghost:hover {
+  border-color: var(--off-white);
+  color: var(--white);
+}
 
 .hero-fine {
   font-family: var(--mono);
@@ -131,6 +138,18 @@
   text-transform: uppercase;
 }
 
+.hero {
+  position: relative;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  /* Changed from center to space-between so the footer naturally pushes to the bottom */
+  justify-content: space-between;
+  overflow: hidden;
+  border-bottom: 1px solid var(--border-strong);
+}
+
 /* Bottom status bar — same vibe as the app footer */
 .hero-footer {
   position: relative;
@@ -138,6 +157,8 @@
   width: 100%;
   display: flex;
   align-items: center;
+  /* Added this to center the spans horizontally */
+  justify-content: center;
   gap: 1rem;
   padding: 0.65rem 2rem;
   border-top: 1px solid var(--border-strong);
@@ -146,13 +167,30 @@
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--faint);
+  /* Added to push it away from the image if needed, keeping it anchored to the bottom */
+  margin-top: auto;
 }
 
-.hero-footer-sep { color: var(--border-strong); }
-
 @media (max-width: 600px) {
-  .hero-content { padding: 7rem 1.25rem 2.5rem; }
-  .hero-actions { flex-direction: column; width: 100%; }
-  .hero-btn-primary, .hero-btn-ghost { width: 100%; text-align: center; }
-  .hero-footer { flex-wrap: wrap; gap: 0.5rem; }
+  .hero-content {
+    padding: 7rem 1.25rem 2.5rem;
+  }
+
+  .hero-actions {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .hero-btn-primary,
+  .hero-btn-ghost {
+    width: 100%;
+    text-align: center;
+  }
+
+  .hero-footer {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    /* Ensures items remain centered even when they wrap on small mobile devices */
+    justify-content: center;
+  }
 }

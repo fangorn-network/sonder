@@ -82,20 +82,28 @@ export default function Product() {
 
       <div className="features">
         {features.map(f => (
-          <div key={f.num} className="feature">
-            <div className="feature-meta">
-              <span className="feature-num">{f.num}</span>
-              <span className="feature-label">{f.label}</span>
-            </div>
-            <div className="feature-body">
+          <div key={f.num} className={`feature ${f.img ? 'feature--has-img' : 'feature--text-only'}`}>
+
+            {/* Text Container */}
+            <div className="feature-info">
+              <div className="feature-meta">
+                <span className="feature-num">{f.num}</span>
+                <span className="feature-label">{f.label}</span>
+              </div>
               <h3 className="feature-title">{f.title}</h3>
               <p className="feature-desc">{f.desc}</p>
-              {f.img && (
-                <div className="feature-img">
-                  <img src={f.img} alt={f.label} />
-                </div>
-              )}
             </div>
+
+            {/* Image Container */}
+            {f.img ? (
+              <div className="feature-img">
+                <img src={f.img} alt={f.label} />
+              </div>
+            ) : (
+              /* Empty placeholder div maintains grid alignment for text-only rows */
+              <div className="feature-img-spacer" />
+            )}
+
           </div>
         ))}
       </div>

@@ -5,8 +5,9 @@ import './Hero.css'
 import heroImg from '../assets/hero.png'
 const HERO_IMAGE = heroImg
 
-const DISCORD_URL = 'https://discord.gg/your-invite'
+const DISCORD_URL = 'https://discord.gg/VU6vTmunCt'
 const DOWNLOAD_URL = '#'
+const BOOK_DEMO_URL = 'https://calendly.com/driemworks-fangorn/sond3r-fangorn-demo'
 
 export default function Hero() {
   return (
@@ -29,8 +30,9 @@ export default function Hero() {
         </p>
 
         <div className="hero-actions">
-          <a href={DOWNLOAD_URL} className="hero-btn-primary">Download</a>
-          <a href={DISCORD_URL} className="hero-btn-ghost" target="_blank" rel="noopener noreferrer">Discord</a>
+          <a href={DOWNLOAD_URL} className="hero-btn-ghost">Download (coming soon)</a>
+          <a href={DISCORD_URL} className="hero-btn-primary" target="_blank" rel="noopener noreferrer">Discord</a>
+          <a href={BOOK_DEMO_URL} className="hero-btn-primary" target="_blank" rel="noopener noreferrer">Book a Demo</a>
         </div>
 
         <p className="hero-fine">Requires Spotify Premium</p>
@@ -48,7 +50,7 @@ export default function Hero() {
         <span className="hero-footer-sep">|</span>
         <span>Arbitrum</span>
         <span className="hero-footer-sep">|</span>
-        <span>v0.1 — testnet</span>
+        <span>v0.0.1</span>
       </div>
     </section>
   )

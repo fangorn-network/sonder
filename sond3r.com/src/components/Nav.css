@@ -40,13 +40,13 @@
 .nav-links a:hover { color: var(--white); }
 
 .nav-cta {
-  color: var(--neon-amber) !important;
-  border: 1px solid rgba(255,185,80,0.25) !important;
+  color: var(--neon-magenta) !important;
+  border: 1px solid rgba(199, 69, 182, 0.61) !important;
   padding: 0.4rem 1rem;
-  transition: border-color 0.15s !important;
+  transition: border-color 0.15s !important; 
 }
 
-.nav-cta:hover { border-color: rgba(255,185,80,0.6) !important; }
+.nav-cta:hover { border-color: rgb(255, 0, 221) !important; }
 
 @media (max-width: 600px) {
   .nav { padding: 0.85rem 1.25rem; }

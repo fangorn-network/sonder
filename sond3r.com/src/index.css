@@ -1,36 +1,186 @@
-@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@300;400&family=DM+Sans:wght@300;400;500&display=swap');
-
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
+/* ==========================================================================
+   SOND3R DESIGN SYSTEM VARIABLES
+   ========================================================================== */
 :root {
-  --bg: #0e1729;
-  --bg2: #05091a;
-  --white: #e4e2ec;
-  --off-white: #b8b6c8;
-  --muted: rgba(184,182,200,0.5);
-  --faint: rgba(184,182,200,0.28);
-  --border: rgba(255,255,255,0.06);
-  --border-strong: rgba(255,255,255,0.11);
-  --neon-teal: rgb(0,240,220);
-  --neon-magenta: rgb(255,0,170);
-  --neon-amber: rgb(255,185,80);
-  --display: 'Bebas Neue', sans-serif;
-  --mono: 'DM Mono', monospace;
-  --body: 'DM Sans', sans-serif;
+  /* Color Palette */
+  --bg-space: #060913;          /* Deep indigo/space background */
+  --bg-card: #0b1120;           /* Slightly lighter terminal/widget background */
+  --border-glow: #131c33;       /* Subtle terminal borders */
+  
+  --text-primary: #ffffff;      /* High contrast white for headers */
+  --text-muted: #8fa0c2;        /* Accessible gray-blue for descriptions */
+  --text-dim: #435375;          /* Low-contrast placeholder/disclaimer text */
+  
+  /* Accent Colors */
+  --accent-cyan: #00f0ff;       /* Agentic / Primary accent */
+  --accent-pink: #ff007a;       /* Secondary accent / Tabs */
+  --accent-purple: #7000ff;     /* Telemetry metric accent */
+
+  /* Typography */
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+  
+  /* Layout Layout Constraints */
+  --max-text-width: 65ch;       /* Limits line length for perfect readability */
+  --container-width: 1200px;
 }
 
-html { scroll-behavior: smooth; }
-
+/* ==========================================================================
+   GLOBAL STYLES & RESET
+   ========================================================================== */
 body {
-  background: var(--bg);
-  color: var(--white);
-  font-family: var(--body);
-  font-weight: 300;
+  background-color: var(--bg-space);
+  color: var(--text-muted);
+  font-family: var(--font-sans);
   line-height: 1.6;
+  margin: 0;
+  padding: 0;
   -webkit-font-smoothing: antialiased;
-  overflow-x: hidden;
 }
 
-img { display: block; max-width: 100%; }
-a { color: inherit; text-decoration: none; }
-::selection { background: rgba(0,240,220,0.3); color: var(--white); }
+h1, h2, h3, h4 {
+  color: var(--text-primary);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  text-transform: uppercase;
+}
+
+/* ==========================================================================
+   TYPOGRAPHY & READABILITY FIXES
+   ========================================================================== */
+/* Hard-hitting section headers */
+.hero-title {
+  font-size: clamp(3rem, 8vw, 6rem);
+  line-height: 0.9;
+  margin-bottom: 1.5rem;
+}
+
+/* Fixes the wide line-length problem from the $300B section */
+.editorial-copy {
+  font-size: 1.125rem;
+  max-width: var(--max-text-width); /* Keeps text snug and readable */
+  color: var(--text-muted);
+  margin-bottom: 2rem;
+}
+
+/* Accessible Spotify disclaimer text */
+.disclaimer-text {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-dim); /* Bump this variable up if contrast testing fails */
+  letter-spacing: 0.05em;
+  opacity: 0.8; 
+  transition: opacity 0.2s ease;
+}
+.disclaimer-text:hover {
+  opacity: 1; /* Subtle micro-interaction */
+}
+
+/* ==========================================================================
+   INTERACTIVE ELEMENTS (BUTTONS & TABS)
+   ========================================================================== */
+.btn {
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 1rem 2.5rem;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Solid Download Button */
+.btn-primary {
+  background-color: var(--text-primary);
+  color: var(--bg-space);
+}
+.btn-primary:hover {
+  background-color: transparent;
+  border-color: var(--text-primary);
+  color: var(--text-primary);
+  box-shadow: 0 0 20px rgba(255, 255, 255, 0.1);
+}
+
+/* Ghost Discord Button */
+.btn-secondary {
+  background-color: transparent;
+  border-color: rgba(255, 255, 255, 0.2);
+  color: var(--text-primary);
+}
+.btn-secondary:hover {
+  border-color: var(--text-primary);
+  background-color: rgba(255, 255, 255, 0.03);
+}
+
+/* Navigation Tabs (Listeners vs Artists) */
+.tab-container {
+  display: flex;
+  gap: 2rem;
+  border-bottom: 1px solid var(--border-glow);
+  margin-bottom: 3rem;
+}
+
+.tab-item {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  letter-spacing: 0.05em;
+  padding-bottom: 0.75rem;
+  color: var(--text-dim);
+  cursor: pointer;
+  position: relative;
+  transition: color 0.2s ease;
+}
+
+.tab-item:hover, .tab-item.active {
+  color: var(--text-primary);
+}
+
+/* Animated accent underline for the active tab */
+.tab-item.active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background-color: var(--accent-pink);
+  box-shadow: 0 0 8px var(--accent-pink);
+}
+
+/* ==========================================================================
+   THE TELEMETRY WIDGETS (TASTE ENGINE)
+   ========================================================================== */
+.telemetry-card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-glow);
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  padding: 2rem;
+}
+
+/* Radial Gauge Placeholder (Entropy, Speed, etc.) */
+.gauge-metric {
+  color: var(--accent-cyan);
+  text-shadow: 0 0 10px rgba(0, 240, 255, 0.3);
+  font-size: 1.25rem;
+}
+
+/* Data Row Layout (Moods/Genres list grid) */
+.data-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0;
+  border-bottom: 1px dashed rgba(67, 83, 117, 0.2);
+  font-size: 0.85rem;
+}
+
+.data-label {
+  color: var(--text-muted);
+}
+
+.data-value {
+  color: var(--text-primary);
+}

@@ -4,7 +4,8 @@ import type { Track } from '../types'
 import './NowPlaying.css'
 import { PublishModal } from './PublishModal'
 import { useFangorn } from '../hooks/useFangorn'
-import { TrackTagModal, readTrackTags, isTrackTagged, type TrackTagData } from './TrackTag'
+import { TrackTagModal, type TrackTagData } from './TrackTag'
+import { computeTrackId } from '../lib/trackId'
 
 const CHROMA_URL = (import.meta as any).env.VITE_CHROMA_URL ?? 'http://localhost:8080'
 
@@ -18,46 +19,58 @@ function fmtTime(ms: number) {
 
 // ── api ───────────────────────────────────────────────────────────────────────
 
-async function checkExistsInChroma(
+interface NetworkTags {
+    genres:   string[]
+    moods:    string[]
+    themes:   string[]
+    contexts: string[]
+}
+
+async function fetchTrackFromChroma(
+    tagTrackId:     string,
     spotifyTrackId: string | null,
-    title: string,
-    artist: string,
-): Promise<boolean> {
+    title:          string,
+    artist:         string,
+): Promise<{ exists: boolean; tags: NetworkTags | null }> {
     try {
-        const q = encodeURIComponent(`${artist} ${title}`)
+        const q   = encodeURIComponent(`${artist} ${title}`)
         const res = await fetch(`${CHROMA_URL}/search?q=${q}&n_results=5`)
-        if (!res.ok) return false
+        if (!res.ok) return { exists: false, tags: null }
         const data = await res.json()
-        return (data.results ?? []).some((h: any) => {
+
+        const hit = (data.results ?? []).find((h: any) => {
             const f = h.fields ?? {}
-            const hId = (f.externalId as string) ?? (h.id?.startsWith('track:') ? h.id.slice(6) : null)
+            if (f.trackId === tagTrackId) return true
+            const hId = (f.externalId as string) ??
+                (h.id?.startsWith('track:') ? h.id.slice(6) : null)
             if (spotifyTrackId && hId === spotifyTrackId) return true
-            const hTitle = (f.title ?? f.name ?? '').toLowerCase()
+            const hTitle  = (f.title    ?? f.name   ?? '').toLowerCase()
             const hArtist = (f.byArtist ?? f.artist ?? '').toLowerCase()
             return hTitle === title.toLowerCase() && hArtist === artist.toLowerCase()
         })
-    } catch {
-        return false
-    }
-}
 
-async function fetchAlbumArt(title: string, artist: string): Promise<string | null> {
-    try {
-        const q = encodeURIComponent(`${artist} ${title}`)
-        const res = await fetch(`https://itunes.apple.com/search?term=${q}&entity=song&limit=3`)
-        const data = await res.json()
-        const url = data.results?.[0]?.artworkUrl100
-        if (url) return url.replace('100x100bb', '600x600bb')
-    } catch { }
-    return null
+        if (!hit) return { exists: false, tags: null }
+
+        const f = hit.fields ?? {}
+        const tags: NetworkTags = {
+            genres:   Array.isArray(f.genres)   ? f.genres   : [],
+            moods:    Array.isArray(f.moods)     ? f.moods    : [],
+            themes:   Array.isArray(f.themes)    ? f.themes   : [],
+            contexts: Array.isArray(f.contexts)  ? f.contexts : [],
+        }
+        const hasTags = Object.values(tags).some(arr => arr.length > 0)
+        return { exists: true, tags: hasTags ? tags : null }
+    } catch {
+        return { exists: false, tags: null }
+    }
 }
 
 async function embedTrack(artist: string, title: string): Promise<number[] | null> {
     try {
         const res = await fetch(`${CHROMA_URL}/embed`, {
-            method: 'POST',
+            method:  'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text: `${artist} - ${title}` }),
+            body:    JSON.stringify({ text: `${artist} - ${title}` }),
         })
         if (!res.ok) return null
         const data = await res.json()
@@ -68,17 +81,17 @@ async function embedTrack(artist: string, title: string): Promise<number[] | nul
 }
 
 async function fetchSimilarTracks(
-    embedding: number[],
-    excludeId: string,
-    excludeTitle: string,
+    embedding:     number[],
+    excludeId:     string,
+    excludeTitle:  string,
     excludeArtist: string,
     n = 10,
 ): Promise<SimilarTrack[]> {
     try {
         const res = await fetch(`${CHROMA_URL}/search/vector`, {
-            method: 'POST',
+            method:  'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ embedding, n_results: n + 20 }),
+            body:    JSON.stringify({ embedding, n_results: n + 20 }),
         })
         if (!res.ok) return []
         const data = await res.json()
@@ -88,7 +101,7 @@ async function fetchSimilarTracks(
             .filter((t: SimilarTrack) => {
                 if (excludeId && t.id === excludeId) return false
                 if (
-                    t.title.toLowerCase() === excludeTitle.toLowerCase() &&
+                    t.title.toLowerCase()  === excludeTitle.toLowerCase() &&
                     t.artist.toLowerCase() === excludeArtist.toLowerCase()
                 ) return false
                 const key = t.spotifyTrackId ?? t.id
@@ -103,22 +116,22 @@ async function fetchSimilarTracks(
 }
 
 async function fetchArtistTracks(
-    artist: string,
-    excludeId: string,
+    artist:       string,
+    excludeId:    string,
     excludeTitle: string,
     n = 10,
 ): Promise<SimilarTrack[]> {
     try {
         const params = new URLSearchParams({ q: artist, n_results: String(100) })
-        const res = await fetch(`${CHROMA_URL}/search?${params}`)
+        const res    = await fetch(`${CHROMA_URL}/search?${params}`)
         if (!res.ok) return []
-        const data = await res.json()
-        const seen = new Set<string>()
+        const data   = await res.json()
+        const seen   = new Set<string>()
         return (data.results ?? [])
             .map((h: any) => parseHit(h))
             .filter((t: SimilarTrack) => {
                 if (t.id === excludeId) return false
-                if (t.title.toLowerCase() === excludeTitle.toLowerCase()) return false
+                if (t.title.toLowerCase()  === excludeTitle.toLowerCase()) return false
                 if (t.artist.toLowerCase() !== artist.toLowerCase()) return false
                 const key = t.spotifyTrackId ?? t.id
                 if (seen.has(key)) return false
@@ -137,30 +150,30 @@ function parseHit(h: any): SimilarTrack {
         (f.externalId as string) ??
         (h.id?.startsWith('track:') ? h.id.slice(6) : null)
     return {
-        id: h.id,
+        id:        h.id,
         spotifyTrackId,
-        title: (f.title as string) ?? (f.name as string) ?? 'Unknown',
-        artist: (f.byArtist as string) ?? (f.artist as string) ?? '',
-        year: typeof f.datePublished === 'string'
+        title:     (f.title    as string) ?? (f.name   as string) ?? 'Unknown',
+        artist:    (f.byArtist as string) ?? (f.artist as string) ?? '',
+        year:      typeof f.datePublished === 'string'
             ? parseInt(f.datePublished.slice(0, 4)) || null
             : (f.year as number) ?? null,
-        genre: Array.isArray(f.genres) ? (f.genres[0] ?? null) : null,
+        genre:     Array.isArray(f.genres) ? (f.genres[0] ?? null) : null,
         embedding: h.embedding ?? null,
-        score: h.score ?? null,
+        score:     h.score     ?? null,
     }
 }
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
 interface SimilarTrack {
-    id: string
+    id:             string
     spotifyTrackId: string | null
-    title: string
-    artist: string
-    year: number | null
-    genre: string | null
-    embedding: number[] | null
-    score: number | null
+    title:          string
+    artist:         string
+    year:           number | null
+    genre:          string | null
+    embedding:      number[] | null
+    score:          number | null
 }
 
 type RightTab = 'similar' | 'artist'
@@ -168,12 +181,12 @@ type RightTab = 'similar' | 'artist'
 // ── component ─────────────────────────────────────────────────────────────────
 
 interface NowPlayingProps {
-    onCollapse: () => void
-    lastPollTime: number
-    track?: Track
-    trackColor?: string
-    onFilter?: (type: 'genre' | 'mood' | 'context', value: string) => void
-    onCallAgent?: (query?: string) => void
+    onCollapse:     () => void
+    lastPollTime:   number
+    track?:         Track
+    trackColor?:    string
+    onFilter?:      (type: 'genre' | 'mood' | 'context', value: string) => void
+    onCallAgent?:   (query?: string) => void
     onTrackSelect?: (track: Track, color?: string) => void
 }
 
@@ -191,76 +204,96 @@ export function NowPlaying({
         play, searchAndPlay, connected, connect,
     } = useSpotifyContext()
 
-    const { fangorn, address, loading: fangornLoading } = useFangorn()
+    const { fangorn, address } = useFangorn()
 
     const focusTrack: Track | null = propTrack ?? (
         currentTrack ? {
-            id: '',
-            trackId: '',
-            owner: '',
-            manifestCid: '',
-            title: currentTrack.name,
-            artist: currentTrack.artist,
-            year: null,
-            durationMs: currentTrack.durationMs ?? null,
+            id:             '',
+            trackId:        '',
+            owner:          '',
+            manifestCid:    '',
+            title:          currentTrack.name,
+            artist:         currentTrack.artist,
+            year:           null,
+            durationMs:     currentTrack.durationMs ?? null,
             spotifyTrackId: currentTrack.spotifyTrackId ?? null,
         } satisfies Track : null
     )
 
     const isThisTrackActive =
         currentTrack && focusTrack &&
-        currentTrack.name.toLowerCase() === focusTrack.title.toLowerCase() &&
+        currentTrack.name.toLowerCase()   === focusTrack.title.toLowerCase() &&
         currentTrack.artist.toLowerCase() === focusTrack.artist.toLowerCase()
 
     // ── state ─────────────────────────────────────────────────────────────────
 
     const [liveProgressMs, setLiveProgressMs] = useState(0)
-    const [albumArt, setAlbumArt] = useState<string | null>(
+    const [albumArt, setAlbumArt]             = useState<string | null>(
         !propTrack ? (currentTrack?.albumArt ?? null) : null
     )
-    const [activeTab, setActiveTab] = useState<RightTab>('similar')
-    const [similarTracks, setSimilarTracks] = useState<SimilarTrack[]>([])
-    const [artistTracks, setArtistTracks] = useState<SimilarTrack[]>([])
+    const [activeTab, setActiveTab]           = useState<RightTab>('similar')
+    const [similarTracks, setSimilarTracks]   = useState<SimilarTrack[]>([])
+    const [artistTracks, setArtistTracks]     = useState<SimilarTrack[]>([])
     const [similarLoading, setSimilarLoading] = useState(false)
-    const [artistLoading, setArtistLoading] = useState(false)
-    const [playLoading, setPlayLoading] = useState(false)
-    const [playingId, setPlayingId] = useState<string | null>(null)
+    const [artistLoading, setArtistLoading]   = useState(false)
+    const [playLoading, setPlayLoading]       = useState(false)
+    const [playingId, setPlayingId]           = useState<string | null>(null)
 
-    const rafRef = useRef<number | null>(null)
+    const rafRef          = useRef<number | null>(null)
     const currentTrackRef = useRef(currentTrack)
 
     const [existsInIndex, setExistsInIndex] = useState<boolean | null>(null)
-    const [showPublish, setShowPublish] = useState(false)
+    const [showPublish, setShowPublish]     = useState(false)
 
-    // ── track tags ────────────────────────────────────────────────────────────
+    // ── track id + network tags ───────────────────────────────────────────────
 
-    const tagTrackId = focusTrack?.spotifyTrackId ?? focusTrack?.id ?? null
+    const [tagTrackId, setTagTrackId]   = useState<string | null>(null)
+    const [networkTags, setNetworkTags] = useState<NetworkTags | null>(null)
+
+    // modalTrackId is a stable snapshot of tagTrackId captured at open time.
+    // This prevents the async tagTrackId resolution from remounting/resetting
+    // the modal mid-publish if the track changes underneath.
     const [showTagModal, setShowTagModal] = useState(false)
-    const [trackTags, setTrackTags] = useState<TrackTagData | null>(null)
+    const [modalTrackId, setModalTrackId] = useState<string | null>(null)
 
-    // Load tags whenever track changes
+    const openTagModal = () => {
+        if (!tagTrackId) return
+        setModalTrackId(tagTrackId)
+        setShowTagModal(true)
+    }
+
+    // Resolve canonical trackId from artist+title
     useEffect(() => {
-        if (!tagTrackId) { setTrackTags(null); return }
-        const tags = readTrackTags(tagTrackId)
-        setTrackTags(tags)
-    }, [tagTrackId])
+        if (!focusTrack?.artist || !focusTrack?.title) { setTagTrackId(null); return }
+        computeTrackId(focusTrack.artist, focusTrack.title).then(setTagTrackId)
+    }, [focusTrack?.artist, focusTrack?.title])
 
-    const tagged = trackTags !== null && isTrackTagged(tagTrackId ?? '')
-    const allTags = trackTags
-        ? [...trackTags.genres, ...trackTags.moods, ...trackTags.contexts, ...trackTags.themes]
-        : []
-
-    // ── chroma existence check ────────────────────────────────────────────────
-
+    // Single fetch: existence check + tags
     useEffect(() => {
-        if (!focusTrack) return
+        if (!tagTrackId || !focusTrack?.title || !focusTrack?.artist) {
+            setExistsInIndex(null)
+            setNetworkTags(null)
+            return
+        }
         setExistsInIndex(null)
-        checkExistsInChroma(
-            focusTrack.spotifyTrackId,
+        setNetworkTags(null)
+        fetchTrackFromChroma(
+            tagTrackId,
+            focusTrack.spotifyTrackId ?? null,
             focusTrack.title,
             focusTrack.artist,
-        ).then(setExistsInIndex)
-    }, [focusTrack?.spotifyTrackId, focusTrack?.title, focusTrack?.artist])
+        ).then(({ exists, tags }) => {
+            setExistsInIndex(exists)
+            setNetworkTags(tags)
+        })
+    }, [tagTrackId, focusTrack?.spotifyTrackId, focusTrack?.title, focusTrack?.artist])
+
+    const allTags = networkTags
+        ? [...networkTags.genres, ...networkTags.moods, ...networkTags.contexts, ...networkTags.themes]
+        : []
+    const tagged = allTags.length > 0
+
+    // ── playback state ────────────────────────────────────────────────────────
 
     useEffect(() => { currentTrackRef.current = currentTrack }, [currentTrack])
 
@@ -272,9 +305,16 @@ export function NowPlaying({
 
     useEffect(() => {
         if (!focusTrack) return
-        fetchAlbumArt(focusTrack.title, focusTrack.artist).then(art => {
-            if (art) setAlbumArt(art)
-        })
+        async function go() {
+            try {
+                const q    = encodeURIComponent(`${focusTrack!.artist} ${focusTrack!.title}`)
+                const res  = await fetch(`https://itunes.apple.com/search?term=${q}&entity=song&limit=3`)
+                const data = await res.json()
+                const url  = data.results?.[0]?.artworkUrl100
+                if (url) setAlbumArt(url.replace('100x100bb', '600x600bb'))
+            } catch { }
+        }
+        go()
     }, [focusTrack?.title, focusTrack?.artist])
 
     // ── progress ticker ───────────────────────────────────────────────────────
@@ -282,7 +322,7 @@ export function NowPlaying({
     useEffect(() => {
         if (rafRef.current) cancelAnimationFrame(rafRef.current)
         if (!currentTrack) return
-        const base = currentTrack.progressMs
+        const base     = currentTrack.progressMs
         const pollTime = lastPollTime ?? Date.now()
         const tick = () => {
             const elapsed = isPlaying ? Date.now() - pollTime : 0
@@ -341,8 +381,8 @@ export function NowPlaying({
 
     if (!focusTrack) return null
 
-    const durationMs = currentTrack?.durationMs ?? 0
-    const progress = durationMs > 0 ? liveProgressMs / durationMs : 0
+    const durationMs  = currentTrack?.durationMs ?? 0
+    const progress    = durationMs > 0 ? liveProgressMs / durationMs : 0
     const accentColor = trackColor ?? 'var(--accent)'
 
     function scrubTo(e: React.MouseEvent<HTMLDivElement>) {
@@ -361,7 +401,6 @@ export function NowPlaying({
                     try {
                         await play(`spotify:track:${focusTrack.spotifyTrackId}`)
                     } catch {
-                        // Device may be inactive — let searchAndPlay handle device selection
                         await searchAndPlay(
                             `${focusTrack.title} ${focusTrack.artist}`.replace(/\(.*?\)/g, '').trim()
                         )
@@ -389,54 +428,45 @@ export function NowPlaying({
                 },
             })
         }
-        ; (onNext ?? next)?.()
+        ;(onNext ?? next)?.()
     }
 
-    const handlePrev = () => { ; (onPrev ?? prev)?.() }
-
-    const handleFilterTag = (type: 'genre' | 'mood' | 'context', value: string) => {
-        onFilter?.(type, value); onCollapse()
-    }
+    const handlePrev = () => { ;(onPrev ?? prev)?.() }
 
     const handlePlayRow = async (t: SimilarTrack) => {
         if (!connected) { await connect(); return }
         setPlayingId(t.id)
 
-        // Convert SimilarTrack → Track and tell the parent to re-focus
         const asTrack: Track = {
-            id: t.id,
-            trackId: t.id,
-            owner: '',
-            manifestCid: '',
-            title: t.title,
-            artist: t.artist,
-            year: t.year,
-            durationMs: null,
+            id:             t.id,
+            trackId:        t.id,
+            owner:          '',
+            manifestCid:    '',
+            title:          t.title,
+            artist:         t.artist,
+            year:           t.year,
+            durationMs:     null,
             spotifyTrackId: t.spotifyTrackId,
         }
-        onTrackSelect?.(asTrack)   // ← swap NowPlaying focus first
+        onTrackSelect?.(asTrack)
 
         try {
             if (t.spotifyTrackId) {
                 try {
                     await play(`spotify:track:${t.spotifyTrackId}`)
                 } catch {
-                    await searchAndPlay(
-                        `${t.title} ${t.artist}`.replace(/\(.*?\)/g, '').trim()
-                    )
+                    await searchAndPlay(`${t.title} ${t.artist}`.replace(/\(.*?\)/g, '').trim())
                 }
             } else {
-                await searchAndPlay(
-                    `${t.title} ${t.artist}`.replace(/\(.*?\)/g, '').trim()
-                )
+                await searchAndPlay(`${t.title} ${t.artist}`.replace(/\(.*?\)/g, '').trim())
             }
         } catch {
             setPlayingId(null)
         }
     }
 
-    const showPause = isThisTrackActive && isPlaying
-    const activeList = activeTab === 'similar' ? similarTracks : artistTracks
+    const showPause     = isThisTrackActive && isPlaying
+    const activeList    = activeTab === 'similar' ? similarTracks : artistTracks
     const activeLoading = activeTab === 'similar' ? similarLoading : artistLoading
 
     // ── render ────────────────────────────────────────────────────────────────
@@ -546,13 +576,13 @@ export function NowPlaying({
 
                 {/* ══ RIGHT COL ══ */}
                 <div className="np-col-right">
-                    {showTagModal && tagTrackId && (
+                    {showTagModal && modalTrackId && (
                         <TrackTagModal
-                            trackId={tagTrackId}
+                            trackId={modalTrackId}
                             trackTitle={focusTrack.title}
                             fangorn={fangorn}
                             onClose={() => setShowTagModal(false)}
-                            onSave={data => setTrackTags(data)}
+                            onSave={() => {}}
                             accentColor={accentColor}
                         />
                     )}
@@ -562,7 +592,7 @@ export function NowPlaying({
                         {/* ── Track Tags ── */}
                         {!showPublish && tagTrackId && (
                             <div className="np-tag-section">
-                                {tagged && allTags.length > 0 ? (
+                                {tagged ? (
                                     <div className="np-tag-row">
                                         <div className="np-tag-chips">
                                             {allTags.slice(0, 6).map(tag => (
@@ -582,7 +612,7 @@ export function NowPlaying({
                                         </div>
                                         <button
                                             className="np-tag-edit-btn"
-                                            onClick={() => setShowTagModal(true)}
+                                            onClick={openTagModal}
                                             title="Edit tags"
                                             aria-label="Edit track tags"
                                         >
@@ -595,7 +625,7 @@ export function NowPlaying({
                                 ) : (
                                     <button
                                         className="np-tag-empty-btn"
-                                        onClick={() => setShowTagModal(true)}
+                                        onClick={openTagModal}
                                     >
                                         <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                                             <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />

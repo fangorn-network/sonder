@@ -40,6 +40,10 @@ $ pnpm dev
 
 ### Build
 
+You can build an executable on a per-OS basis. 
+
+**IMPORTANT**: The executable will allow the `.env` file to be locally editable. Be careful not to include any secret information in the .env. 
+
 ```bash
 # For windows
 $ pnpm build:win

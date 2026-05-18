@@ -15,7 +15,7 @@ export class ToolboxConfigManager {
   private configPath: string;
   private config: ToolboxConfigFile | null = null;
   private registry: ToolboxDescriptor[] = [];
-  private toolboxDir: string | null = null;
+  // private toolboxDir: string | null = null;
 
   constructor() {
     this.configPath = path.join(app.getPath("userData"), "toolbox-config.json");
@@ -26,7 +26,7 @@ export class ToolboxConfigManager {
    * the registry of available toolboxes.
    */
   discoverRegistry(toolboxDir: string): ToolboxDescriptor[] {
-    this.toolboxDir = toolboxDir;
+    // this.toolboxDir = toolboxDir;
     this.registry = [];
 
     if (!existsSync(toolboxDir)) {

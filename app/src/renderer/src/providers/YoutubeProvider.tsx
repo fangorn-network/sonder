@@ -37,19 +37,21 @@ export function YouTubeProvider({ children }: { children: React.ReactNode }) {
   const [currentTitle,   setCurrentTitle]   = useState<string | null>(null)
   const [currentArtist,  setCurrentArtist]  = useState<string | null>(null)
 
-  // ── Hidden 1×1 anchor — audio only, never visible ─────────────────────────
+  // ── Hidden container — opacity:0 keeps it in the rendering context so YT's
+  //    ABR algorithm doesn't treat it as an off-screen / abandoned player.
+  //    640×360 tricks YT into selecting a high-bitrate stream.
   useEffect(() => {
     const el = document.createElement('div')
     el.id = 'yt-player-anchor'
     Object.assign(el.style, {
-      position: 'fixed',
-      width:    '1px',
-      height:   '1px',
-      opacity:  '0',
+      position:      'fixed',
+      width:         '640px',
+      height:        '360px',
+      top:           '0',
+      left:          '0',
+      opacity:       '0',         // visually hidden, still in layout context
       pointerEvents: 'none',
-      left:     '0',
-      top:      '0',
-      zIndex:   '-1',
+      zIndex:        '-1',
     })
     document.body.appendChild(el)
     anchorEl.current = el
@@ -66,8 +68,8 @@ export function YouTubeProvider({ children }: { children: React.ReactNode }) {
       if (!el || playerRef.current) return
 
       playerRef.current = new window.YT.Player(el, {
-        width:  1,
-        height: 1,
+        width:  640,
+        height: 360,
         playerVars: {
           autoplay:       0,
           controls:       0,
@@ -77,23 +79,27 @@ export function YouTubeProvider({ children }: { children: React.ReactNode }) {
           modestbranding: 1,
           rel:            0,
           playsinline:    1,
-          origin:         'http://127.0.0.1:5173',
+          // NOTE: vq is not a recognized IFrame API playerVar — removed
+          origin: window.location.origin,
         },
         events: {
           onReady: () => {
             readyRef.current = true
             setReady(true)
             console.log('[YT] ready')
+
             if (pendingRef.current) {
               const { videoId, title, artist } = pendingRef.current
               pendingRef.current = null
-              _cueAndPlay(videoId)
+              _loadAndPlay(videoId)
               setCurrentVideoId(videoId)
               setCurrentTitle(title   ?? null)
               setCurrentArtist(artist ?? null)
             }
           },
           onStateChange: (e: any) => {
+            // Fallback: if the player ends up in CUED or UNSTARTED, force play.
+            // With loadVideoById this rarely fires, but keep as a safety net.
             if (e.data === YT_CUED || e.data === YT_UNSTARTED) {
               playerRef.current?.playVideo()
             }
@@ -119,9 +125,10 @@ export function YouTubeProvider({ children }: { children: React.ReactNode }) {
     window.onYouTubeIframeAPIReady = initPlayer
   }, [])
 
-  const _cueAndPlay = (videoId: string) => {
-    playerRef.current?.cueVideoById(videoId)
-    setTimeout(() => playerRef.current?.playVideo(), 200)
+  // loadVideoById combines cue + play in a single call — no setTimeout race,
+  // no extra CUED state, YT selects quality immediately on load.
+  const _loadAndPlay = (videoId: string) => {
+    playerRef.current?.loadVideoById({ videoId })
   }
 
   const play = useCallback((videoId: string, title?: string, artist?: string) => {
@@ -133,7 +140,7 @@ export function YouTubeProvider({ children }: { children: React.ReactNode }) {
       pendingRef.current = { videoId, title, artist }
       return
     }
-    _cueAndPlay(videoId)
+    _loadAndPlay(videoId)
   }, [])
 
   const pause  = useCallback(() => { playerRef.current?.pauseVideo?.() }, [])

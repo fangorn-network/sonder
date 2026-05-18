@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "skipLibCheck": true,
+    "skipDefaultLibCheck": true,
+    "noEmit": true,
+    "allowJs": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "types": ["node", "electron-vite/node"],
+    "lib": ["ESNext", "DOM"], // Temporarily add DOM to stop Web3 browser primitives from crashing
+    "maxNodeModuleJsDepth": 0  // Hard stop on analyzing deep module dependencies
+  },
+  "include": [
+    "src/main/**/*.ts",
+    "src/preload/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
+}

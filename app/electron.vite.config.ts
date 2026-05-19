@@ -18,7 +18,7 @@ export default defineConfig({
         '/health': 'http://localhost:8080',
         '/reingest': 'http://localhost:8080',
         '/facilitator': {
-          target: 'https:/facilitator.fangorn.network',
+          target: 'https://facilitator.fangorn.network',
           changeOrigin: true,
           secure: false,
           followRedirects: true,

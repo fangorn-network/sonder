@@ -38,6 +38,26 @@ $ pnpm install
 $ pnpm dev
 ```
 
+### Chroma DB
+Chroma DB uses python which requries a binary to be built
+
+Navigate to `vectordb` and activate your venv
+```bash
+source venv/bin/activate
+```
+
+If needed, install `pyinstaller`
+```bash
+pip install pyinstaller
+```
+
+Then build your binary
+```bash
+pyinstaller --onefile --name server \
+  $(pip list --format=freeze | cut -d= -f1 | xargs -I{} echo "--collect-submodules {}") \
+  server.py
+```
+
 ### Build
 
 You can build an executable on a per-OS basis. 

@@ -152,6 +152,8 @@ function createWindow(): void {
     },
   })
 
+  mainWindow.webContents.openDevTools({ mode: 'detach' });
+
   mainWindow.on('ready-to-show', () => mainWindow.show())
 
   mainWindow.webContents.setWindowOpenHandler((details) => {

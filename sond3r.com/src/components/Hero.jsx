@@ -45,12 +45,15 @@ export default function Hero() {
         }
       </div>
 
-      <div className="hero-footer">
-        <span>Built on Fangorn Protocol</span>
-        <span className="hero-footer-sep">|</span>
-        <span>Arbitrum</span>
-        <span className="hero-footer-sep">|</span>
-        <span>v0.0.1</span>
+      <div className="hero-footer" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        <span>Built on</span>
+        <div>
+          <span>Fangorn</span>
+          <span className="hero-footer-sep"> | </span>
+          <span>Arbitrum</span>
+          <span className="hero-footer-sep"> | </span>
+          <span>v0.0.1</span>
+        </div>
       </div>
     </section>
   )

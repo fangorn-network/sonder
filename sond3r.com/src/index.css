@@ -1,20 +1,31 @@
 /* ==========================================================================
    SOND3R DESIGN SYSTEM VARIABLES
    ========================================================================== */
+
+/*
+  Palette extracted directly from CityCanvas:
+  Sky:        #01010f → #130626  (deep indigo → violet)
+  Buildings:  #020409 / #03050d / #050718
+  NEONS[0]    rgb(0,255,240)   — electric cyan
+  NEONS[1]    rgb(255,0,180)   — hot magenta
+  NEONS[4]    rgb(210,0,255)   — ultraviolet
+  Headlights: #e8f0ff          — cool white-blue
+*/
+
 :root {
   /* Color Palette */
-  --bg-space: #060913;          /* Deep indigo/space background */
-  --bg-card: #0b1120;           /* Slightly lighter terminal/widget background */
-  --border-glow: #131c33;       /* Subtle terminal borders */
+  --bg-space: #02010e;          /* Canvas sky top — deep indigo-black */
+  --bg-card: #050718;           /* Canvas building layer 3 — darkest struct */
+  --border-glow: #0d1030;       /* Canvas horizon mid-tone — indigo border */
   
-  --text-primary: #ffffff;      /* High contrast white for headers */
-  --text-muted: #8fa0c2;        /* Accessible gray-blue for descriptions */
-  --text-dim: #435375;          /* Low-contrast placeholder/disclaimer text */
+  --text-primary: #e8f0ff;      /* Canvas headlight color — cool white-blue */
+  --text-muted: #6070b8;        /* Mid indigo — between sky and neon */
+  --text-dim: #242848;          /* Deep indigo dim — building interior tone */
   
-  /* Accent Colors */
-  --accent-cyan: #00f0ff;       /* Agentic / Primary accent */
-  --accent-pink: #ff007a;       /* Secondary accent / Tabs */
-  --accent-purple: #7000ff;     /* Telemetry metric accent */
+  /* Accent Colors — pulled 1:1 from NEONS[] array in CityCanvas */
+  --accent-cyan: #00fff0;       /* NEONS[0] — electric cyan */
+  --accent-pink: #ff00b4;       /* NEONS[1] — hot magenta */
+  --accent-purple: #d200ff;     /* NEONS[4] — ultraviolet */
 
   /* Typography */
   --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
@@ -93,25 +104,25 @@ h1, h2, h3, h4 {
 
 /* Solid Download Button */
 .btn-primary {
-  background-color: var(--text-primary);
+  background-color: var(--accent-cyan);
   color: var(--bg-space);
 }
 .btn-primary:hover {
   background-color: transparent;
-  border-color: var(--text-primary);
-  color: var(--text-primary);
-  box-shadow: 0 0 20px rgba(255, 255, 255, 0.1);
+  border-color: var(--accent-cyan);
+  color: var(--accent-cyan);
+  box-shadow: 0 0 20px rgba(0, 255, 240, 0.18);
 }
 
 /* Ghost Discord Button */
 .btn-secondary {
   background-color: transparent;
-  border-color: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 0, 180, 0.3);
   color: var(--text-primary);
 }
 .btn-secondary:hover {
-  border-color: var(--text-primary);
-  background-color: rgba(255, 255, 255, 0.03);
+  border-color: var(--accent-pink);
+  background-color: rgba(255, 0, 180, 0.05);
 }
 
 /* Navigation Tabs (Listeners vs Artists) */
@@ -162,8 +173,8 @@ h1, h2, h3, h4 {
 
 /* Radial Gauge Placeholder (Entropy, Speed, etc.) */
 .gauge-metric {
-  color: var(--accent-cyan);
-  text-shadow: 0 0 10px rgba(0, 240, 255, 0.3);
+  color: var(--accent-purple);
+  text-shadow: 0 0 10px rgba(210, 0, 255, 0.35);
   font-size: 1.25rem;
 }
 
@@ -173,7 +184,7 @@ h1, h2, h3, h4 {
   justify-content: space-between;
   align-items: center;
   padding: 0.5rem 0;
-  border-bottom: 1px dashed rgba(67, 83, 117, 0.2);
+  border-bottom: 1px dashed rgba(36, 40, 72, 0.6);
   font-size: 0.85rem;
 }
 

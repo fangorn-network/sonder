@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import './Product.css'
-import screen1 from '../assets/Kernel.png'
+import screen1 from '../assets/Kernelsmall.png'
 import screen2 from '../assets/nowPlaying.png'
 import screen3 from '../assets/agent.png'
 
@@ -9,14 +9,14 @@ const LISTENER_FEATURES = [
     num: '01',
     label: 'Discover',
     title: 'Your taste, not their algorithm.',
-    desc: 'As you listen, SOND3R builds a mathematical model of your taste. It lives on your device. No setup, no configuration. It reads what you have already built and surfaces what actually fits.',
+    desc: 'Sond3r builds a local model of your listening as you go. The more you use it, the better it understands your taste and what you actually want.',
     img: screen1,
   },
   {
     num: '02',
     label: 'The shared layer',
-    title: 'A brain shared between listeners.',
-    desc: 'Your local profile contributes to a shared semantic graph. Every listener adds to it. None of them own it. When you search or browse, your agent navigates that graph on your behalf across the whole network.',
+    title: 'A Semantic Substrate Shared Between Listeners',
+    desc: 'Users contribute to a shared semantic graph; building a collective picture of how music relates, built from real listening behavior across the whole network. Every listener can add to it, but nobody owns it. When you search or browse, you navigate a space built by everyone, but captured by nobody',
     img: screen2,
   },
   {
@@ -33,7 +33,7 @@ const ARTIST_FEATURES = [
     num: '01',
     label: 'Upload',
     title: 'Your music, on your terms.',
-    desc: 'Upload directly to decentralized storage. No platform approval, no content moderation queue, no account in good standing required. Your files go to IPFS. They stay there.',
+    desc: 'Upload directly to any storage backend. No platform approval, content moderation queue, or account in good standing required. You own the data.',
     img: null,
   },
   {
@@ -61,7 +61,7 @@ export default function Product() {
       <div className="product-intro">
         <h2 className="product-title">SOND3R.</h2>
         <p className="product-sub">
-          A music browser that grows with you. Your taste profile lives on your device and contributes to a shared semantic graph that no single party owns. Your agent navigates both.
+          A music browser that grows with you. Your taste profile lives on your device and contributes to a shared semantic graph that no single party owns.
         </p>
       </div>
 
@@ -103,7 +103,6 @@ export default function Product() {
               /* Empty placeholder div maintains grid alignment for text-only rows */
               <div className="feature-img-spacer" />
             )}
-
           </div>
         ))}
       </div>

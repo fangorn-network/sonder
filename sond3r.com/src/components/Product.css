@@ -78,6 +78,8 @@
   grid-template-columns: 1fr 1fr;
   gap: 4rem;
   align-items: center;
+  padding-bottom: 48px;
+  border-bottom: 1px solid gray;
 }
 
 /* ==========================================================================

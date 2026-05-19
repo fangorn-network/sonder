@@ -45,7 +45,7 @@ export default function Support() {
           <div className="support-perks">
             <span>Early access to SOND3R</span>
             <span>Direct access to the founding team</span>
-            <span>Private Discord</span>
+            <span>Private Telegram for Early Supporters</span>
             <span>First rights to participate in future funding rounds</span>
           </div>
         </div>

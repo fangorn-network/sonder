@@ -18,7 +18,7 @@ export default function Hero() {
       <div className="hero-veil" />
 
       <div className="hero-content">
-        <p className="hero-kicker">Local-first agentic music browser</p>
+        {/* <p className="hero-kicker">Local-first agentic music browser</p> */}
 
         <h1 className="hero-headline">
           {/* PLACEHOLDER */}

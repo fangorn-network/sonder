@@ -18,9 +18,9 @@
   --bg-card: #050718;           /* Canvas building layer 3 — darkest struct */
   --border-glow: #0d1030;       /* Canvas horizon mid-tone — indigo border */
   
-  --text-primary: #e8f0ff;      /* Canvas headlight color — cool white-blue */
-  --text-muted: #6070b8;        /* Mid indigo — between sky and neon */
-  --text-dim: #242848;          /* Deep indigo dim — building interior tone */
+  --text-primary: #ffffff;      /* Canvas headlight color — pure white */
+  --text-muted: #9aaade;        /* Mid indigo — lifted for legibility */
+  --text-dim: #545880;          /* Deep indigo dim — was nearly invisible */
   
   /* Accent Colors — pulled 1:1 from NEONS[] array in CityCanvas */
   --accent-cyan: #00fff0;       /* NEONS[0] — electric cyan */

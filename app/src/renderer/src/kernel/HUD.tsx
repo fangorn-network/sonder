@@ -4,13 +4,8 @@
  * Fixed bottom-right trigger that expands upward into the kernel visualizer.
  * Self-contained — manages its own open state and Ctrl+K shortcut.
  *
- * Usage in App.tsx (replaces the old showKernelDebug block):
+ * Usage in App.tsx:
  *   <KernelDebugHUD state={kernel.state} history={sessionHistory} />
- *
- * Remove from App.tsx:
- *   - const [showKernelDebug, setShowKernelDebug] = useState(false)
- *   - the Ctrl+K useEffect
- *   - the sidebar / overlay render block
  */
 
 import { createPortal } from 'react-dom'
@@ -18,36 +13,61 @@ import { useState, useEffect } from 'react'
 import { KernelVisualizer, type SessionEvent } from './Visualizer'
 import type { KernelState } from '../kernel/types'
 
-// ─── tokens (kept minimal — KernelVisualizer owns its own palette) ────────────
+// ─── tokens ───────────────────────────────────────────────────────────────────
 
-const H = {
-  bg:          '#07090e',
-  bgHover:     '#0c1020',
-  border:      '#1a2540',
-  borderHi:    '#253560',
-  cobalt:      '#4080f8',
-  orange:      '#e06830',
-  amber:       '#c07830',
-  textMid:     '#6878a0',
-  textLo:      '#2a3555',
-  mono:        "'JetBrains Mono', 'Fira Mono', monospace",
+const T = {
+  bg:         '#0c0d14',
+  bgHover:    '#11121e',
+  border:     'rgba(255,255,255,0.07)',
+  borderHi:   'rgba(255,255,255,0.13)',
+  textMid:    '#9090b0',
+  textLo:     '#44445e',
+  sans:       "system-ui, -apple-system, 'Segoe UI', sans-serif",
+}
+
+// entropy → { color, label }
+const entropyMeta = (h: number) =>
+  h > 0.65
+    ? { color: '#e05840', label: 'exploring' }
+    : h > 0.33
+    ? { color: '#c49020', label: 'learning'  }
+    : { color: '#4880f0', label: 'focused'   }
+
+// ─── tiny bar — 4 segments representing entropy level ─────────────────────────
+
+function EntropyBar({ entropy, color }: { entropy: number; color: string }) {
+  const filled = Math.round(entropy * 4)
+  return (
+    <div style={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+      {[0, 1, 2, 3].map(i => (
+        <div
+          key={i}
+          style={{
+            width:      4,
+            height:     8,
+            background: i < filled ? color : 'rgba(255,255,255,0.08)',
+            transition: 'background 0.4s ease',
+          }}
+        />
+      ))}
+    </div>
+  )
 }
 
 // ─── types ────────────────────────────────────────────────────────────────────
 
 interface Props {
-  state:        KernelState
-  history:      SessionEvent[]
-  bottomOffset?: number   // px above bottom of viewport (default: 72 — clears PlayerBar)
+  state:         KernelState
+  history:       SessionEvent[]
+  bottomOffset?: number
 }
 
 // ─── component ────────────────────────────────────────────────────────────────
 
-export function KernelDebugHUD({ state, history, bottomOffset = 72 }: Props) {
-  const [open, setOpen] = useState(false)
+export function KernelDebugHUD({ state, history, bottomOffset = 0 }: Props) {
+  const [open,    setOpen]    = useState(false)
   const [hovered, setHovered] = useState(false)
 
-  // Ctrl+K / Cmd+K toggle
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'k' && (e.metaKey || e.ctrlKey)) {
@@ -59,113 +79,160 @@ export function KernelDebugHUD({ state, history, bottomOffset = 72 }: Props) {
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  const entropy      = state?.entropy ?? 0.2
-  const timestep     = state?.t ?? 0
-  const nSkips       = state?.skips?.length ?? 0
-  const entropyColor = entropy > 0.65 ? H.orange : entropy > 0.33 ? H.amber : H.cobalt
+  const entropy  = state?.entropy ?? 0.2
+  const timestep = state?.t       ?? 0
+  const nSkips   = state?.skips?.length ?? 0
+  const { color, label } = entropyMeta(entropy)
 
   return createPortal(
+    // Outer shell — full panel width so KernelVisualizer fits; trigger is
+    // narrower and right-aligned inside.
     <div style={{
       position:      'fixed',
       bottom:        bottomOffset,
-      right:         16,
+      right:         0,
       zIndex:        200,
+      width:         440,
       display:       'flex',
       flexDirection: 'column',
       alignItems:    'stretch',
-      width:         440,
     }}>
 
-      {/* ── Panel ─────────────────────────────────────────────────────────── */}
+      {/* ── Slide-up panel ────────────────────────────────────────────────── */}
       <div style={{
-        overflowY:    'auto',
-        maxHeight:    open ? 'calc(100vh - 140px)' : 0,
-        opacity:      open ? 1 : 0,
-        // slide up from trigger when opening
-        transform:    open ? 'translateY(0)' : 'translateY(4px)',
+        overflowY:     'auto',
+        maxHeight:     open ? 'calc(100vh - 140px)' : 0,
+        opacity:       open ? 1 : 0,
+        transform:     open ? 'translateY(0)' : 'translateY(6px)',
         pointerEvents: open ? 'auto' : 'none',
-        transition:   [
+        transition: [
           'max-height 0.28s cubic-bezier(0.4,0,0.2,1)',
           'opacity 0.18s ease',
-          'transform 0.2s ease',
+          'transform 0.22s ease',
         ].join(', '),
-        // border on three sides — bottom handled by trigger's top border
-        borderTop:    `1px solid ${H.border}`,
-        borderLeft:   `1px solid ${H.border}`,
-        borderRight:  `1px solid ${H.border}`,
+        background:   T.bg,
+        border:       `1px solid ${T.border}`,
         borderBottom: 'none',
-        boxShadow:    '0 -8px 40px rgba(0,0,0,0.55)',
+        boxShadow:    '0 -8px 48px rgba(0,0,0,0.6)',
       }}>
+
+        {/* Friendly panel header */}
+        <div style={{
+          display:        'flex',
+          alignItems:     'center',
+          justifyContent: 'space-between',
+          padding:        '10px 14px 9px',
+          borderBottom:   `1px solid ${T.border}`,
+        }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <span style={{
+              fontFamily:    T.sans,
+              fontSize:      11,
+              fontWeight:    600,
+              letterSpacing: '0.04em',
+              color:         '#c8c8e0',
+            }}>
+              Taste Engine
+            </span>
+            <span style={{
+              fontFamily: T.sans,
+              fontSize:   10,
+              color:      T.textLo,
+            }}>
+              {timestep} {timestep === 1 ? 'session' : 'sessions'}
+              {nSkips > 0 && ` · ${nSkips} ${nSkips === 1 ? 'skip' : 'skips'}`}
+            </span>
+          </div>
+
+          {/* Live state pill */}
+          <div style={{
+            display:      'flex',
+            alignItems:   'center',
+            gap:          6,
+            padding:      '3px 8px',
+            background:   `${color}18`,
+            border:       `1px solid ${color}40`,
+          }}>
+            <div style={{
+              width:      5,
+              height:     5,
+              borderRadius: '50%',
+              background: color,
+              boxShadow:  `0 0 6px ${color}`,
+            }} />
+            <span style={{
+              fontFamily:    T.sans,
+              fontSize:      10,
+              color,
+              fontWeight:    500,
+              letterSpacing: '0.05em',
+            }}>
+              {label}
+            </span>
+          </div>
+        </div>
+
         <KernelVisualizer state={state} history={history} />
       </div>
 
-      {/* ── Trigger ───────────────────────────────────────────────────────── */}
-      <button
-        onClick={() => setOpen(v => !v)}
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
-        style={{
-          display:       'flex',
-          alignItems:    'center',
-          gap:           10,
-          padding:       '7px 12px 7px 10px',
-          background:    hovered ? H.bgHover : H.bg,
-          // full border — forms a seamless bottom cap when panel is open
-          border:        `1px solid ${open || hovered ? H.borderHi : H.border}`,
-          color:         H.textMid,
-          fontFamily:    H.mono,
-          fontSize:      10,
-          letterSpacing: '0.08em',
-          cursor:        'pointer',
-          borderRadius:  0,
-          width:         '100%',
-          textAlign:     'left',
-          transition:    'background 0.15s ease, border-color 0.15s ease',
-          userSelect:    'none',
-        }}
-      >
-        {/* live entropy indicator — colored square, straight edges */}
-        <div style={{
-          width:      7,
-          height:     7,
-          background: entropyColor,
-          flexShrink: 0,
-          transition: 'background 0.4s ease',
-          boxShadow:  `0 0 8px ${entropyColor}66`,
-        }} />
+      {/* ── Trigger — narrow, right-aligned ───────────────────────────────── */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <button
+          onClick={() => setOpen(v => !v)}
+          onMouseEnter={() => setHovered(true)}
+          onMouseLeave={() => setHovered(false)}
+          style={{
+            display:     'flex',
+            alignItems:  'center',
+            gap:         7,
+            padding:     '7px 10px 7px 9px',
+            width:       152,
+            background:  hovered ? T.bgHover : T.bg,
+            border:      `1px solid ${open || hovered ? T.borderHi : T.border}`,
+            borderTop:   open ? 'none' : `1px solid ${open || hovered ? T.borderHi : T.border}`,
+            cursor:      'pointer',
+            userSelect:  'none',
+            transition:  'background 0.15s ease, border-color 0.15s ease',
+          }}
+        >
+          {/* Status dot */}
+          <div style={{
+            width:        6,
+            height:       6,
+            borderRadius: '50%',
+            background:   color,
+            flexShrink:   0,
+            boxShadow:    `0 0 7px ${color}99`,
+            transition:   'background 0.4s ease, box-shadow 0.4s ease',
+          }} />
 
-        {/* label */}
-        <span style={{ color: H.textMid, letterSpacing: '0.12em' }}>KERNEL</span>
-
-        {/* live values */}
-        <span style={{ color: entropyColor, transition: 'color 0.4s ease' }}>
-          H:{entropy.toFixed(3)}
-        </span>
-
-        <span style={{ color: H.textLo }}>t={timestep}</span>
-
-        {nSkips > 0 && (
-          <span style={{ color: H.orange, opacity: 0.8 }}>
-            {nSkips}sk
+          {/* "taste" wordmark */}
+          <span style={{
+            fontFamily:    T.sans,
+            fontSize:      10,
+            fontWeight:    500,
+            letterSpacing: '0.06em',
+            color:         T.textMid,
+          }}>
+            taste
           </span>
-        )}
 
-        {/* shortcut hint + chevron */}
-        <span style={{ flex: 1 }} />
-        <span style={{ color: H.textLo, fontSize: 8, letterSpacing: '0.05em' }}>
-          ⌘K
-        </span>
-        <span style={{
-          color:      H.textMid,
-          fontSize:   8,
-          marginLeft: 6,
-          transition: 'transform 0.2s ease',
-          display:    'inline-block',
-          transform:  open ? 'scaleY(-1)' : 'scaleY(1)',
-        }}>
-          ▲
-        </span>
-      </button>
+          {/* Entropy bar */}
+          <EntropyBar entropy={entropy} color={color} />
+
+          {/* Spacer + chevron */}
+          <span style={{ flex: 1 }} />
+          <span style={{
+            color:      T.textLo,
+            fontSize:   8,
+            display:    'inline-block',
+            transition: 'transform 0.2s ease',
+            transform:  open ? 'scaleY(-1)' : 'scaleY(1)',
+          }}>
+            ▲
+          </span>
+        </button>
+      </div>
 
     </div>,
     document.body,

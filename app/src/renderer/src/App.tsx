@@ -26,6 +26,8 @@ import { AgentContext, useAgentContext } from './context/useAgentContext'
 import { rankWithContext } from './context/ContextScoring'
 import { ContextBar } from './views/ContextBar'
 import { useYouTubeSearch } from './hooks/useYoutubeSearch'
+import { YouTubeProvider } from './providers/YoutubeProvider'
+import { usePlaybackRouter } from './hooks/usePlaybackRouter'
 
 const SNAPSHOT_HISTORY_DEPTH = 5
 const SCROLL_THRESHOLD = 10
@@ -87,12 +89,14 @@ function SpotifyProviderShell({
 
   return (
     <SpotifyProvider value={{ ...spotify }}>
-      <AppContent
-        spotify={spotify}
-        onTrackEndRef={onTrackEndRef}
-        onSpotifyConfigSaved={onSpotifyConfigSaved}
-        hasConfig={hasConfig}
-      />
+      <YouTubeProvider>
+        <AppContent
+          spotify={spotify}
+          onTrackEndRef={onTrackEndRef}
+          onSpotifyConfigSaved={onSpotifyConfigSaved}
+          hasConfig={hasConfig}
+        />
+      </YouTubeProvider>
     </SpotifyProvider>
   )
 }
@@ -271,7 +275,34 @@ function AppContent({
     }
   }, [kernel, pushPlay, pushSkip, applyKernelQuery])
 
-  // ─── Playback ─────────────────────────────────────────────────────────────────
+  // Keep handleSignal in a ref so usePlaybackRouter's onSkip can call it
+  // without being in its dependency chain (avoids ordering issues)
+  const handleSignalRef = useRef(handleSignal)
+  handleSignalRef.current = handleSignal
+
+  // Keep ytTracks + fallbackTracks in refs for the onSkip lookup
+  const ytTracksRef       = useRef(ytTracks)
+  const fallbackTracksRef = useRef(fallbackTracks)
+  useEffect(() => { ytTracksRef.current = ytTracks },       [ytTracks])
+  useEffect(() => { fallbackTracksRef.current = fallbackTracks }, [fallbackTracks])
+
+  // ─── Playback router ──────────────────────────────────────────────────────────
+
+  const { play, pause, stop, state: playbackState } = usePlaybackRouter('auto', {
+    onSkip: useCallback((trackId: string) => {
+      // look up the outgoing track across all sources
+      const skipped =
+        filteredTracksRef.current.find(t => t.id === trackId) ??
+        ytTracksRef.current.find(t => t.id === trackId)       ??
+        fallbackTracksRef.current.find(t => t.id === trackId)
+
+      if (skipped) {
+        handleSignalRef.current({ type: 'skip', track: skipped, weight: 1.0 })
+      }
+    }, []), // stable — all reads go through refs
+  })
+
+  // ─── Playback internals ───────────────────────────────────────────────────────
 
   const recentlyPlayedIdsRef = useRef<Set<string>>(new Set())
 
@@ -461,6 +492,8 @@ function AppContent({
                 ytLoading={ytLoading}
                 onYtSearch={ytSearch}
                 onYtClear={ytClear}
+                playbackState={playbackState}
+                onPlay={play}
               />
             )}
             {!showConnectors && view === 'Agent' && <AgentView />}
@@ -469,6 +502,7 @@ function AppContent({
           <PlayerBar
             onExpand={() => setNowPlaying('player')}
             hidden={nowPlayingOpen}
+            playbackState={playbackState}
           />
 
           {nowPlayingOpen && createPortal(

@@ -7,6 +7,7 @@ import { PublishModal } from '../components/PublishModal'
 import type { Fangorn } from '@fangorn-network/sdk'
 import type { Hex } from 'viem'
 import { PlaybackState } from '../types/playback'
+import { useYouTubeContext } from '../providers/YoutubeProvider'
 
 const GENRE_PALETTE = [
   '#a78bfa', '#60a5fa', '#f472b6', '#22c55e',
@@ -117,6 +118,8 @@ export function BrowseView({
   const fetchingRef = useRef<Set<string>>(new Set())
   const [reasonExpanded, setReasonExpanded] = useState(false)
   const [publishingTrack, setPublishingTrack] = useState<{ track: Track; color: string } | null>(null)
+
+  const { stop: stopYt } = useYouTubeContext()
 
   const [activeTab, setActiveTab] = useState<SearchTab>('library')
   const mbFetchedRef = useRef<string>('')
@@ -250,6 +253,7 @@ export function BrowseView({
     const durationStr = track.durationMs
       ? `${Math.floor(track.durationMs / 60000)}:${String(Math.floor((track.durationMs % 60000) / 1000)).padStart(2, '0')}`
       : null
+    const isYtTrack = track.id.startsWith('yt:')
 
     return (
       <div
@@ -301,6 +305,41 @@ export function BrowseView({
               publish
             </button>
           )}
+
+          {isYtTrack && connected && (
+            <button
+              onClick={e => {
+                e.stopPropagation()
+                onPlay?.({
+                  ...track,
+                  youtubeVideoId: undefined,  // no YT address → router uses Spotify searchAndPlay
+                  spotifyTrackId: null,       // no explicit ID → triggers fuzzy search
+                })
+              }}
+              style={{
+                marginTop: 4, marginLeft: 4,
+                display: 'inline-flex', alignItems: 'center', gap: 4,
+                background: 'none', border: '1px solid rgba(30,215,96,0.25)',
+                borderRadius: 4, color: 'rgba(30,215,96,0.7)', opacity: 0.7,
+                fontSize: 9, letterSpacing: '0.07em', textTransform: 'uppercase',
+                padding: '2px 7px', cursor: 'pointer', transition: 'all 0.15s ease',
+                fontFamily: 'inherit',
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.opacity = '1'
+                e.currentTarget.style.borderColor = 'rgba(30,215,96,0.55)'
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.opacity = '0.7'
+                e.currentTarget.style.borderColor = 'rgba(30,215,96,0.25)'
+              }}
+              title="Search for this track on Spotify"
+            >
+              <SpotifyDot />
+              try spotify
+            </button>
+          )}
+
         </div>
       </div>
     )
@@ -641,3 +680,11 @@ function YtIcon({ size = 14 }: { size?: number }) {
     </svg>
   )
 }
+
+function SpotifyDot() {
+  return (
+    <svg width="8" height="8" viewBox="0 0 8 8">
+      <circle cx="4" cy="4" r="4" fill="rgba(30,215,96,0.9)" />
+    </svg>
+  )
+} 

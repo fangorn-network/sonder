@@ -2889,7 +2889,10 @@ textarea {
   grid-area: main;
   position: fixed;
   bottom: 96px;
-  right: 32px;
+  /* Changed 'right: 32px' to these two lines to perfectly center it */
+  left: 50%;
+  transform: translateX(-50%);
+  
   width: 40px;
   height: 40px;
   border-radius: 0;
@@ -2912,9 +2915,9 @@ textarea {
   color: #fff;
   border-color: var(--accent);
   background: var(--accent);
-  transform: translateY(-2px);
+  /* Updated to keep the horizontal centering while lifting it on the Y-axis */
+  transform: translate(-50%, -2px);
 }
-
 /* =============================================================================
    MOBILE
    ─────────────────────────────────────────────────────────────────────────── */

@@ -1,0 +1,15 @@
+{
+  "extends": "@electron-toolkit/tsconfig/tsconfig.web.json",
+  "include": [
+    "src/renderer/src/**/*"
+  ],
+  "exclude": [
+    "node_modules"
+  ],
+  "compilerOptions": {
+    "composite": false,
+    "skipLibCheck": true,
+    "jsx": "react-jsx",
+    "types": ["electron-vite/client"]
+  }
+}

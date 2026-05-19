@@ -4,6 +4,7 @@ import aiohttp
 import chromadb
 import hashlib
 import json
+import os
 import requests
 import uvicorn
 from chromadb.utils import embedding_functions
@@ -36,6 +37,7 @@ def parse_args():
     )
     parser.add_argument("--ipfs-gateway",      default="https://ipfs.io/ipfs")
     parser.add_argument("--chroma-path",        default="./db/sond3r")
+    parser.add_argument("--checkpoint-file",    default="./db/ingest_checkpoint.json")
     parser.add_argument("--collection",         default="fangorn")
     parser.add_argument("--searchable-fields",  default="trackId,title,byArtist,genres,moods,themes,contexts")
     parser.add_argument("--page-size",          type=int, default=100)
@@ -78,6 +80,30 @@ collection:      object | None = None
 debug_secondary: dict         = {}
 
 # ---------------------------------------------------------------------------
+# CHECKPOINT
+# Persists {schema_name: {cid: blockTimestamp}} so reingest only fetches
+# IPFS for CIDs that are new or have an updated blockTimestamp.
+# ---------------------------------------------------------------------------
+
+def _load_checkpoint() -> dict[str, dict[str, int]]:
+    try:
+        with open(cfg.checkpoint_file) as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+def _save_checkpoint(checkpoint: dict[str, dict[str, int]]) -> None:
+    os.makedirs(os.path.dirname(cfg.checkpoint_file) or ".", exist_ok=True)
+    with open(cfg.checkpoint_file, "w") as f:
+        json.dump(checkpoint, f)
+
+def _clear_checkpoint() -> None:
+    try:
+        os.remove(cfg.checkpoint_file)
+    except FileNotFoundError:
+        pass
+
+# ---------------------------------------------------------------------------
 # MODELS
 # ---------------------------------------------------------------------------
 
@@ -95,29 +121,13 @@ class VectorSearchRequest(BaseModel):
 # ---------------------------------------------------------------------------
 
 def _compute_track_id(artist: str, title: str) -> str:
-    """
-    Canonical join key: SHA256(artist:title)[:24]
-    Must match exactly how track IDs were generated during data collection.
-    """
     return hashlib.sha256(f"{artist}:{title}".encode()).hexdigest()[:24]
 
 def _track_id(entry: dict) -> str:
-    """
-    Resolve the join key for an entry.
-
-    Rule: trust whatever is stored in fields.trackId if it is present — both
-    schemas must agree on the value, so we never second-guess it based on
-    format or length. The secondary schema has no byArtist/title to derive
-    from, so discarding its stored trackId would leave it with no key at all
-    and silently break every join.
-
-    Only fall back to computing from byArtist:title when trackId is completely
-    absent from the entry (e.g. a primary entry published without the field).
-    """
     fields = entry.get("fields", {})
     tid    = fields.get("trackId", "")
     stored = tid.strip() if isinstance(tid, str) else ""
-    stored = stored.removeprefix("track:")   # strip legacy bad publishes
+    stored = stored.removeprefix("track:")
 
     if stored:
         return stored
@@ -208,6 +218,8 @@ async def _fetch_json(
             return cid, None
 
 async def fetch_all_ipfs(cids: list[str]) -> dict[str, dict | None]:
+    if not cids:
+        return {}
     sem = asyncio.Semaphore(cfg.concurrency)
     async with aiohttp.ClientSession() as session:
         results = await asyncio.gather(*[_fetch_json(session, sem, cid) for cid in cids])
@@ -244,16 +256,6 @@ def _build_seen_cids(publishes: list, updates: list) -> dict[str, dict]:
     return seen
 
 def _dedup_entries(all_entries: list) -> list:
-    """
-    Keep the most recent entry per canonical track ID.
-
-    Uses _track_id as the dedup key — NOT entry.name. Entry names are
-    arbitrary strings that differ between schemas and carry no join semantics;
-    using them as a dedup key would incorrectly collapse or preserve entries
-    based on publisher convention rather than track identity.
-
-    Entries with no resolvable track ID are kept as-is (no dedup possible).
-    """
     best:   dict[str, dict] = {}
     no_key: list[dict]      = []
     for item in all_entries:
@@ -266,34 +268,59 @@ def _dedup_entries(all_entries: list) -> list:
             best[key] = item
     return list(best.values()) + no_key
 
-async def fetch_schema_entries(schema_name: str, schema_id: str, loop) -> list[dict]:
+async def fetch_schema_entries(
+    schema_name: str,
+    schema_id:   str,
+    loop,
+    prior_checkpoint: dict[str, int],   # cid -> blockTimestamp from last run
+) -> tuple[list[dict], dict[str, int]]:
+    """
+    Returns (entries, new_checkpoint) where new_checkpoint covers all seen CIDs
+    for this schema (both cached and freshly fetched).
+    """
     publishes, updates = await loop.run_in_executor(None, _fetch_all_events, schema_id)
     print(f"  [{schema_name}] subgraph: {len(publishes)} publishes, {len(updates)} updates")
 
     seen_cids = _build_seen_cids(publishes, updates)
     print(f"  [{schema_name}] unique manifest CIDs: {len(seen_cids)}")
 
-    manifests = await fetch_all_ipfs(list(seen_cids.keys()))
-    ok  = sum(1 for v in manifests.values() if v is not None)
-    bad = sum(1 for v in manifests.values() if v is None)
-    print(f"  [{schema_name}] IPFS: {ok} fetched, {bad} failed")
+    # Diff: only fetch CIDs that are new or have a later blockTimestamp
+    new_cids  = [
+        cid for cid, meta in seen_cids.items()
+        if prior_checkpoint.get(cid, -1) < meta["blockTimestamp"]
+    ]
+    skip_count = len(seen_cids) - len(new_cids)
+    print(f"  [{schema_name}] IPFS: {len(new_cids)} to fetch, {skip_count} unchanged (skipped)")
+
+    fresh_manifests = await fetch_all_ipfs(new_cids)
+    ok  = sum(1 for v in fresh_manifests.values() if v is not None)
+    bad = sum(1 for v in fresh_manifests.values() if v is None)
+    if new_cids:
+        print(f"  [{schema_name}] IPFS: {ok} fetched, {bad} failed")
+
+    # Build new checkpoint: carry forward cached CIDs, update with fresh ones
+    new_checkpoint: dict[str, int] = dict(prior_checkpoint)
+    for cid, meta in seen_cids.items():
+        if cid in fresh_manifests and fresh_manifests[cid] is not None:
+            new_checkpoint[cid] = meta["blockTimestamp"]
+        elif cid not in fresh_manifests:
+            # Unchanged — keep prior timestamp
+            new_checkpoint[cid] = meta["blockTimestamp"]
+        # Failed fetches: don't update checkpoint so they retry next time
 
     all_entries = []
-    for cid, manifest_json in manifests.items():
+    for cid, manifest_json in fresh_manifests.items():
         if not manifest_json:
             continue
-        meta = seen_cids[cid]
+        meta    = seen_cids[cid]
         entries = manifest_json.get("entries", [])
         for i, entry in enumerate(entries):
             all_entries.append({"entry": entry, "entryIndex": i, "meta": meta})
 
     deduped = _dedup_entries(all_entries)
-    print(f"  [{schema_name}] entries: {len(all_entries)} raw → {len(deduped)} after dedup")
-    for item in deduped:
-        tid = _track_id(item["entry"])
-        # print(f"    track_id={tid!r}")
+    print(f"  [{schema_name}] entries from new CIDs: {len(all_entries)} raw → {len(deduped)} after dedup")
 
-    return deduped
+    return deduped, new_checkpoint
 
 # ---------------------------------------------------------------------------
 # JOIN + DOCUMENT BUILD
@@ -333,7 +360,6 @@ def _build_searchable_text(fields: dict) -> str:
     parts: list[str] = []
     if tag_terms:
         tag_text = " ".join(tag_terms)
-        # Repeat tag block to boost its embedding weight
         parts.append(tag_text)
         parts.append(tag_text)
     parts.extend(track_terms)
@@ -346,7 +372,6 @@ def join_records(entries_by_schema: dict[str, list[dict]], primary: str) -> list
         print(f"  [warn] primary schema '{primary}' has no entries — nothing to join")
         return []
 
-    # Index secondary (tag) entries by canonical track ID
     secondary_fields: dict[str, dict] = {}
     for schema_name, entries in entries_by_schema.items():
         if schema_name == primary:
@@ -363,23 +388,19 @@ def join_records(entries_by_schema: dict[str, list[dict]], primary: str) -> list
 
     global debug_secondary
     debug_secondary = secondary_fields
-    print(f"  [join] secondary index: {len(secondary_fields)} keys:")
-    for k, v in secondary_fields.items():
-        print(f"    tag key={k!r}  genres={v.get('genres')}  moods={v.get('moods')}")
+    print(f"  [join] secondary index: {len(secondary_fields)} keys")
 
     joined = []
     matched = 0
-    print(f"  [join] primary entries ({len(primary_entries)}):")
     for item in primary_entries:
         track_id = _track_id(item["entry"])
-        # print(f"    primary track_id={track_id!r}")
         if not track_id:
             continue
 
         core_fields = _flatten_fields(item["entry"].get("fields", {}))
         tag_fields  = secondary_fields.get(track_id, {})
         fields      = {**core_fields, **tag_fields}
-        fields["trackId"] = track_id  # ensure canonical ID is always stored
+        fields["trackId"] = track_id
 
         doc = _build_searchable_text(fields)
 
@@ -400,7 +421,7 @@ def join_records(entries_by_schema: dict[str, list[dict]], primary: str) -> list
             },
         })
 
-    print(f"  [join] {len(joined)} records — {matched} with tags, {len(joined) - matched} without")
+    print(f"  [join] {len(joined)} records from new CIDs — {matched} with tags, {len(joined) - matched} without")
     return joined
 
 # ---------------------------------------------------------------------------
@@ -409,43 +430,82 @@ def join_records(entries_by_schema: dict[str, list[dict]], primary: str) -> list
 
 async def ingest():
     global collection
-    loop    = asyncio.get_event_loop()
-    schemas = get_schemas()
-    primary = get_primary(schemas)
+    loop      = asyncio.get_event_loop()
+    schemas   = get_schemas()
+    primary   = get_primary(schemas)
+    checkpoint = _load_checkpoint()
 
     print(f"\n{'='*60}")
     print(f"Ingesting {len(schemas)} schema(s): {list(schemas.keys())}")
-    # print(f"Primary: '{primary}'")
     print(f"{'='*60}")
 
+    # Fetch all schemas in parallel, each with its own prior checkpoint slice
     results = await asyncio.gather(*[
-        fetch_schema_entries(name, schema_id, loop)
+        fetch_schema_entries(
+            name,
+            schema_id,
+            loop,
+            checkpoint.get(name, {}),
+        )
         for name, schema_id in schemas.items()
     ])
-    entries_by_schema = dict(zip(schemas.keys(), results))
+
+    entries_by_schema:     dict[str, list[dict]]      = {}
+    new_checkpoints_by_schema: dict[str, dict[str, int]] = {}
+    for (name, _), (entries, new_ckpt) in zip(schemas.items(), results):
+        entries_by_schema[name]         = entries
+        new_checkpoints_by_schema[name] = new_ckpt
 
     joined = join_records(entries_by_schema, primary)
 
     if not joined:
-        print("  Nothing to ingest.")
+        print("  No new records to upsert.")
+        # Still save checkpoint so we don't refetch unchanged CIDs next time
+        for name, ckpt in new_checkpoints_by_schema.items():
+            checkpoint[name] = ckpt
+        _save_checkpoint(checkpoint)
         return
 
-    ids       = [r["id"]       for r in joined]
-    documents = [r["document"] for r in joined]
-    metadatas = [{**r["metadata"], "payload": r["payload"]} for r in joined]
+    # Diff against ChromaDB: skip records whose document hasn't changed
+    ids_to_check = [r["id"] for r in joined]
+    loop = asyncio.get_event_loop()
 
-    BATCH = 100
-    for i in range(0, len(ids), BATCH):
-        s, e = i, min(i + BATCH, len(ids))
-        await loop.run_in_executor(
-            None,
-            lambda s=s, e=e: collection.upsert(
-                ids=ids[s:e],
-                documents=documents[s:e],
-                metadatas=metadatas[s:e],
-            ),
-        )
-        print(f"  upserted {e}/{len(ids)}")
+    existing_raw = await loop.run_in_executor(
+        None,
+        lambda: collection.get(ids=ids_to_check, include=["documents"]),
+    )
+    existing_docs: dict[str, str] = {}
+    ex_ids  = existing_raw.get("ids") or []
+    ex_docs = existing_raw.get("documents") or []
+    for eid, edoc in zip(ex_ids, ex_docs):
+        existing_docs[eid] = edoc or ""
+
+    changed = [r for r in joined if existing_docs.get(r["id"], "") != r["document"]]
+    skipped = len(joined) - len(changed)
+    print(f"  Diff: {len(changed)} changed, {skipped} unchanged (skipped upsert)")
+
+    if changed:
+        ids       = [r["id"]       for r in changed]
+        documents = [r["document"] for r in changed]
+        metadatas = [{**r["metadata"], "payload": r["payload"]} for r in changed]
+
+        BATCH = 100
+        for i in range(0, len(ids), BATCH):
+            s, e = i, min(i + BATCH, len(ids))
+            await loop.run_in_executor(
+                None,
+                lambda s=s, e=e: collection.upsert(
+                    ids=ids[s:e],
+                    documents=documents[s:e],
+                    metadatas=metadatas[s:e],
+                ),
+            )
+            print(f"  upserted {e}/{len(ids)}")
+
+    # Persist updated checkpoint
+    for name, ckpt in new_checkpoints_by_schema.items():
+        checkpoint[name] = ckpt
+    _save_checkpoint(checkpoint)
 
     print(f"Ingestion complete. Collection size: {collection.count()}")
 
@@ -493,8 +553,9 @@ async def lifespan(app: FastAPI):
         settings=Settings(allow_reset=True),
     )
     if cfg.reset:
-        print("[startup] resetting Chroma collection")
+        print("[startup] resetting Chroma collection and checkpoint")
         client.reset()
+        _clear_checkpoint()
     ef_global  = embedding_functions.DefaultEmbeddingFunction()
     collection = client.get_or_create_collection(cfg.collection, embedding_function=ef_global)
     asyncio.create_task(ingest())
@@ -563,7 +624,6 @@ async def embed(body: EmbedRequest):
 
 @app.get("/debug")
 async def debug():
-    """Shows the loaded secondary (tag) index and all primary track_ids. Use this to diagnose join mismatches."""
     schemas = get_schemas()
     primary = get_primary(schemas)
     loop    = asyncio.get_event_loop()
@@ -573,12 +633,15 @@ async def debug():
     )
     metas = results.get("metadatas") or []
     primary_ids = [m.get("trackId", "") for m in metas if m]
+    checkpoint  = _load_checkpoint()
+    total_cached_cids = sum(len(v) for v in checkpoint.values())
     return {
-        "primary_track_ids":  sorted(primary_ids),
-        "secondary_tag_keys": sorted(debug_secondary.keys()),
-        "matched":            sorted(set(primary_ids) & set(debug_secondary.keys())),
-        "unmatched_primary":  sorted(set(primary_ids) - set(debug_secondary.keys())),
-        "unmatched_tags":     sorted(set(debug_secondary.keys()) - set(primary_ids)),
+        "primary_track_ids":    sorted(primary_ids),
+        "secondary_tag_keys":   sorted(debug_secondary.keys()),
+        "matched":              sorted(set(primary_ids) & set(debug_secondary.keys())),
+        "unmatched_primary":    sorted(set(primary_ids) - set(debug_secondary.keys())),
+        "unmatched_tags":       sorted(set(debug_secondary.keys()) - set(primary_ids)),
+        "checkpoint_cid_count": total_cached_cids,
         "tag_details": {
             k: {
                 "genres":   v.get("genres"),
@@ -592,13 +655,26 @@ async def debug():
 
 @app.get("/health")
 async def health():
-    schemas = get_schemas()
-    return {"status": "ok", "count": collection.count(), "schemas": schemas}
+    schemas    = get_schemas()
+    checkpoint = _load_checkpoint()
+    return {
+        "status":  "ok",
+        "count":   collection.count(),
+        "schemas": schemas,
+        "checkpoint_cids": {name: len(cids) for name, cids in checkpoint.items()},
+    }
 
 @app.post("/reingest")
 async def reingest():
     asyncio.create_task(ingest())
     return {"status": "accepted"}
+
+@app.post("/reingest/full")
+async def reingest_full():
+    """Clear checkpoint and re-fetch everything from scratch."""
+    _clear_checkpoint()
+    asyncio.create_task(ingest())
+    return {"status": "accepted", "note": "checkpoint cleared — full reingest in progress"}
 
 # ---------------------------------------------------------------------------
 # ENTRY POINT

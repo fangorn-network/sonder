@@ -1,0 +1,197 @@
+/* ==========================================================================
+   SOND3R DESIGN SYSTEM VARIABLES
+   ========================================================================== */
+
+/*
+  Palette extracted directly from CityCanvas:
+  Sky:        #01010f → #130626  (deep indigo → violet)
+  Buildings:  #020409 / #03050d / #050718
+  NEONS[0]    rgb(0,255,240)   — electric cyan
+  NEONS[1]    rgb(255,0,180)   — hot magenta
+  NEONS[4]    rgb(210,0,255)   — ultraviolet
+  Headlights: #e8f0ff          — cool white-blue
+*/
+
+:root {
+  /* Color Palette */
+  --bg-space: #02010e;          /* Canvas sky top — deep indigo-black */
+  --bg-card: #050718;           /* Canvas building layer 3 — darkest struct */
+  --border-glow: #0d1030;       /* Canvas horizon mid-tone — indigo border */
+  
+  --text-primary: #e8f0ff;      /* Canvas headlight color — cool white-blue */
+  --text-muted: #6070b8;        /* Mid indigo — between sky and neon */
+  --text-dim: #242848;          /* Deep indigo dim — building interior tone */
+  
+  /* Accent Colors — pulled 1:1 from NEONS[] array in CityCanvas */
+  --accent-cyan: #00fff0;       /* NEONS[0] — electric cyan */
+  --accent-pink: #ff00b4;       /* NEONS[1] — hot magenta */
+  --accent-purple: #d200ff;     /* NEONS[4] — ultraviolet */
+
+  /* Typography */
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+  
+  /* Layout Layout Constraints */
+  --max-text-width: 65ch;       /* Limits line length for perfect readability */
+  --container-width: 1200px;
+}
+
+/* ==========================================================================
+   GLOBAL STYLES & RESET
+   ========================================================================== */
+body {
+  background-color: var(--bg-space);
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  line-height: 1.6;
+  margin: 0;
+  padding: 0;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4 {
+  color: var(--text-primary);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  text-transform: uppercase;
+}
+
+/* ==========================================================================
+   TYPOGRAPHY & READABILITY FIXES
+   ========================================================================== */
+/* Hard-hitting section headers */
+.hero-title {
+  font-size: clamp(3rem, 8vw, 6rem);
+  line-height: 0.9;
+  margin-bottom: 1.5rem;
+}
+
+/* Fixes the wide line-length problem from the $300B section */
+.editorial-copy {
+  font-size: 1.125rem;
+  max-width: var(--max-text-width); /* Keeps text snug and readable */
+  color: var(--text-muted);
+  margin-bottom: 2rem;
+}
+
+/* Accessible Spotify disclaimer text */
+.disclaimer-text {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-dim); /* Bump this variable up if contrast testing fails */
+  letter-spacing: 0.05em;
+  opacity: 0.8; 
+  transition: opacity 0.2s ease;
+}
+.disclaimer-text:hover {
+  opacity: 1; /* Subtle micro-interaction */
+}
+
+/* ==========================================================================
+   INTERACTIVE ELEMENTS (BUTTONS & TABS)
+   ========================================================================== */
+.btn {
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 1rem 2.5rem;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Solid Download Button */
+.btn-primary {
+  background-color: var(--accent-cyan);
+  color: var(--bg-space);
+}
+.btn-primary:hover {
+  background-color: transparent;
+  border-color: var(--accent-cyan);
+  color: var(--accent-cyan);
+  box-shadow: 0 0 20px rgba(0, 255, 240, 0.18);
+}
+
+/* Ghost Discord Button */
+.btn-secondary {
+  background-color: transparent;
+  border-color: rgba(255, 0, 180, 0.3);
+  color: var(--text-primary);
+}
+.btn-secondary:hover {
+  border-color: var(--accent-pink);
+  background-color: rgba(255, 0, 180, 0.05);
+}
+
+/* Navigation Tabs (Listeners vs Artists) */
+.tab-container {
+  display: flex;
+  gap: 2rem;
+  border-bottom: 1px solid var(--border-glow);
+  margin-bottom: 3rem;
+}
+
+.tab-item {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  letter-spacing: 0.05em;
+  padding-bottom: 0.75rem;
+  color: var(--text-dim);
+  cursor: pointer;
+  position: relative;
+  transition: color 0.2s ease;
+}
+
+.tab-item:hover, .tab-item.active {
+  color: var(--text-primary);
+}
+
+/* Animated accent underline for the active tab */
+.tab-item.active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background-color: var(--accent-pink);
+  box-shadow: 0 0 8px var(--accent-pink);
+}
+
+/* ==========================================================================
+   THE TELEMETRY WIDGETS (TASTE ENGINE)
+   ========================================================================== */
+.telemetry-card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-glow);
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  padding: 2rem;
+}
+
+/* Radial Gauge Placeholder (Entropy, Speed, etc.) */
+.gauge-metric {
+  color: var(--accent-purple);
+  text-shadow: 0 0 10px rgba(210, 0, 255, 0.35);
+  font-size: 1.25rem;
+}
+
+/* Data Row Layout (Moods/Genres list grid) */
+.data-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0;
+  border-bottom: 1px dashed rgba(36, 40, 72, 0.6);
+  font-size: 0.85rem;
+}
+
+.data-label {
+  color: var(--text-muted);
+}
+
+.data-value {
+  color: var(--text-primary);
+}

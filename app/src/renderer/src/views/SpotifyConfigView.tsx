@@ -110,7 +110,7 @@ export function SpotifyConfigView({ initial, onSave, onBack }: SpotifyConfigView
             padding: '1px 6px',
             color: 'var(--accent)',
           }}>
-            http://localhost:8080/callback
+            http://127.0.0.1:5173/callback
           </code>
           , then paste the credentials below. All data is stored locally.
         </p>

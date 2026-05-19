@@ -17,7 +17,7 @@ export interface PlaybackProvider {
   id: SourceId
   label: string
   // for the UI indicator
-  color: string          
+  color: string
   isAvailable: () => boolean
   play: (address: string) => Promise<void>
   pause: () => Promise<void>

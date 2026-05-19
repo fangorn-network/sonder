@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, ipcMain, net } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, net, session } from 'electron' // <-- Added 'session' to imports
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { spawn } from 'child_process'
@@ -6,7 +6,7 @@ import path from 'path'
 import fs from 'fs'
 import http from 'http'
 import mime from 'mime-types'
-
+import dotenv from 'dotenv'
 import { AgentProviderManager } from './agent/agent-provider-manager'
 import { AgentBridge } from './agent/agent-bridge'
 import { registerAgentIpcHandlers } from './agent/ipc-handlers'
@@ -17,6 +17,16 @@ import { ToolboxConfigManager } from './agent/toolbox-config-manager'
 let pyProcess: ReturnType<typeof spawn> | null = null
 let rendererServer: http.Server | null = null
 
+// Hnadle env vars
+// Check if the application is bundled/packaged
+if (app.isPackaged) {
+  // In production, extraResources are placed in the app's system resources directory
+  dotenv.config({ path: path.join(process.resourcesPath, '.env') })
+} else {
+  // In local development, read directly from the project root directory
+  dotenv.config({ path: path.resolve(process.cwd(), '.env') })
+}
+
 // ─────────────────────────────────────────────────────────────
 // Python backend
 // ─────────────────────────────────────────────────────────────
@@ -24,9 +34,6 @@ let rendererServer: http.Server | null = null
 function startPython() {
   const root = is.dev ? app.getAppPath() : process.resourcesPath
 
-  // In dev the script lives at <root>/vectordb/server.py.
-  // We set cwd to that directory so any relative imports / file lookups
-  // inside server.py resolve the same way they do when you run it by hand.
   const [bin, args, cwd]: [string, string[], string] = app.isPackaged
     ? [
       path.join(root, 'server'),
@@ -37,7 +44,6 @@ function startPython() {
         'tony.test.tags.track.0=0x43a911728ed43457b145f5c4c0d89145b7c8d352b2c6ba0d86fff1f005166935',
         '--primary',
         'tony.test.invariants.track.2',
-        // '--reset',
       ],
       root,
     ]
@@ -51,9 +57,8 @@ function startPython() {
         'tony.test.tags.track.0=0x43a911728ed43457b145f5c4c0d89145b7c8d352b2c6ba0d86fff1f005166935',
         '--primary',
         'tony.test.invariants.track.2',
-        // '--reset',
       ],
-      path.join(root, 'vectordb'),   // ← the fix: match the manual-run cwd
+      path.join(root, 'vectordb'),
     ]
 
   pyProcess = spawn(bin, args, {
@@ -72,8 +77,6 @@ function startPython() {
 
 // ─────────────────────────────────────────────────────────────
 // Local renderer HTTP server
-// Serves built renderer at http://127.0.0.1:5173
-// Gives Privy a stable http:// origin (not file://)
 // ─────────────────────────────────────────────────────────────
 
 function startRendererServer(): Promise<void> {
@@ -88,7 +91,6 @@ function startRendererServer(): Promise<void> {
 
       fs.readFile(filePath, (err, data) => {
         if (err) {
-          // SPA fallback
           fs.readFile(join(rendererPath, 'index.html'), (fallbackErr, fallback) => {
             if (fallbackErr) {
               res.writeHead(500)
@@ -145,7 +147,7 @@ function createWindow(): void {
       sandbox: false,
       nodeIntegration: false,
       webSecurity: true,
-      partition: 'persist:main',
+      partition: 'persist:main', // <-- This partition matches the session intercepted below
       webviewTag: true
     },
   })
@@ -169,8 +171,6 @@ function createWindow(): void {
 // ─────────────────────────────────────────────────────────────
 
 function registerIpcHandlers() {
-
-  // generic proxy
   ipcMain.handle('fetch:proxy', async (_event, { url, options }) => {
     const res = await fetch(url, options ?? {})
     const text = await res.text()
@@ -185,7 +185,6 @@ function registerIpcHandlers() {
     return { status: res.status, body: text }
   })
 
-  // Spotify API calls proxied through main so Spotify doesn't see Electron UA
   ipcMain.handle('spotify:api', async (_event, { url, method, token, body }) => {
     const res = await fetch(url, {
       method: method ?? 'GET',
@@ -223,11 +222,6 @@ function registerIpcHandlers() {
     return text
   })
 
-  // ── Spotify OAuth ────────────────────────────────────────────────────────────
-  // Opens a dedicated BrowserWindow for the OAuth flow. Watches will-redirect
-  // and will-navigate for the callback URI, destroys the window, and resolves
-  // with the full callback URL as the invoke return value.
-  // No HTTP server needed. No IPC events. Clean req/res via invoke.
   ipcMain.handle('spotify:oauth', (_event, authUrl: string, redirectUri: string) => {
     return new Promise<string>((resolve, reject) => {
       const win = new BrowserWindow({
@@ -256,11 +250,10 @@ function registerIpcHandlers() {
       win.on('closed', () => reject(new Error('auth_cancelled')))
     })
   })
-
 }
 
 // ─────────────────────────────────────────────────────────────
-// Arbitrum RPC proxy (local HTTP, port 8545)
+// Arbitrum RPC proxy
 // ─────────────────────────────────────────────────────────────
 
 const rpcProxy = http.createServer(async (req, res) => {
@@ -355,6 +348,21 @@ app.whenReady().then(async () => {
   if (!is.dev) {
     await startRendererServer()
   }
+
+  // ── AUDIO FIX: Force Desktop Flags on YouTube Iframe Player Session ──
+  const targetSession = session.fromPartition('persist:main')
+  const ytFilter = { urls: ['https://*.youtube.com/*', 'https://*.youtube-nocookie.com/*'] }
+
+  targetSession.webRequest.onBeforeSendHeaders(ytFilter, (details, callback) => {
+    // 1. Swap the typical Electron framework UA identifier out for a pristine Desktop Chrome UA
+    details.requestHeaders['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+
+    // 2. Inject the performance parameter preference directly into the cookies header. 
+    // f4=4000000 tells YouTube's media delivery controller to prioritize high definition configurations.
+    details.requestHeaders['Cookie'] = 'PREF=f4=4000000&f6=40000000&volume=100;'
+
+    callback({ requestHeaders: details.requestHeaders })
+  })
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)

@@ -152,9 +152,12 @@ function createWindow(): void {
     },
   })
 
-  mainWindow.webContents.openDevTools({ mode: 'detach' });
-
-  mainWindow.on('ready-to-show', () => mainWindow.show())
+  mainWindow.on('ready-to-show', () => 
+    {
+        mainWindow.webContents.openDevTools({ mode: 'detach' });
+        mainWindow.show()
+    }
+)
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url)
@@ -226,6 +229,7 @@ function registerIpcHandlers() {
 
   ipcMain.handle('spotify:oauth', (_event, authUrl: string, redirectUri: string) => {
     return new Promise<string>((resolve, reject) => {
+      console.log('OAuth starting, redirectUri:', redirectUri);
       const win = new BrowserWindow({
         width: 520,
         height: 720,
@@ -240,16 +244,34 @@ function registerIpcHandlers() {
 
       win.loadURL(authUrl)
 
+      let result: string | null = null
+      let error: string | null = null
+
       const handleUrl = (url: string) => {
+        console.log('Navigation detected:', url);
         if (url.startsWith(redirectUri)) {
-          win.destroy()
-          resolve(url)
+        const params = new URL(url).searchParams
+          if (params.has('error')) {
+            error = params.get('error')
+          } else {
+            result = url
+          }
+          win.close()
         }
       }
 
       win.webContents.on('will-redirect', (_e, url) => handleUrl(url))
       win.webContents.on('will-navigate', (_e, url) => handleUrl(url))
-      win.on('closed', () => reject(new Error('auth_cancelled')))
+      
+      win.on('closed', () => {
+        if(result) {
+          resolve(result)
+        } else if (error) {
+          reject(new Error(`spotify_auth_error: ${error}`))
+        } else {
+          reject(new Error('auth_cancelled'))
+        }
+      })
     })
   })
 }

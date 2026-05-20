@@ -16,8 +16,8 @@
     "build": "npm run typecheck && electron-vite build",
     "postinstall": "electron-builder install-app-deps",
     "link": "pnpm link ../../agent/agent && pnpm link ../../agent/tools",
-    "build:unpack": "npm run build && electron-builder --dir",
-    "build:win": "npm run build && electddron-builder --win",
+    "build:unpack": "pnpm run build && electron-builder --dir",
+    "build:win": "electron-vite build && electron-builder --win",
     "build:mac": "electron-vite build && electron-builder --mac",
     "build:linux": "electron-vite build && electron-builder --linux"
   },

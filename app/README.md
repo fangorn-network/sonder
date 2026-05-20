@@ -64,15 +64,28 @@ You can build an executable on a per-OS basis.
 
 **IMPORTANT**: The executable will allow the `.env` file to be locally editable. Be careful not to include any secret information in the .env. 
 
+#### Linux and Mac
 ```bash
-# For windows
-$ pnpm build:win
 
 # For macOS
 $ pnpm build:mac
 
 # For Linux
 $ pnpm build:linux
+```
+
+#### Windows
+First, ensure Wine is installed
+```bash
+# Ubuntu/Debian
+sudo dpkg --add-architecture i386
+sudo apt update
+sudo apt install wine64 wine32
+```
+Then build
+```bash
+# For windows
+$ pnpm build:win
 ```
 
 > Note: If work is being performed that requires changes to the agent, tools, or agent-types, add the following to pnpm section of package.json replaced with the location to the relevant projects

@@ -14,6 +14,166 @@ import { DataContext } from '@fangorn-network/agent-types'
 import { existsSync } from 'fs'
 import { ToolboxConfigManager } from './agent/toolbox-config-manager'
 
+// yt-dlp helpers
+function getYtDlpBin(): string {
+  const updatable = path.join(app.getPath('userData'), 'yt-dlp')
+  if (fs.existsSync(updatable)) return updatable
+  if (app.isPackaged) {
+    return path.join(process.resourcesPath, 'bin', 'yt-dlp')
+  }
+  return path.join(app.getAppPath(), 'resources', 'bin', 'yt-dlp')
+}
+
+async function updateYtDlp(): Promise<void> {
+  return new Promise((resolve) => {
+    const bin = getYtDlpBin()
+    // Copy bundled binary to userData so it can self-update
+    // (bundled resources are read-only in packaged apps)
+    const updatable = path.join(app.getPath('userData'), 'yt-dlp')
+
+    // On first run, seed from bundled binary
+    if (!fs.existsSync(updatable)) {
+      fs.copyFileSync(bin, updatable)
+      fs.chmodSync(updatable, 0o755)
+    }
+
+    console.log('[yt-dlp] checking for updates...')
+    const proc = spawn(updatable, ['--update-to', 'nightly'])
+    proc.on('close', (code) => {
+      console.log(`[yt-dlp] update exited ${code}`)
+      resolve()
+    })
+    proc.on('error', () => resolve()) // non-fatal
+  })
+}
+
+export interface YtResolveResult {
+  streamUrl: string
+  videoId: string
+  title: string
+  artist: string
+  thumbnail: string
+  durationMs: number
+}
+
+// ─── Stream cache ─────────────────────────────────────────────────────────────
+
+interface StreamEntry {
+  url:     string
+  headers: Record<string, string>
+}
+const streamCache = new Map<string, StreamEntry>()
+
+// ─── Proxy server ─────────────────────────────────────────────────────────────
+
+
+let streamServer: http.Server | null = null
+let streamPort = 0
+
+function startYtStreamProxy() {
+  streamServer = http.createServer(async (req, res) => {
+    const videoId = req.url?.slice(1)
+    if (!videoId) { res.writeHead(400); res.end(); return }
+
+    const entry = streamCache.get(videoId)
+    if (!entry) { res.writeHead(404); res.end(); return }
+
+    res.on('error', () => {}) // ignore EPIPE
+
+    try {
+      const fetchHeaders: Record<string, string> = { ...entry.headers }
+      if (req.headers.range) fetchHeaders['Range'] = req.headers.range as string
+
+      const upstream = await fetch(entry.url, { headers: fetchHeaders })
+
+      const status = req.headers.range ? 206 : 200
+      const outHeaders: Record<string, string> = {
+        'Content-Type':  upstream.headers.get('content-type') || 'audio/mp4',
+        'Accept-Ranges': 'bytes',
+      }
+      const cl = upstream.headers.get('content-length')
+      const cr = upstream.headers.get('content-range')
+      if (cl) outHeaders['Content-Length'] = cl
+      if (cr) outHeaders['Content-Range']  = cr
+
+      res.writeHead(status, outHeaders)
+
+      const reader = upstream.body!.getReader()
+      req.on('close', () => reader.cancel().catch(() => {}))
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        if (res.writableEnded) break
+        const ok = res.write(Buffer.from(value))
+        if (!ok) await new Promise(r => res.once('drain', r))
+      }
+      if (!res.writableEnded) res.end()
+    } catch {
+      if (!res.writableEnded) res.end()
+    }
+  })
+
+  streamServer.listen(0, '127.0.0.1', () => {
+    streamPort = (streamServer!.address() as any).port
+    console.log(`[yt-stream] :${streamPort}`)
+  })
+}
+
+// ─── resolveYt ────────────────────────────────────────────────────────────────
+
+function resolveYt(query: string): Promise<YtResolveResult> {
+  return new Promise((resolve, reject) => {
+    const target = /^[A-Za-z0-9_-]{11}$/.test(query)
+      ? query
+      : `ytsearch1:${query} music`
+
+    const proc = spawn(getYtDlpBin(), [
+      target,
+      '--dump-json',
+      '--no-playlist',
+      '--no-warnings',
+      '--extractor-args', 'youtube:player_client=tv_embedded',
+    ])
+
+    let out = '', err = ''
+    proc.stdout.on('data', (d: Buffer) => { out += d.toString() })
+    proc.stderr.on('data', (d: Buffer) => { err += d.toString() })
+    proc.on('error', reject)
+    proc.on('close', (code: number) => {
+      if (code !== 0) { reject(new Error(`yt-dlp exited ${code}: ${err.slice(0, 200)}`)); return }
+      try {
+        const info = JSON.parse(out.trim().split('\n')[0])
+
+        // Pick best audio-only format
+        const fmt = (info.formats ?? [])
+          .filter((f: any) => f.url && f.acodec !== 'none' && (!f.vcodec || f.vcodec === 'none'))
+          .sort((a: any, b: any) => (b.abr ?? b.tbr ?? 0) - (a.abr ?? a.tbr ?? 0))[0]
+
+        if (!fmt?.url) throw new Error('No audio format found')
+
+        // Cache URL + yt-dlp's headers — these are what YouTube validates
+        streamCache.set(info.id, {
+          url:     fmt.url,
+          headers: fmt.http_headers ?? {},
+        })
+
+        resolve({
+          streamUrl:  `http://127.0.0.1:${streamPort}/${info.id}`,
+          videoId:    info.id,
+          title:      info.title    ?? 'Unknown Title',
+          artist:     info.uploader ?? info.channel ?? 'Unknown Artist',
+          thumbnail:  info.thumbnail ?? '',
+          durationMs: Math.round((info.duration ?? 0) * 1000),
+        })
+      } catch (e: any) {
+        reject(new Error(`resolve failed: ${e.message}`))
+      }
+    })
+  })
+}
+// python helpers
+
 let pyProcess: ReturnType<typeof spawn> | null = null
 let rendererServer: http.Server | null = null
 
@@ -173,6 +333,7 @@ function createWindow(): void {
 // ─────────────────────────────────────────────────────────────
 
 function registerIpcHandlers() {
+
   ipcMain.handle('fetch:proxy', async (_event, { url, options }) => {
     const res = await fetch(url, options ?? {})
     const text = await res.text()
@@ -187,6 +348,7 @@ function registerIpcHandlers() {
     return { status: res.status, body: text }
   })
 
+  // maybe I can get rid of this?
   ipcMain.handle('spotify:api', async (_event, { url, method, token, body }) => {
     const res = await fetch(url, {
       method: method ?? 'GET',
@@ -213,7 +375,8 @@ function registerIpcHandlers() {
       (_, v) => (typeof v === 'bigint' ? '0x' + v.toString(16) : v)
     )
 
-    const res = await net.fetch('https://sepolia-rollup.arbitrum.io/rpc', {
+    const rpcUrl   = (import.meta as any).env.VITE_ARBITRUM_SEPOLIA_RPC_URL
+    const res = await net.fetch(rpcUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body,
@@ -224,32 +387,68 @@ function registerIpcHandlers() {
     return text
   })
 
-  ipcMain.handle('spotify:oauth', (_event, authUrl: string, redirectUri: string) => {
-    return new Promise<string>((resolve, reject) => {
-      const win = new BrowserWindow({
-        width: 520,
-        height: 720,
-        title: 'Connect Spotify',
-        parent: BrowserWindow.getAllWindows()[0],
-        modal: false,
-        webPreferences: {
-          nodeIntegration: false,
-          contextIsolation: true,
-        },
+  // ipcMain.handle('spotify:oauth', (_event, authUrl: string, redirectUri: string) => {
+  //   return new Promise<string>((resolve, reject) => {
+  //     const win = new BrowserWindow({
+  //       width: 520,
+  //       height: 720,
+  //       title: 'Connect Spotify',
+  //       parent: BrowserWindow.getAllWindows()[0],
+  //       modal: false,
+  //       webPreferences: {
+  //         nodeIntegration: false,
+  //         contextIsolation: true,
+  //       },
+  //     })
+
+  //     win.loadURL(authUrl)
+
+  //     const handleUrl = (url: string) => {
+  //       if (url.startsWith(redirectUri)) {
+  //         win.destroy()
+  //         resolve(url)
+  //       }
+  //     }
+
+  //     win.webContents.on('will-redirect', (_e, url) => handleUrl(url))
+  //     win.webContents.on('will-navigate', (_e, url) => handleUrl(url))
+  //     win.on('closed', () => reject(new Error('auth_cancelled')))
+  //   })
+  // })
+
+  // yt-dlp
+  ipcMain.handle('yt:resolve', async (_event, query: string): Promise<YtResolveResult> => {
+    return resolveYt(query)
+  })
+
+  // Call this from the renderer when the agent queues a track
+  ipcMain.handle('yt:prefetch', async (_event, query: string) => {
+    try { await resolveYt(query) } catch { /* non-fatal */ }
+  })
+
+  ipcMain.handle('yt:search', async (_event, query: string): Promise<any[]> => {
+    return new Promise((resolve, reject) => {
+      const proc = spawn(getYtDlpBin(), [
+        `ytsearch10:${query} official audio -live -concert -cover`,
+        '--dump-json',
+        '--no-playlist',
+        '--no-warnings',
+        '--flat-playlist',
+        '--extractor-args', 'youtube:player_client=tv_embedded',
+      ])
+
+      let out = ''
+      proc.stdout.on('data', (d: Buffer) => { out += d.toString() })
+      proc.on('error', reject)
+      proc.on('close', (code) => {
+        if (code !== 0) { resolve([]); return }
+        // yt-dlp emits one JSON object per line for search results
+        const results = out.trim().split('\n')
+          .filter(Boolean)
+          .map(line => { try { return JSON.parse(line) } catch { return null } })
+          .filter(Boolean)
+        resolve(results)
       })
-
-      win.loadURL(authUrl)
-
-      const handleUrl = (url: string) => {
-        if (url.startsWith(redirectUri)) {
-          win.destroy()
-          resolve(url)
-        }
-      }
-
-      win.webContents.on('will-redirect', (_e, url) => handleUrl(url))
-      win.webContents.on('will-navigate', (_e, url) => handleUrl(url))
-      win.on('closed', () => reject(new Error('auth_cancelled')))
     })
   })
 }
@@ -341,11 +540,18 @@ async function bootstrap() {
 
 app.commandLine.appendSwitch('enable-unsafe-swiftshader')
 app.commandLine.appendSwitch('use-gl', 'swiftshader')
+// force raw sample to match OS settings
+app.commandLine.appendSwitch('enable-unsafe-swiftshader')
+app.commandLine.appendSwitch('use-gl', 'swiftshader')
+app.commandLine.appendSwitch('audio-output-rate', '48000')
+app.commandLine.appendSwitch('disable-audio-output-resampler')
 
 app.whenReady().then(async () => {
   electronApp.setAppUserModelId('com.electron')
 
   startPython()
+  updateYtDlp()
+  startYtStreamProxy()
 
   if (!is.dev) {
     await startRendererServer()

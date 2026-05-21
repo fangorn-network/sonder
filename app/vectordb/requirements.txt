@@ -1,0 +1,5 @@
+aiohttp
+chromadb
+fastapi
+requests
+uvicorn[standard]

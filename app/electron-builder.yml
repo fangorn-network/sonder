@@ -15,6 +15,9 @@ extraResources:
     to: "server"
   - from: "out/renderer"
     to: "renderer"
+  - from:  "resources/bin"
+    to: "bin"
+    filter: ["yt-dlp"]
 asarUnpack:
   - resources/**
 win:

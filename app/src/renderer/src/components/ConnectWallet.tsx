@@ -12,6 +12,8 @@ const CONTRACT_ABI = parseAbi([
   'function publish(string manifest_cid, bytes32 schema_id, string name, uint256 price) public'
 ])
 
+const rpcUrl   = (import.meta as any).env.VITE_ARBITRUM_SEPOLIA_RPC_URL
+
 const publicClient = createPublicClient({
   chain: arbitrumSepolia,
   transport: http("https://sepolia-rollup.arbitrum.io/rpc")

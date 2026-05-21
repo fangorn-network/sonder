@@ -7,7 +7,7 @@ import { PublishModal } from '../components/PublishModal'
 import type { Fangorn } from '@fangorn-network/sdk'
 import type { Hex } from 'viem'
 import { PlaybackState } from '../types/playback'
-import { useYouTubeContext } from '../providers/YoutubeProvider'
+import { useYouTubeContext } from '../hooks/useYoutubeContext'
 
 const GENRE_PALETTE = [
   '#a78bfa', '#60a5fa', '#f472b6', '#22c55e',
@@ -119,7 +119,11 @@ export function BrowseView({
   const [reasonExpanded, setReasonExpanded] = useState(false)
   const [publishingTrack, setPublishingTrack] = useState<{ track: Track; color: string } | null>(null)
 
-  const { stop: stopYt } = useYouTubeContext()
+  const {
+    stop: stopYt,
+    currentVideoId: ytCurrentId,
+    isPlaying: ytIsPlaying
+  } = useYouTubeContext()
 
   const [activeTab, setActiveTab] = useState<SearchTab>('library')
   const mbFetchedRef = useRef<string>('')
@@ -248,7 +252,9 @@ export function BrowseView({
 
   const renderCard = (track: Track) => {
     const accentColor = hashColor(track.id)
-    const isThisPlaying = playbackState?.trackId === track.id && playbackState?.playing
+    const isThisPlaying =
+      (playbackState?.trackId === track.id && playbackState?.playing) ||
+      (track.youtubeVideoId != null && track.youtubeVideoId === ytCurrentId && ytIsPlaying)
     const isMbTrack = !track.manifestCid
     const durationStr = track.durationMs
       ? `${Math.floor(track.durationMs / 60000)}:${String(Math.floor((track.durationMs % 60000) / 1000)).padStart(2, '0')}`
@@ -477,36 +483,6 @@ export function BrowseView({
               </button>
             )
           })}
-        </div>
-      )}
-
-      {showSpotifyNudge && (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 10,
-          padding: '8px 12px', marginBottom: 10, borderRadius: 6,
-          background: 'rgba(30,215,96,0.06)', border: '1px solid rgba(30,215,96,0.18)',
-          fontSize: 11, letterSpacing: '0.03em', color: 'var(--fg3, #a3a3a3)',
-        }}>
-          <SpotifyIcon width={14} height={14} style={{ flexShrink: 0, opacity: 0.7 }} />
-          <span style={{ flex: 1 }}>Connect Spotify to enable playback</span>
-          <button
-            onClick={onSpotifyNudgeConnect}
-            style={{
-              background: 'rgba(30,215,96,0.12)', border: '1px solid rgba(30,215,96,0.3)',
-              borderRadius: 4, color: '#1DB954', fontFamily: 'var(--font-mono, monospace)',
-              fontSize: 10, letterSpacing: '0.08em', padding: '3px 10px',
-              cursor: 'pointer', flexShrink: 0,
-            }}
-            onMouseEnter={e => (e.currentTarget.style.background = 'rgba(30,215,96,0.22)')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'rgba(30,215,96,0.12)')}
-          >SET UP</button>
-          <button
-            onClick={onSpotifyNudgeDismiss}
-            aria-label="Dismiss"
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--fg3, #a3a3a3)', fontSize: 12, padding: '0 2px', lineHeight: 1, opacity: 0.5, flexShrink: 0 }}
-            onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
-            onMouseLeave={e => (e.currentTarget.style.opacity = '0.5')}
-          >✕</button>
         </div>
       )}
 

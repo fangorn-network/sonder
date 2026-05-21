@@ -26,8 +26,9 @@ import { AgentContext, useAgentContext } from './context/useAgentContext'
 import { rankWithContext } from './context/ContextScoring'
 import { ContextBar } from './views/ContextBar'
 import { useYouTubeSearch } from './hooks/useYoutubeSearch'
-import { YouTubeProvider } from './providers/YoutubeProvider'
+import { YouTubeProvider } from './hooks/useYoutubeContext'
 import { usePlaybackRouter } from './hooks/usePlaybackRouter'
+import { useAutoplay } from './hooks/useAutoplay'
 
 const SNAPSHOT_HISTORY_DEPTH = 5
 const SCROLL_THRESHOLD = 10
@@ -84,15 +85,18 @@ function SpotifyProviderShell({
   onSpotifyConfigSaved: (cfg: { clientId: string; clientSecret: string }) => void
   hasConfig: boolean
 }) {
-  const onTrackEndRef = useRef<() => void>(() => { })
+  const onTrackEndRef  = useRef<() => void>(() => {})
+  const onYtEndedRef   = useRef<() => void>(() => {})
+
   const spotify = useSpotify({ onTrackEnd: () => onTrackEndRef.current() })
 
   return (
     <SpotifyProvider value={{ ...spotify }}>
-      <YouTubeProvider>
+      <YouTubeProvider onEnded={() => onYtEndedRef.current()}>
         <AppContent
           spotify={spotify}
           onTrackEndRef={onTrackEndRef}
+          onYtEndedRef={onYtEndedRef}
           onSpotifyConfigSaved={onSpotifyConfigSaved}
           hasConfig={hasConfig}
         />
@@ -106,11 +110,13 @@ function SpotifyProviderShell({
 function AppContent({
   spotify,
   onTrackEndRef,
+  onYtEndedRef,
   onSpotifyConfigSaved,
   hasConfig,
 }: {
   spotify: ReturnType<typeof useSpotify>
   onTrackEndRef: React.MutableRefObject<() => void>
+  onYtEndedRef:  React.MutableRefObject<() => void>
   onSpotifyConfigSaved: (cfg: { clientId: string; clientSecret: string }) => void
   hasConfig: boolean
 }) {
@@ -174,7 +180,7 @@ function AppContent({
         const parts = q.split(/\s+/)
         if (parts.length >= 3) {
           const artist = parts.slice(-2).join(' ')
-          const title  = parts.slice(0, -2).join(' ')
+          const title = parts.slice(0, -2).join(' ')
           return `recording:"${title}" AND artist:"${artist}"`
         }
         return `recording:"${q}"`
@@ -186,7 +192,7 @@ function AppContent({
       ])
       const [structuredData, fallbackData] = await Promise.all([
         structuredResp.ok ? structuredResp.json() : { recordings: [] },
-        fallbackResp.ok  ? fallbackResp.json()  : { recordings: [] },
+        fallbackResp.ok ? fallbackResp.json() : { recordings: [] },
       ])
       const toTrack = (rec: any): Track => {
         const artist = (rec['artist-credit'] ?? [])
@@ -222,11 +228,11 @@ function AppContent({
   type AutoplayMode = 'none' | 'sequential' | 'agent' | 'similar'
   const [autoplayMode] = useState<AutoplayMode>('agent')
   const filteredTracksRef = useRef<Track[]>([])
-  const playingIdRef      = useRef<string | null>(null)
-  const spotifyRef        = useRef<ReturnType<typeof useSpotify> | null>(null)
-  const seededRef         = useRef(false)
-  const recentPlaysRef    = useRef<string[]>([])
-  const recentSkipsRef    = useRef<string[]>([])
+  const playingIdRef = useRef<string | null>(null)
+  const spotifyRef = useRef<ReturnType<typeof useSpotify> | null>(null)
+  const seededRef = useRef(false)
+  const recentPlaysRef = useRef<string[]>([])
+  const recentSkipsRef = useRef<string[]>([])
 
   const pushPlay = useCallback((label: string) => {
     recentPlaysRef.current = [label, ...recentPlaysRef.current].slice(0, SNAPSHOT_HISTORY_DEPTH)
@@ -256,9 +262,9 @@ function AppContent({
         : await kernel.embedText(label)
       const meta = {
         trackId: track.id, artistId: track.artist,
-        genres:   (track as any).genres   ?? [],
-        moods:    (track as any).moods    ?? [],
-        themes:   (track as any).themes   ?? [],
+        genres: (track as any).genres ?? [],
+        moods: (track as any).moods ?? [],
+        themes: (track as any).themes ?? [],
         contexts: (track as any).contexts ?? [],
         durationMs: track.durationMs ?? 0,
       }
@@ -275,32 +281,41 @@ function AppContent({
     }
   }, [kernel, pushPlay, pushSkip, applyKernelQuery])
 
-  // Keep handleSignal in a ref so usePlaybackRouter's onSkip can call it
-  // without being in its dependency chain (avoids ordering issues)
   const handleSignalRef = useRef(handleSignal)
   handleSignalRef.current = handleSignal
 
-  // Keep ytTracks + fallbackTracks in refs for the onSkip lookup
-  const ytTracksRef       = useRef(ytTracks)
+  const ytTracksRef = useRef(ytTracks)
   const fallbackTracksRef = useRef(fallbackTracks)
-  useEffect(() => { ytTracksRef.current = ytTracks },       [ytTracks])
+  useEffect(() => { ytTracksRef.current = ytTracks }, [ytTracks])
   useEffect(() => { fallbackTracksRef.current = fallbackTracks }, [fallbackTracks])
 
   // ─── Playback router ──────────────────────────────────────────────────────────
 
   const { play, pause, stop, state: playbackState } = usePlaybackRouter('auto', {
     onSkip: useCallback((trackId: string) => {
-      // look up the outgoing track across all sources
       const skipped =
         filteredTracksRef.current.find(t => t.id === trackId) ??
-        ytTracksRef.current.find(t => t.id === trackId)       ??
+        ytTracksRef.current.find(t => t.id === trackId) ??
         fallbackTracksRef.current.find(t => t.id === trackId)
-
       if (skipped) {
         handleSignalRef.current({ type: 'skip', track: skipped, weight: 1.0 })
       }
-    }, []), // stable — all reads go through refs
+    }, []),
   })
+
+  // ─── Autoplay ─────────────────────────────────────────────────────────────────
+
+  const { nextTrack, prefetchNext, playNext } = useAutoplay(kernel, play)
+
+  // Prefetch next track whenever a new track starts playing
+  useEffect(() => {
+    if (playbackState.trackId) prefetchNext()
+  }, [playbackState.trackId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Wire YouTube onEnded → playNext
+  useEffect(() => {
+    onYtEndedRef.current = playNext
+  }, [playNext, onYtEndedRef])
 
   // ─── Playback internals ───────────────────────────────────────────────────────
 
@@ -329,9 +344,12 @@ function AppContent({
   const handleNextRef = useRef(handleNext)
   useEffect(() => { handleNextRef.current = handleNext }, [handleNext])
 
+  // Spotify onTrackEnd → kernel-driven autoplay
   useEffect(() => {
-    onTrackEndRef.current = () => { if (autoplayMode !== 'none') handleNextRef.current() }
-  }, [autoplayMode])
+    onTrackEndRef.current = () => {
+      if (autoplayMode !== 'none') playNext()
+    }
+  }, [autoplayMode, playNext, onTrackEndRef])
 
   const prevContextRef = useRef<AgentContext | null>(null)
   useEffect(() => {
@@ -343,12 +361,12 @@ function AppContent({
   const handleSkip = useCallback(() => {
     const currentTrack = filteredTracksRef.current.find(t => t.id === playingIdRef.current)
     if (currentTrack) handleSignal({ type: 'skip', track: currentTrack, weight: 1.0 })
-    handleNext()
-  }, [handleSignal, handleNext])
+    playNext()
+  }, [handleSignal, playNext])
 
   const handlePrev = useCallback(() => {
     const list = filteredTracksRef.current
-    const idx  = list.findIndex(t => t.id === playingIdRef.current)
+    const idx = list.findIndex(t => t.id === playingIdRef.current)
     const prev = list[idx - 1]
     if (prev) {
       playingIdRef.current = prev.id
@@ -404,8 +422,8 @@ function AppContent({
   }, [])
 
   const handleFilter = useCallback((type: 'genre' | 'mood' | 'context', value: string) => {
-    if (type === 'genre')   setGenreFilter(value)
-    if (type === 'mood')    setMoodFilter(value)
+    if (type === 'genre') setGenreFilter(value)
+    if (type === 'mood') setMoodFilter(value)
     if (type === 'context') setContextFilter(value)
   }, [])
 
@@ -503,10 +521,14 @@ function AppContent({
             onExpand={() => setNowPlaying('player')}
             hidden={nowPlayingOpen}
             playbackState={playbackState}
+            nextTrack={nextTrack}
+            onPlayNext={playNext}
           />
 
           {nowPlayingOpen && createPortal(
             <NowPlaying
+              playbackState={playbackState}
+              onPlay={play}
               onCollapse={() => setNowPlaying(null)}
               lastPollTime={spotify.lastPollTime}
               track={nowPlaying !== 'player' ? nowPlaying.track : undefined}

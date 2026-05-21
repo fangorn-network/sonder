@@ -10,6 +10,10 @@ tony.test.tags.track.0
 0x43a911728ed43457b145f5c4c0d89145b7c8d352b2c6ba0d86fff1f005166935
 bafkreib2ecnzk44q2jmb7hjiska5vadumxsntcl4mvzf73z6ovguo6yw7a
 
+audio source schema
+tony.test.source.track.0
+0x8dfc44d7707713b38bc3fa714f1b256ce6899e8e3f1fc3bfa3d62d5cefad26e4
+bafkreiezhrltwfwdusvxl3pzfpzp42gb4eogsm4usgtstifwrfhg4igqme
 ---
 
 

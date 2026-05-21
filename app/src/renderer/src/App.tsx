@@ -22,17 +22,16 @@ import { ConnectWallet } from './components/ConnectWallet'
 import { type SessionEvent } from './kernel/Visualizer'
 import { useChromaSync } from './hooks/useChromaSync'
 import KernelDebugHUD from './kernel/HUD'
-import { AgentContext, useAgentContext } from './context/useAgentContext'
-import { rankWithContext } from './context/ContextScoring'
+import { useAgentContext } from './context/useAgentContext'
 import { ContextBar } from './views/ContextBar'
 import { useYouTubeSearch } from './hooks/useYoutubeSearch'
+import { useSoundCloudSearch } from './hooks/useSoundcloudSearch'
 import { YouTubeProvider } from './hooks/useYoutubeContext'
 import { usePlaybackRouter } from './hooks/usePlaybackRouter'
 import { useAutoplay } from './hooks/useAutoplay'
 
 const SNAPSHOT_HISTORY_DEPTH = 5
 const SCROLL_THRESHOLD = 10
-const RECENTLY_PLAYED_MAX = 8
 const MB_USER_AGENT = 'SOND3R/1.0.0 (https://fangorn.network)'
 
 window.addEventListener('scroll', () => {
@@ -76,7 +75,9 @@ export default function App() {
   )
 }
 
-// ─── SpotifyProviderShell ──────────────────────────────────────────────────────
+// ─── SpotifyProviderShell ─────────────────────────────────────────────────────
+// Spotify is kept only for kernel seeding (top tracks).
+// All playback goes through yt-dlp.
 
 function SpotifyProviderShell({
   onSpotifyConfigSaved,
@@ -85,17 +86,14 @@ function SpotifyProviderShell({
   onSpotifyConfigSaved: (cfg: { clientId: string; clientSecret: string }) => void
   hasConfig: boolean
 }) {
-  const onTrackEndRef  = useRef<() => void>(() => {})
-  const onYtEndedRef   = useRef<() => void>(() => {})
-
-  const spotify = useSpotify({ onTrackEnd: () => onTrackEndRef.current() })
+  const onYtEndedRef = useRef<() => void>(() => {})
+  const spotify      = useSpotify({ onTrackEnd: () => {} }) // no Spotify playback callbacks needed
 
   return (
     <SpotifyProvider value={{ ...spotify }}>
       <YouTubeProvider onEnded={() => onYtEndedRef.current()}>
         <AppContent
           spotify={spotify}
-          onTrackEndRef={onTrackEndRef}
           onYtEndedRef={onYtEndedRef}
           onSpotifyConfigSaved={onSpotifyConfigSaved}
           hasConfig={hasConfig}
@@ -105,34 +103,32 @@ function SpotifyProviderShell({
   )
 }
 
-// ─── AppContent ────────────────────────────────────────────────────────────────
+// ─── AppContent ───────────────────────────────────────────────────────────────
 
 function AppContent({
   spotify,
-  onTrackEndRef,
   onYtEndedRef,
   onSpotifyConfigSaved,
   hasConfig,
 }: {
-  spotify: ReturnType<typeof useSpotify>
-  onTrackEndRef: React.MutableRefObject<() => void>
-  onYtEndedRef:  React.MutableRefObject<() => void>
+  spotify:              ReturnType<typeof useSpotify>
+  onYtEndedRef:         React.MutableRefObject<() => void>
   onSpotifyConfigSaved: (cfg: { clientId: string; clientSecret: string }) => void
-  hasConfig: boolean
+  hasConfig:            boolean
 }) {
   const [sessionHistory, setSessionHistory] = useState<SessionEvent[]>([])
-  const [entropy, setEntropy] = useState(0.2)
+  const [entropy, setEntropy]               = useState(0.2)
   const kernel = useSessionKernel({ entropy })
 
   const [showConnectors, setShowConnectors] = useState(false)
   const [nudgeDismissed, setNudgeDismissed] = useState(
     () => localStorage.getItem('sond3r:nudge:spotify') === '1'
   )
-  const [view, setView] = useState<ViewName>('Discover')
+  const [view, setView]           = useState<ViewName>('Discover')
   const [nowPlaying, setNowPlaying] = useState<null | 'player' | { track: Track; color: string }>(null)
 
-  const [genreFilter, setGenreFilter] = useState('all')
-  const [moodFilter, setMoodFilter] = useState('all')
+  const [genreFilter, setGenreFilter]     = useState('all')
+  const [moodFilter, setMoodFilter]       = useState('all')
   const [contextFilter, setContextFilter] = useState('all')
 
   const {
@@ -143,8 +139,9 @@ function AppContent({
   } = useChroma({ genreFilter, moodFilter, contextFilter })
 
   const { ytTracks, ytLoading, search: ytSearch, clear: ytClear } = useYouTubeSearch()
+  const { scTracks, scLoading, search: scSearch, clear: scClear } = useSoundCloudSearch()
 
-  // ─── Agent context ───────────────────────────────────────────────────────────
+  // ─── Agent context ──────────────────────────────────────────────────────────
 
   const { sendMessage } = useFangornAgent()
 
@@ -154,9 +151,9 @@ function AppContent({
 
   const agentContext = useAgentContext(sendMessage, contextHints)
 
-  // ─── MusicBrainz fallback search ────────────────────────────────────────────
+  // ─── MusicBrainz fallback ───────────────────────────────────────────────────
 
-  const [fallbackTracks, setFallbackTracks] = useState<Track[]>([])
+  const [fallbackTracks, setFallbackTracks]   = useState<Track[]>([])
   const [fallbackLoading, setFallbackLoading] = useState(false)
 
   const handleSetSearch = useCallback((q: string) => {
@@ -174,26 +171,13 @@ function AppContent({
     setFallbackLoading(true)
     setFallbackTracks([])
     try {
-      const headers = { 'User-Agent': MB_USER_AGENT }
-      const buildRecordingQuery = (input: string) => {
-        const q = input.trim()
-        const parts = q.split(/\s+/)
-        if (parts.length >= 3) {
-          const artist = parts.slice(-2).join(' ')
-          const title = parts.slice(0, -2).join(' ')
-          return `recording:"${title}" AND artist:"${artist}"`
-        }
-        return `recording:"${q}"`
-      }
       const fallbackQuery = `recording:"${query.trim()}"`
-      const [structuredResp, fallbackResp] = await Promise.all([
-        fetch(`https://musicbrainz.org/ws/2/recording?query=${encodeURIComponent(buildRecordingQuery(query))}&limit=25&fmt=json`, { headers }),
-        fetch(`https://musicbrainz.org/ws/2/recording?query=${encodeURIComponent(fallbackQuery)}&limit=10&fmt=json`, { headers }),
-      ])
-      const [structuredData, fallbackData] = await Promise.all([
-        structuredResp.ok ? structuredResp.json() : { recordings: [] },
-        fallbackResp.ok ? fallbackResp.json() : { recordings: [] },
-      ])
+      const url = `https://musicbrainz.org/ws/2/recording?query=${encodeURIComponent(fallbackQuery)}&limit=25&fmt=json`
+      const { body } = await (window as any).electron.ipcRenderer.invoke('fetch:proxy', {
+        url,
+        options: { headers: { 'User-Agent': MB_USER_AGENT } },
+      })
+      const data = JSON.parse(body)
       const toTrack = (rec: any): Track => {
         const artist = (rec['artist-credit'] ?? [])
           .map((c: any) => c.name ?? c.artist?.name ?? '')
@@ -206,33 +190,24 @@ function AppContent({
           durationMs: rec.length ?? null,
         }
       }
-      const seen = new Set<string>()
-      const merged: Track[] = []
-      for (const rec of [...(structuredData.recordings ?? []), ...(fallbackData.recordings ?? [])]) {
-        if (!seen.has(rec.id)) { seen.add(rec.id); merged.push(toTrack(rec)) }
-      }
-      setFallbackTracks(merged)
+      setFallbackTracks((data.recordings ?? []).map(toTrack))
     } catch (e) {
-      console.warn('[mb-fallback] search failed:', e)
-      setFallbackTracks([])
+      console.warn('[mb] search failed:', e)
     } finally {
       setFallbackLoading(false)
     }
   }, [])
 
-  // ─── Recommendations ─────────────────────────────────────────────────────────
+  // ─── Recommendations ────────────────────────────────────────────────────────
 
   const [recommendedTracks, setRecommendedTracks] = useState<RecommendedTracks | null>(null)
-  const [recommendLoading, setRecommendLoading] = useState(false)
+  const [recommendLoading, setRecommendLoading]   = useState(false)
 
-  type AutoplayMode = 'none' | 'sequential' | 'agent' | 'similar'
-  const [autoplayMode] = useState<AutoplayMode>('agent')
   const filteredTracksRef = useRef<Track[]>([])
-  const playingIdRef = useRef<string | null>(null)
-  const spotifyRef = useRef<ReturnType<typeof useSpotify> | null>(null)
-  const seededRef = useRef(false)
-  const recentPlaysRef = useRef<string[]>([])
-  const recentSkipsRef = useRef<string[]>([])
+  const playingIdRef      = useRef<string | null>(null)
+  const seededRef         = useRef(false)
+  const recentPlaysRef    = useRef<string[]>([])
+  const recentSkipsRef    = useRef<string[]>([])
 
   const pushPlay = useCallback((label: string) => {
     recentPlaysRef.current = [label, ...recentPlaysRef.current].slice(0, SNAPSHOT_HISTORY_DEPTH)
@@ -250,7 +225,7 @@ function AppContent({
 
   useChromaSync({ enabled: visible })
 
-  // ─── Signals ─────────────────────────────────────────────────────────────────
+  // ─── Signals ────────────────────────────────────────────────────────────────
 
   const handleSignal = useCallback(async (signal: TasteSignal) => {
     const { type, track } = signal
@@ -262,9 +237,9 @@ function AppContent({
         : await kernel.embedText(label)
       const meta = {
         trackId: track.id, artistId: track.artist,
-        genres: (track as any).genres ?? [],
-        moods: (track as any).moods ?? [],
-        themes: (track as any).themes ?? [],
+        genres:   (track as any).genres   ?? [],
+        moods:    (track as any).moods    ?? [],
+        themes:   (track as any).themes   ?? [],
         contexts: (track as any).contexts ?? [],
         durationMs: track.durationMs ?? 0,
       }
@@ -284,97 +259,45 @@ function AppContent({
   const handleSignalRef = useRef(handleSignal)
   handleSignalRef.current = handleSignal
 
-  const ytTracksRef = useRef(ytTracks)
+  const ytTracksRef       = useRef(ytTracks)
+  const scTracksRef       = useRef(scTracks)
   const fallbackTracksRef = useRef(fallbackTracks)
-  useEffect(() => { ytTracksRef.current = ytTracks }, [ytTracks])
+  useEffect(() => { ytTracksRef.current       = ytTracks       }, [ytTracks])
+  useEffect(() => { scTracksRef.current       = scTracks       }, [scTracks])
   useEffect(() => { fallbackTracksRef.current = fallbackTracks }, [fallbackTracks])
 
-  // ─── Playback router ──────────────────────────────────────────────────────────
+  // ─── Playback router ─────────────────────────────────────────────────────────
 
-  const { play, pause, stop, state: playbackState } = usePlaybackRouter('auto', {
+  const { play, pause, stop, resume, state: playbackState } = usePlaybackRouter({
     onSkip: useCallback((trackId: string) => {
       const skipped =
         filteredTracksRef.current.find(t => t.id === trackId) ??
         ytTracksRef.current.find(t => t.id === trackId) ??
+        scTracksRef.current.find(t => t.id === trackId) ??
         fallbackTracksRef.current.find(t => t.id === trackId)
-      if (skipped) {
-        handleSignalRef.current({ type: 'skip', track: skipped, weight: 1.0 })
-      }
+      if (skipped) handleSignalRef.current({ type: 'skip', track: skipped, weight: 1.0 })
     }, []),
   })
 
-  // ─── Autoplay ─────────────────────────────────────────────────────────────────
+  // ─── Autoplay ────────────────────────────────────────────────────────────────
 
   const { nextTrack, prefetchNext, playNext } = useAutoplay(kernel, play)
 
-  // Prefetch next track whenever a new track starts playing
   useEffect(() => {
     if (playbackState.trackId) prefetchNext()
   }, [playbackState.trackId]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Wire YouTube onEnded → playNext
   useEffect(() => {
     onYtEndedRef.current = playNext
   }, [playNext, onYtEndedRef])
 
-  // ─── Playback internals ───────────────────────────────────────────────────────
+  // ─── Agent context entropy ───────────────────────────────────────────────────
 
-  const recentlyPlayedIdsRef = useRef<Set<string>>(new Set())
-
-  const handleNext = useCallback(() => {
-    const raw = filteredTracksRef.current
-    if (!raw.length) return
-    if (playingIdRef.current) {
-      recentlyPlayedIdsRef.current.add(playingIdRef.current)
-      if (recentlyPlayedIdsRef.current.size > RECENTLY_PLAYED_MAX) {
-        const oldest = recentlyPlayedIdsRef.current.values().next().value
-        recentlyPlayedIdsRef.current.delete(oldest!)
-      }
-    }
-    const ranked = rankWithContext(raw, agentContext.context)
-    const next =
-      ranked.find(t => t.id !== playingIdRef.current && !recentlyPlayedIdsRef.current.has(t.id)) ??
-      ranked.find(t => t.id !== playingIdRef.current)
-    if (!next) return
-    playingIdRef.current = next.id
-    handleSignal({ type: 'play', track: next, weight: 1.0 })
-    spotifyRef.current?.searchAndPlay(`${next.title} ${next.artist}`)
-  }, [handleSignal, agentContext.context])
-
-  const handleNextRef = useRef(handleNext)
-  useEffect(() => { handleNextRef.current = handleNext }, [handleNext])
-
-  // Spotify onTrackEnd → kernel-driven autoplay
-  useEffect(() => {
-    onTrackEndRef.current = () => {
-      if (autoplayMode !== 'none') playNext()
-    }
-  }, [autoplayMode, playNext, onTrackEndRef])
-
-  const prevContextRef = useRef<AgentContext | null>(null)
   useEffect(() => {
     setEntropy(agentContext.context?.kernelOverrides?.entropy ?? 0.2)
-    if (agentContext.context !== null && prevContextRef.current === null) handleNextRef.current()
-    prevContextRef.current = agentContext.context
-  }, [agentContext.context]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [agentContext.context])
 
-  const handleSkip = useCallback(() => {
-    const currentTrack = filteredTracksRef.current.find(t => t.id === playingIdRef.current)
-    if (currentTrack) handleSignal({ type: 'skip', track: currentTrack, weight: 1.0 })
-    playNext()
-  }, [handleSignal, playNext])
-
-  const handlePrev = useCallback(() => {
-    const list = filteredTracksRef.current
-    const idx = list.findIndex(t => t.id === playingIdRef.current)
-    const prev = list[idx - 1]
-    if (prev) {
-      playingIdRef.current = prev.id
-      spotifyRef.current?.searchAndPlay(`${prev.title} ${prev.artist}`)
-    }
-  }, [])
-
-  useEffect(() => { spotifyRef.current = spotify }, [spotify])
+  // ─── Spotify kernel seeding (no playback) ────────────────────────────────────
 
   useEffect(() => {
     if (!spotify.connected || seededRef.current) return
@@ -384,10 +307,9 @@ function AppContent({
     })
   }, [spotify.connected]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ─── UI callbacks ─────────────────────────────────────────────────────────────
+  // ─── UI callbacks ────────────────────────────────────────────────────────────
 
   const handleTrackClick = useCallback((track: Track, color: string) => {
-    recentlyPlayedIdsRef.current.clear()
     setNowPlaying({ track, color })
   }, [])
 
@@ -430,7 +352,7 @@ function AppContent({
   const nowPlayingOpen = nowPlaying !== null
 
   return (
-    <SpotifyProvider value={{ ...spotify, onNext: handleSkip, onPrev: handlePrev, onSignal: handleSignal }}>
+    <SpotifyProvider value={{ ...spotify }}>
       <PlayerProvider tracks={tracks}>
         <div className="app">
 
@@ -510,6 +432,10 @@ function AppContent({
                 ytLoading={ytLoading}
                 onYtSearch={ytSearch}
                 onYtClear={ytClear}
+                scTracks={scTracks}
+                scLoading={scLoading}
+                onScSearch={scSearch}
+                onScClear={scClear}
                 playbackState={playbackState}
                 onPlay={play}
               />

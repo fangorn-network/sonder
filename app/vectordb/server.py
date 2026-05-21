@@ -33,9 +33,10 @@ def parse_args():
     parser.add_argument("--primary", "-p", metavar="NAME", default=None)
     parser.add_argument(
         "--subgraph-url",
-        default="https://api.studio.thegraph.com/query/1745244/fangorn-data-discovery/version/latest",
+        default="https://gateway.thegraph.com/api/subgraphs/id/2yVbpC7TT1VPq9vLn8a49zCjESNAEjoPg8wZhriQDDcY",
     )
-    parser.add_argument("--ipfs-gateway",      default="https://ipfs.io/ipfs")
+    parser.add_argument("--graph-api-key",      default="",                     help="The Graph gateway API key")
+    parser.add_argument("--ipfs-gateway",       default="https://ipfs.io/ipfs")
     parser.add_argument("--chroma-path",        default="./db/sond3r")
     parser.add_argument("--checkpoint-file",    default="./db/ingest_checkpoint.json")
     parser.add_argument("--collection",         default="fangorn")
@@ -81,8 +82,6 @@ debug_secondary: dict         = {}
 
 # ---------------------------------------------------------------------------
 # CHECKPOINT
-# Persists {schema_name: {cid: blockTimestamp}} so reingest only fetches
-# IPFS for CIDs that are new or have an updated blockTimestamp.
 # ---------------------------------------------------------------------------
 
 def _load_checkpoint() -> dict[str, dict[str, int]]:
@@ -169,9 +168,14 @@ query Updates($schemaId: Bytes!, $first: Int!, $skip: Int!) {
 """
 
 def _query_subgraph(query: str, variables: dict) -> dict:
+    headers = {}
+    if cfg.graph_api_key:
+        headers["Authorization"] = f"Bearer {cfg.graph_api_key}"
+
     resp = requests.post(
         cfg.subgraph_url,
         json={"query": query, "variables": variables},
+        headers=headers,
         timeout=30,
     )
     resp.raise_for_status()
@@ -272,19 +276,14 @@ async def fetch_schema_entries(
     schema_name: str,
     schema_id:   str,
     loop,
-    prior_checkpoint: dict[str, int],   # cid -> blockTimestamp from last run
+    prior_checkpoint: dict[str, int],
 ) -> tuple[list[dict], dict[str, int]]:
-    """
-    Returns (entries, new_checkpoint) where new_checkpoint covers all seen CIDs
-    for this schema (both cached and freshly fetched).
-    """
     publishes, updates = await loop.run_in_executor(None, _fetch_all_events, schema_id)
     print(f"  [{schema_name}] subgraph: {len(publishes)} publishes, {len(updates)} updates")
 
     seen_cids = _build_seen_cids(publishes, updates)
     print(f"  [{schema_name}] unique manifest CIDs: {len(seen_cids)}")
 
-    # Diff: only fetch CIDs that are new or have a later blockTimestamp
     new_cids  = [
         cid for cid, meta in seen_cids.items()
         if prior_checkpoint.get(cid, -1) < meta["blockTimestamp"]
@@ -298,15 +297,12 @@ async def fetch_schema_entries(
     if new_cids:
         print(f"  [{schema_name}] IPFS: {ok} fetched, {bad} failed")
 
-    # Build new checkpoint: carry forward cached CIDs, update with fresh ones
     new_checkpoint: dict[str, int] = dict(prior_checkpoint)
     for cid, meta in seen_cids.items():
         if cid in fresh_manifests and fresh_manifests[cid] is not None:
             new_checkpoint[cid] = meta["blockTimestamp"]
         elif cid not in fresh_manifests:
-            # Unchanged — keep prior timestamp
             new_checkpoint[cid] = meta["blockTimestamp"]
-        # Failed fetches: don't update checkpoint so they retry next time
 
     all_entries = []
     for cid, manifest_json in fresh_manifests.items():
@@ -439,7 +435,6 @@ async def ingest():
     print(f"Ingesting {len(schemas)} schema(s): {list(schemas.keys())}")
     print(f"{'='*60}")
 
-    # Fetch all schemas in parallel, each with its own prior checkpoint slice
     results = await asyncio.gather(*[
         fetch_schema_entries(
             name,
@@ -450,8 +445,8 @@ async def ingest():
         for name, schema_id in schemas.items()
     ])
 
-    entries_by_schema:     dict[str, list[dict]]      = {}
-    new_checkpoints_by_schema: dict[str, dict[str, int]] = {}
+    entries_by_schema:         dict[str, list[dict]]      = {}
+    new_checkpoints_by_schema: dict[str, dict[str, int]]  = {}
     for (name, _), (entries, new_ckpt) in zip(schemas.items(), results):
         entries_by_schema[name]         = entries
         new_checkpoints_by_schema[name] = new_ckpt
@@ -460,13 +455,11 @@ async def ingest():
 
     if not joined:
         print("  No new records to upsert.")
-        # Still save checkpoint so we don't refetch unchanged CIDs next time
         for name, ckpt in new_checkpoints_by_schema.items():
             checkpoint[name] = ckpt
         _save_checkpoint(checkpoint)
         return
 
-    # Diff against ChromaDB: skip records whose document hasn't changed
     ids_to_check = [r["id"] for r in joined]
     loop = asyncio.get_event_loop()
 
@@ -502,7 +495,6 @@ async def ingest():
             )
             print(f"  upserted {e}/{len(ids)}")
 
-    # Persist updated checkpoint
     for name, ckpt in new_checkpoints_by_schema.items():
         checkpoint[name] = ckpt
     _save_checkpoint(checkpoint)
@@ -671,7 +663,6 @@ async def reingest():
 
 @app.post("/reingest/full")
 async def reingest_full():
-    """Clear checkpoint and re-fetch everything from scratch."""
     _clear_checkpoint()
     asyncio.create_task(ingest())
     return {"status": "accepted", "note": "checkpoint cleared — full reingest in progress"}

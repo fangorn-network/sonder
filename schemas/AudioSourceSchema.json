@@ -1,0 +1,11 @@
+{
+    "trackId": {
+        "@type": "string"
+    },
+    "platform": {
+        "@type": "string"
+    },
+    "platformId": {
+        "@type": "string"
+    }
+}

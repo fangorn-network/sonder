@@ -17,7 +17,6 @@ export default function Footer() {
           <a href={DISCORD_URL} className="footer-btn-ghost" target="_blank" rel="noopener noreferrer">Discord</a>
           <a href="#support" className="footer-btn-ghost">Support us</a>
         </div>
-        <p className="footer-note">Requires Spotify Premium.</p>
       </div>
 
       <div className="footer-bottom">

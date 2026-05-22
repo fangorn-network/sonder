@@ -239,6 +239,7 @@
 
 @media (max-width: 768px) {
   .support-layout {
+    display: block;
     grid-template-columns: 1fr;
     gap: 3rem;
   }

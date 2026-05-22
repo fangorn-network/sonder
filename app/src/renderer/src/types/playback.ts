@@ -1,9 +1,10 @@
-export type SourceId = 'spotify' | 'youtube'
+// TODO: should this be yt-dlp instead?
+export type SourceId = 'youtube' 
 // can extenbd in the future: 'soundcloud' | 'podcast' | 'url' | ...
 
 export interface PlaybackSource {
   id: SourceId
-  // spotify:track:xxx | youtube video id | url | ...
+  // soundcloud track id | youtube video id | url | ...
   address: string
 }
 

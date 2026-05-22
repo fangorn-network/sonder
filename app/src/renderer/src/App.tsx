@@ -12,10 +12,7 @@ import { useFangornAgent } from './hooks/useFangornAgent'
 import { agentResultToTracks } from './utils/agentToTrack'
 import { useChroma } from './hooks/useChroma'
 import { StartupView } from './views/StartupView'
-import { useSpotify } from './hooks/useSpotify'
-import { SpotifyProvider } from './providers/SpotifyProvider'
 import { useSessionKernel } from './hooks/useSessionKernel'
-import { useSpotifyConfig } from './hooks/useSpotifyConfig'
 import { ConnectorsView } from './views/ConnectorsView'
 import type { TasteSignal } from './types'
 import { ConnectWallet } from './components/ConnectWallet'
@@ -29,6 +26,7 @@ import { useSoundCloudSearch } from './hooks/useSoundcloudSearch'
 import { YouTubeProvider } from './hooks/useYoutubeContext'
 import { usePlaybackRouter } from './hooks/usePlaybackRouter'
 import { useAutoplay } from './hooks/useAutoplay'
+import { useMediaSearch } from './hooks/useMediaSearch'
 
 const SNAPSHOT_HISTORY_DEPTH = 5
 const SCROLL_THRESHOLD = 10
@@ -42,15 +40,10 @@ window.addEventListener('scroll', () => {
 // ─── Root ──────────────────────────────────────────────────────────────────────
 
 export default function App() {
-  const { hasConfig, saveConfig } = useSpotifyConfig()
   const [booted, setBooted] = useState(() => localStorage.getItem('booted') === 'true')
   const { ready, authenticated, login } = usePrivy()
 
   const handleBooted = useCallback(() => { setBooted(true) }, [])
-  const handleSpotifyConfigSaved = useCallback((cfg: { clientId: string; clientSecret: string }) => {
-    saveConfig(cfg)
-    setBooted(true)
-  }, [saveConfig])
 
   if (!booted) {
     return (
@@ -68,67 +61,28 @@ export default function App() {
   if (!ready) return <BootSplash />
 
   return (
-    <SpotifyProviderShell
-      onSpotifyConfigSaved={handleSpotifyConfigSaved}
-      hasConfig={hasConfig}
-    />
+    <YouTubeProvider onEnded={() => onYtEndedRef.current()}>
+      <Main />
+    </YouTubeProvider>
   )
 }
 
-// ─── SpotifyProviderShell ─────────────────────────────────────────────────────
-// Spotify is kept only for kernel seeding (top tracks).
-// All playback goes through yt-dlp.
+// ─── onYtEndedRef lives outside React so YouTubeProvider and Main can share it
+const onYtEndedRef = { current: () => { } }
 
-function SpotifyProviderShell({
-  onSpotifyConfigSaved,
-  hasConfig,
-}: {
-  onSpotifyConfigSaved: (cfg: { clientId: string; clientSecret: string }) => void
-  hasConfig: boolean
-}) {
-  const onYtEndedRef = useRef<() => void>(() => {})
-  const spotify      = useSpotify({ onTrackEnd: () => {} }) // no Spotify playback callbacks needed
+// ─── Main ─────────────────────────────────────────────────────────────────────
 
-  return (
-    <SpotifyProvider value={{ ...spotify }}>
-      <YouTubeProvider onEnded={() => onYtEndedRef.current()}>
-        <AppContent
-          spotify={spotify}
-          onYtEndedRef={onYtEndedRef}
-          onSpotifyConfigSaved={onSpotifyConfigSaved}
-          hasConfig={hasConfig}
-        />
-      </YouTubeProvider>
-    </SpotifyProvider>
-  )
-}
-
-// ─── AppContent ───────────────────────────────────────────────────────────────
-
-function AppContent({
-  spotify,
-  onYtEndedRef,
-  onSpotifyConfigSaved,
-  hasConfig,
-}: {
-  spotify:              ReturnType<typeof useSpotify>
-  onYtEndedRef:         React.MutableRefObject<() => void>
-  onSpotifyConfigSaved: (cfg: { clientId: string; clientSecret: string }) => void
-  hasConfig:            boolean
-}) {
+function Main() {
   const [sessionHistory, setSessionHistory] = useState<SessionEvent[]>([])
-  const [entropy, setEntropy]               = useState(0.2)
+  const [entropy, setEntropy] = useState(0.2)
   const kernel = useSessionKernel({ entropy })
 
   const [showConnectors, setShowConnectors] = useState(false)
-  const [nudgeDismissed, setNudgeDismissed] = useState(
-    () => localStorage.getItem('sond3r:nudge:spotify') === '1'
-  )
-  const [view, setView]           = useState<ViewName>('Discover')
+  const [view, setView] = useState<ViewName>('Discover')
   const [nowPlaying, setNowPlaying] = useState<null | 'player' | { track: Track; color: string }>(null)
 
-  const [genreFilter, setGenreFilter]     = useState('all')
-  const [moodFilter, setMoodFilter]       = useState('all')
+  const [genreFilter, setGenreFilter] = useState('all')
+  const [moodFilter, setMoodFilter] = useState('all')
   const [contextFilter, setContextFilter] = useState('all')
 
   const {
@@ -138,8 +92,11 @@ function AppContent({
     chromaReady, seeding, retryConnect,
   } = useChroma({ genreFilter, moodFilter, contextFilter })
 
-  const { ytTracks, ytLoading, search: ytSearch, clear: ytClear } = useYouTubeSearch()
-  const { scTracks, scLoading, search: scSearch, clear: scClear } = useSoundCloudSearch()
+  // const { ytTracks, ytLoading, search: ytSearch, clear: ytClear } = useYouTubeSearch()
+  // const { scTracks, scLoading, search: scSearch, clear: scClear } = useSoundCloudSearch()
+
+  const { tracks: ytTracks, loading: ytLoading, search: ytSearch, clear: ytClear } = useMediaSearch();
+
 
   // ─── Agent context ──────────────────────────────────────────────────────────
 
@@ -153,7 +110,7 @@ function AppContent({
 
   // ─── MusicBrainz fallback ───────────────────────────────────────────────────
 
-  const [fallbackTracks, setFallbackTracks]   = useState<Track[]>([])
+  const [fallbackTracks, setFallbackTracks] = useState<Track[]>([])
   const [fallbackLoading, setFallbackLoading] = useState(false)
 
   const handleSetSearch = useCallback((q: string) => {
@@ -185,7 +142,7 @@ function AppContent({
         const yearInt = parseInt((rec.releases?.[0]?.date ?? '').split('-')[0], 10)
         return {
           id: rec.id, trackId: rec.id, owner: '', manifestCid: '',
-          title: rec.title, artist, spotifyTrackId: null,
+          title: rec.title, artist,
           year: isNaN(yearInt) ? null : yearInt,
           durationMs: rec.length ?? null,
         }
@@ -201,13 +158,12 @@ function AppContent({
   // ─── Recommendations ────────────────────────────────────────────────────────
 
   const [recommendedTracks, setRecommendedTracks] = useState<RecommendedTracks | null>(null)
-  const [recommendLoading, setRecommendLoading]   = useState(false)
+  const [recommendLoading, setRecommendLoading] = useState(false)
 
   const filteredTracksRef = useRef<Track[]>([])
-  const playingIdRef      = useRef<string | null>(null)
-  const seededRef         = useRef(false)
-  const recentPlaysRef    = useRef<string[]>([])
-  const recentSkipsRef    = useRef<string[]>([])
+  const playingIdRef = useRef<string | null>(null)
+  const recentPlaysRef = useRef<string[]>([])
+  const recentSkipsRef = useRef<string[]>([])
 
   const pushPlay = useCallback((label: string) => {
     recentPlaysRef.current = [label, ...recentPlaysRef.current].slice(0, SNAPSHOT_HISTORY_DEPTH)
@@ -236,10 +192,11 @@ function AppContent({
         ? new Float32Array((track as any).embedding)
         : await kernel.embedText(label)
       const meta = {
-        trackId: track.id, artistId: track.artist,
-        genres:   (track as any).genres   ?? [],
-        moods:    (track as any).moods    ?? [],
-        themes:   (track as any).themes   ?? [],
+        trackId: track.id,
+        artistId: track.artist,
+        genres: (track as any).genres ?? [],
+        moods: (track as any).moods ?? [],
+        themes: (track as any).themes ?? [],
         contexts: (track as any).contexts ?? [],
         durationMs: track.durationMs ?? 0,
       }
@@ -259,21 +216,21 @@ function AppContent({
   const handleSignalRef = useRef(handleSignal)
   handleSignalRef.current = handleSignal
 
-  const ytTracksRef       = useRef(ytTracks)
-  const scTracksRef       = useRef(scTracks)
+  const ytTracksRef = useRef(ytTracks)
+  // const scTracksRef = useRef(scTracks)
   const fallbackTracksRef = useRef(fallbackTracks)
-  useEffect(() => { ytTracksRef.current       = ytTracks       }, [ytTracks])
-  useEffect(() => { scTracksRef.current       = scTracks       }, [scTracks])
+  useEffect(() => { ytTracksRef.current = ytTracks }, [ytTracks])
+  // useEffect(() => { scTracksRef.current = scTracks }, [scTracks])
   useEffect(() => { fallbackTracksRef.current = fallbackTracks }, [fallbackTracks])
 
   // ─── Playback router ─────────────────────────────────────────────────────────
 
-  const { play, pause, stop, resume, state: playbackState } = usePlaybackRouter({
+  const { play, state: playbackState } = usePlaybackRouter({
     onSkip: useCallback((trackId: string) => {
       const skipped =
         filteredTracksRef.current.find(t => t.id === trackId) ??
         ytTracksRef.current.find(t => t.id === trackId) ??
-        scTracksRef.current.find(t => t.id === trackId) ??
+        // scTracksRef.current.find(t => t.id === trackId) ??
         fallbackTracksRef.current.find(t => t.id === trackId)
       if (skipped) handleSignalRef.current({ type: 'skip', track: skipped, weight: 1.0 })
     }, []),
@@ -289,7 +246,7 @@ function AppContent({
 
   useEffect(() => {
     onYtEndedRef.current = playNext
-  }, [playNext, onYtEndedRef])
+  }, [playNext])
 
   // ─── Agent context entropy ───────────────────────────────────────────────────
 
@@ -297,25 +254,10 @@ function AppContent({
     setEntropy(agentContext.context?.kernelOverrides?.entropy ?? 0.2)
   }, [agentContext.context])
 
-  // ─── Spotify kernel seeding (no playback) ────────────────────────────────────
-
-  useEffect(() => {
-    if (!spotify.connected || seededRef.current) return
-    seededRef.current = true
-    kernel.seedFromSpotify(spotify.spotifyFetch).then(q => {
-      if (q) applyKernelQuery(Array.from(q), true)
-    })
-  }, [spotify.connected]) // eslint-disable-line react-hooks/exhaustive-deps
-
   // ─── UI callbacks ────────────────────────────────────────────────────────────
 
   const handleTrackClick = useCallback((track: Track, color: string) => {
     setNowPlaying({ track, color })
-  }, [])
-
-  const dismissNudge = useCallback(() => {
-    localStorage.setItem('sond3r:nudge:spotify', '1')
-    setNudgeDismissed(true)
   }, [])
 
   const handleFindSimilar = useCallback(async (query?: string) => {
@@ -352,132 +294,124 @@ function AppContent({
   const nowPlayingOpen = nowPlaying !== null
 
   return (
-    <SpotifyProvider value={{ ...spotify }}>
-      <PlayerProvider tracks={tracks}>
-        <div className="app">
+    <PlayerProvider tracks={tracks}>
+      <div className="app">
 
-          <header className="header">
-            <div className="header-brand">
-              <span className="brand-name">SOND3R</span>
-              <nav style={{ display: 'flex', gap: '16px', marginLeft: '24px' }}>
-                {(['Discover', 'Agent'] as ViewName[]).map(v => (
-                  <button
-                    key={v}
-                    onClick={() => { setView(v); setShowConnectors(false) }}
-                    className={`app-nav-tab ${view === v && !showConnectors ? 'active' : ''}`}
-                  >{v}</button>
-                ))}
+        <header className="header">
+          <div className="header-brand">
+            <span className="brand-name">SOND3R</span>
+            <nav style={{ display: 'flex', gap: '16px', marginLeft: '24px' }}>
+              {(['Discover', 'Agent'] as ViewName[]).map(v => (
                 <button
-                  onClick={() => setShowConnectors(true)}
-                  className={`app-nav-tab ${showConnectors ? 'active' : ''}`}
-                >Connectors</button>
-              </nav>
-              <ConnectWallet />
-            </div>
-          </header>
+                  key={v}
+                  onClick={() => { setView(v); setShowConnectors(false) }}
+                  className={`app-nav-tab ${view === v && !showConnectors ? 'active' : ''}`}
+                >{v}</button>
+              ))}
+              <button
+                onClick={() => setShowConnectors(true)}
+                className={`app-nav-tab ${showConnectors ? 'active' : ''}`}
+              >Connectors</button>
+            </nav>
+            <ConnectWallet />
+          </div>
+        </header>
 
-          <KernelDebugHUD state={kernel.state} history={sessionHistory} />
+        <KernelDebugHUD state={kernel.state} history={sessionHistory} />
 
-          <main className="main">
-            {showConnectors && (
-              <ConnectorsView onSpotifyConfigSaved={onSpotifyConfigSaved} />
-            )}
-            {!showConnectors && view === 'Discover' && (
-              <BrowseView
-                tracks={tracks}
-                loading={loading}
-                loadingMore={loadingMore}
-                error={error}
-                hasMore={hasMore}
-                loadMore={loadMore}
-                search={search}
-                setSearch={handleSetSearch}
-                chromaReady={chromaReady}
-                seeding={seeding}
-                retryConnect={retryConnect}
-                recommendedTracks={recommendedTracks}
-                recommendLoading={recommendLoading}
-                onClearRecommendations={clearRecommendations}
-                onCallAgent={handleFindSimilar}
-                onFilteredChange={f => { filteredTracksRef.current = f }}
-                onPlayingIdChange={id => { playingIdRef.current = id }}
-                onSignal={handleSignal}
-                onTrackClick={handleTrackClick}
-                genreFilter={genreFilter}
-                moodFilter={moodFilter}
-                contextFilter={contextFilter}
-                onGenreFilter={setGenreFilter}
-                onMoodFilter={setMoodFilter}
-                onContextFilter={setContextFilter}
-                allGenres={allGenres}
-                allMoods={allMoods}
-                allContexts={allContexts}
-                showSpotifyNudge={!hasConfig && !nudgeDismissed}
-                onSpotifyNudgeConnect={() => setShowConnectors(true)}
-                onSpotifyNudgeDismiss={dismissNudge}
-                fallbackTracks={fallbackTracks}
-                fallbackLoading={fallbackLoading}
-                onFallbackSearch={handleMusicBrainzSearch}
-                onFallbackClear={handleFallbackClear}
-                contextBar={
-                  <ContextBar
-                    context={agentContext.context}
-                    loading={agentContext.loading}
-                    error={agentContext.error}
-                    onActivate={agentContext.activate}
-                    onClear={agentContext.clear}
-                  />
-                }
-                ytTracks={ytTracks}
-                ytLoading={ytLoading}
-                onYtSearch={ytSearch}
-                onYtClear={ytClear}
-                scTracks={scTracks}
-                scLoading={scLoading}
-                onScSearch={scSearch}
-                onScClear={scClear}
-                playbackState={playbackState}
-                onPlay={play}
-              />
-            )}
-            {!showConnectors && view === 'Agent' && <AgentView />}
-          </main>
-
-          <PlayerBar
-            onExpand={() => setNowPlaying('player')}
-            hidden={nowPlayingOpen}
-            playbackState={playbackState}
-            nextTrack={nextTrack}
-            onPlayNext={playNext}
-          />
-
-          {nowPlayingOpen && createPortal(
-            <NowPlaying
+        <main className="main">
+          {showConnectors && <ConnectorsView />}
+          {!showConnectors && view === 'Discover' && (
+            <BrowseView
+              tracks={tracks}
+              loading={loading}
+              loadingMore={loadingMore}
+              error={error}
+              hasMore={hasMore}
+              loadMore={loadMore}
+              search={search}
+              setSearch={handleSetSearch}
+              chromaReady={chromaReady}
+              seeding={seeding}
+              retryConnect={retryConnect}
+              recommendedTracks={recommendedTracks}
+              recommendLoading={recommendLoading}
+              onClearRecommendations={clearRecommendations}
+              onCallAgent={handleFindSimilar}
+              onFilteredChange={f => { filteredTracksRef.current = f }}
+              onPlayingIdChange={id => { playingIdRef.current = id }}
+              onSignal={handleSignal}
+              onTrackClick={handleTrackClick}
+              genreFilter={genreFilter}
+              moodFilter={moodFilter}
+              contextFilter={contextFilter}
+              onGenreFilter={setGenreFilter}
+              onMoodFilter={setMoodFilter}
+              onContextFilter={setContextFilter}
+              allGenres={allGenres}
+              allMoods={allMoods}
+              allContexts={allContexts}
+              fallbackTracks={fallbackTracks}
+              fallbackLoading={fallbackLoading}
+              onFallbackSearch={handleMusicBrainzSearch}
+              onFallbackClear={handleFallbackClear}
+              contextBar={
+                <ContextBar
+                  context={agentContext.context}
+                  loading={agentContext.loading}
+                  error={agentContext.error}
+                  onActivate={agentContext.activate}
+                  onClear={agentContext.clear}
+                />
+              }
+              ytTracks={ytTracks}
+              ytLoading={ytLoading}
+              onYtSearch={ytSearch}
+              onYtClear={ytClear}
+              // scTracks={scTracks}
+              // scLoading={scLoading}
+              // onScSearch={scSearch}
+              // onScClear={scClear}
               playbackState={playbackState}
               onPlay={play}
-              onCollapse={() => setNowPlaying(null)}
-              lastPollTime={spotify.lastPollTime}
-              track={nowPlaying !== 'player' ? nowPlaying.track : undefined}
-              trackColor={nowPlaying !== 'player' ? nowPlaying.color : undefined}
-              onFilter={(type, value) => { handleFilter(type, value); setNowPlaying(null) }}
-              onCallAgent={handleFindSimilar}
-              onTrackSelect={(track, color) => setNowPlaying({ track, color: color ?? '' })}
-            />,
-            document.body
+            />
           )}
+          {!showConnectors && view === 'Agent' && <AgentView />}
+        </main>
 
-          {showScrollTop && createPortal(
-            <button
-              className="scroll-top-btn"
-              onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-              title="Back to top"
-            >↑</button>,
-            document.body
-          )}
+        <PlayerBar
+          onExpand={() => setNowPlaying('player')}
+          hidden={nowPlayingOpen}
+          playbackState={playbackState}
+          nextTrack={nextTrack}
+          onPlayNext={playNext}
+        />
 
-        </div>
-      </PlayerProvider>
-    </SpotifyProvider>
+        {nowPlayingOpen && createPortal(
+          <NowPlaying
+            playbackState={playbackState}
+            onPlay={play}
+            onCollapse={() => setNowPlaying(null)}
+            track={nowPlaying !== 'player' ? nowPlaying.track : undefined}
+            trackColor={nowPlaying !== 'player' ? nowPlaying.color : undefined}
+            onFilter={(type, value) => { handleFilter(type, value); setNowPlaying(null) }}
+            onCallAgent={handleFindSimilar}
+            onTrackSelect={(track, color) => setNowPlaying({ track, color: color ?? '' })}
+          />,
+          document.body
+        )}
+
+        {showScrollTop && createPortal(
+          <button
+            className="scroll-top-btn"
+            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+            title="Back to top"
+          >↑</button>,
+          document.body
+        )}
+
+      </div>
+    </PlayerProvider>
   )
 }
 

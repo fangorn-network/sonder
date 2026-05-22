@@ -414,19 +414,19 @@ function registerIpcHandlers() {
     try { await resolveYt(query) } catch { /* non-fatal */ }
   })
 
-  ipcMain.handle('yt:search', async (_event, query: string): Promise<any[]> => {
+  ipcMain.handle('yt:search:music', async (_event, query: string): Promise<any[]> => {
     return new Promise((resolve) => {
       const proc = spawn(getYtDlpBin(), [
-        `ytsearch10:${query} official audio -live -concert -cover`,
+        `ytmsearch15:${query}`,
         '--dump-json',
         '--no-playlist',
         '--no-warnings',
         '--flat-playlist',
-        '--extractor-args', 'youtube:player_client=tv_embedded',
       ])
-
+ 
       let out = ''
       proc.stdout.on('data', (d: Buffer) => { out += d.toString() })
+      proc.stderr.on('data', (d: Buffer) => { console.error('[yt:search:music]', d.toString().trim()) })
       proc.on('error', () => resolve([]))
       proc.on('close', (code) => {
         if (code !== 0) { resolve([]); return }
@@ -442,7 +442,7 @@ function registerIpcHandlers() {
   ipcMain.handle('yt:search:sc', async (_event, query: string): Promise<any[]> => {
     return new Promise((resolve) => {
       const proc = spawn(getYtDlpBin(), [
-        `scsearch10:${query}`,
+        `scsearch30:${query}`,
         '--dump-json',
         '--no-playlist',
         '--no-warnings',

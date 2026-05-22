@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import { useSpotifyContext } from '../providers/SpotifyProvider'
 import { useYouTubeContext } from '../hooks/useYoutubeContext'
 import type { Track } from '../types'
 import type { PlaybackState } from '../types/playback'
@@ -26,7 +25,6 @@ interface NetworkTags {
 
 async function fetchTrackFromChroma(
     tagTrackId: string,
-    spotifyTrackId: string | null,
     title: string,
     artist: string,
 ): Promise<{ exists: boolean; tags: NetworkTags | null }> {
@@ -40,7 +38,6 @@ async function fetchTrackFromChroma(
             if (f.trackId === tagTrackId) return true
             const hId = (f.externalId as string) ??
                 (h.id?.startsWith('track:') ? h.id.slice(6) : null)
-            if (spotifyTrackId && hId === spotifyTrackId) return true
             const hTitle  = (f.title ?? f.name ?? '').toLowerCase()
             const hArtist = (f.byArtist ?? f.artist ?? '').toLowerCase()
             return hTitle === title.toLowerCase() && hArtist === artist.toLowerCase()
@@ -91,7 +88,7 @@ async function fetchSimilarTracks(
                 if (excludeId && t.id === excludeId) return false
                 if (t.title.toLowerCase() === excludeTitle.toLowerCase() &&
                     t.artist.toLowerCase() === excludeArtist.toLowerCase()) return false
-                const key = t.spotifyTrackId ?? t.id
+                const key = t.id
                 if (seen.has(key)) return false
                 seen.add(key)
                 return true
@@ -115,7 +112,7 @@ async function fetchArtistTracks(
                 if (t.id === excludeId) return false
                 if (t.title.toLowerCase() === excludeTitle.toLowerCase()) return false
                 if (t.artist.toLowerCase() !== artist.toLowerCase()) return false
-                const key = t.spotifyTrackId ?? t.id
+                const key = t.id
                 if (seen.has(key)) return false
                 seen.add(key)
                 return true
@@ -126,13 +123,8 @@ async function fetchArtistTracks(
 
 function parseHit(h: any): SimilarTrack {
     const f: Record<string, any> = h.fields ?? {}
-    const spotifyTrackId =
-        (f.externalId as string) ??
-        (h.id?.startsWith('track:') ? h.id.slice(6) : null)
     return {
         id:             h.id,
-        spotifyTrackId,
-        // platformId comes from the joined source schema — this is the yt-dlp resolvable source
         youtubeVideoId: (f.platformId as string) ?? undefined,
         title:          (f.title as string) ?? (f.name as string) ?? 'Unknown',
         artist:         (f.byArtist as string) ?? (f.artist as string) ?? '',
@@ -147,7 +139,6 @@ function parseHit(h: any): SimilarTrack {
 
 interface SimilarTrack {
     id:              string
-    spotifyTrackId:  string | null
     youtubeVideoId?: string
     title:           string
     artist:          string
@@ -161,7 +152,7 @@ type RightTab = 'similar' | 'artist'
 
 interface NowPlayingProps {
     onCollapse:     () => void
-    lastPollTime:   number
+    lastPollTime?:  number
     track?:         Track
     trackColor?:    string
     onFilter?:      (type: 'genre' | 'mood' | 'context', value: string) => void
@@ -173,19 +164,12 @@ interface NowPlayingProps {
 
 export function NowPlaying({
     onCollapse,
-    lastPollTime,
     track: propTrack,
     trackColor,
-    onFilter,
     onTrackSelect,
     onPlay,
     playbackState,
 }: NowPlayingProps) {
-    const {
-        currentTrack, isPlaying, connecting, error,
-        togglePlay, seek, next, prev, onNext, onPrev, onSignal,
-    } = useSpotifyContext()
-
     const {
         currentTitle:  ytTitle,
         currentArtist: ytArtist,
@@ -199,36 +183,21 @@ export function NowPlaying({
     } = useYouTubeContext()
 
     const { fangorn, address } = useFangorn()
-    const isYT = playbackState?.activeSource === 'youtube'
 
-    // focusTrack — preserve youtubeVideoId from propTrack so router can use it
+    // focusTrack — propTrack preserves youtubeVideoId for the router
     const focusTrack: Track | null = propTrack ?? (
-        isYT && ytTitle
-            ? {
-                id: '', trackId: '', owner: '', manifestCid: '',
-                title: ytTitle, artist: ytArtist ?? '',
-                year: null, durationMs: ytDurationMs || null, spotifyTrackId: null,
-            } satisfies Track
-            : currentTrack
-                ? {
-                    id: '', trackId: '', owner: '', manifestCid: '',
-                    title: currentTrack.name, artist: currentTrack.artist,
-                    year: null, durationMs: currentTrack.durationMs ?? null,
-                    spotifyTrackId: currentTrack.spotifyTrackId ?? null,
-                } satisfies Track
-                : null
+        ytTitle ? {
+            id: '', trackId: '', owner: '', manifestCid: '',
+            title: ytTitle, artist: ytArtist ?? '',
+            year: null, durationMs: ytDurationMs || null,
+        } satisfies Track : null
     )
 
-    const isThisTrackActive = isYT
-        ? !!ytTitle && ytTitle.toLowerCase() === focusTrack?.title.toLowerCase()
-        : !!(currentTrack && focusTrack &&
-            currentTrack.name.toLowerCase() === focusTrack.title.toLowerCase() &&
-            currentTrack.artist.toLowerCase() === focusTrack.artist.toLowerCase())
+    const isThisTrackActive = !!ytTitle &&
+        ytTitle.toLowerCase() === focusTrack?.title.toLowerCase()
 
     const [liveProgressMs, setLiveProgressMs] = useState(0)
-    const [albumArt, setAlbumArt]             = useState<string | null>(
-        !propTrack ? (currentTrack?.albumArt ?? null) : null
-    )
+    const [albumArt, setAlbumArt]             = useState<string | null>(null)
     const [activeTab, setActiveTab]           = useState<RightTab>('similar')
     const [similarTracks, setSimilarTracks]   = useState<SimilarTrack[]>([])
     const [artistTracks, setArtistTracks]     = useState<SimilarTrack[]>([])
@@ -236,16 +205,12 @@ export function NowPlaying({
     const [artistLoading, setArtistLoading]   = useState(false)
     const [playLoading, setPlayLoading]       = useState(false)
     const [playingId, setPlayingId]           = useState<string | null>(null)
-
-    const rafRef          = useRef<number | null>(null)
-    const currentTrackRef = useRef(currentTrack)
-
-    const [existsInIndex, setExistsInIndex] = useState<boolean | null>(null)
-    const [showPublish, setShowPublish]     = useState(false)
-    const [tagTrackId, setTagTrackId]       = useState<string | null>(null)
-    const [networkTags, setNetworkTags]     = useState<NetworkTags | null>(null)
-    const [showTagModal, setShowTagModal]   = useState(false)
-    const [modalTrackId, setModalTrackId]   = useState<string | null>(null)
+    const [existsInIndex, setExistsInIndex]   = useState<boolean | null>(null)
+    const [showPublish, setShowPublish]       = useState(false)
+    const [tagTrackId, setTagTrackId]         = useState<string | null>(null)
+    const [networkTags, setNetworkTags]       = useState<NetworkTags | null>(null)
+    const [showTagModal, setShowTagModal]     = useState(false)
+    const [modalTrackId, setModalTrackId]     = useState<string | null>(null)
 
     const openTagModal = () => {
         if (!tagTrackId) return
@@ -263,21 +228,19 @@ export function NowPlaying({
             setExistsInIndex(null); setNetworkTags(null); return
         }
         setExistsInIndex(null); setNetworkTags(null)
-        fetchTrackFromChroma(tagTrackId, focusTrack.spotifyTrackId ?? null, focusTrack.title, focusTrack.artist)
+        fetchTrackFromChroma(tagTrackId, focusTrack.title, focusTrack.artist)
             .then(({ exists, tags }) => { setExistsInIndex(exists); setNetworkTags(tags) })
-    }, [tagTrackId, focusTrack?.spotifyTrackId, focusTrack?.title, focusTrack?.artist])
+    }, [tagTrackId, focusTrack?.title, focusTrack?.artist])
 
     const allTags = networkTags
         ? [...networkTags.genres, ...networkTags.moods, ...networkTags.contexts, ...networkTags.themes]
         : []
     const tagged = allTags.length > 0
 
-    useEffect(() => { currentTrackRef.current = currentTrack }, [currentTrack])
-
+    // Album art — YT thumb first, then iTunes
     useEffect(() => {
-        if (isYT && ytThumb) { setAlbumArt(ytThumb); return }
-        if (!propTrack && currentTrack?.albumArt) setAlbumArt(currentTrack.albumArt)
-    }, [currentTrack?.albumArt, propTrack, isYT, ytThumb])
+        if (ytThumb) { setAlbumArt(ytThumb); return }
+    }, [ytThumb])
 
     useEffect(() => {
         if (!focusTrack) return
@@ -290,24 +253,15 @@ export function NowPlaying({
                 if (url) setAlbumArt(url.replace('100x100bb', '600x600bb'))
             } catch { }
         }
-        go()
-    }, [focusTrack?.title, focusTrack?.artist])
+        if (!ytThumb) go()
+    }, [focusTrack?.title, focusTrack?.artist, ytThumb])
 
+    // Progress
     useEffect(() => {
-        if (isYT) { setLiveProgressMs(ytProgressMs); return }
-        if (rafRef.current) cancelAnimationFrame(rafRef.current)
-        if (!currentTrack) return
-        const base = currentTrack.progressMs
-        const pollTime = lastPollTime ?? Date.now()
-        const tick = () => {
-            const elapsed = isPlaying ? Date.now() - pollTime : 0
-            setLiveProgressMs(Math.min(base + elapsed, currentTrack.durationMs))
-            if (isPlaying) rafRef.current = requestAnimationFrame(tick)
-        }
-        rafRef.current = requestAnimationFrame(tick)
-        return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current) }
-    }, [currentTrack?.progressMs, currentTrack?.durationMs, isPlaying, lastPollTime, isYT, ytProgressMs])
+        setLiveProgressMs(ytProgressMs)
+    }, [ytProgressMs])
 
+    // Similar tracks
     useEffect(() => {
         if (!focusTrack) return
         setSimilarLoading(true)
@@ -322,6 +276,7 @@ export function NowPlaying({
         })().finally(() => setSimilarLoading(false))
     }, [focusTrack?.id, focusTrack?.title])
 
+    // Artist tracks
     useEffect(() => {
         if (!focusTrack?.artist) return
         setArtistLoading(true)
@@ -331,6 +286,7 @@ export function NowPlaying({
             .finally(() => setArtistLoading(false))
     }, [focusTrack?.artist, focusTrack?.id])
 
+    // Keyboard + scroll lock
     useEffect(() => {
         const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !showTagModal) onCollapse() }
         window.addEventListener('keydown', onKey)
@@ -340,49 +296,28 @@ export function NowPlaying({
 
     if (!focusTrack) return null
 
-    const durationMs  = isYT ? ytDurationMs : (currentTrack?.durationMs ?? 0)
+    const durationMs  = ytDurationMs
     const progress    = durationMs > 0 ? liveProgressMs / durationMs : 0
     const accentColor = trackColor ?? 'var(--accent)'
-    const showPause   = isThisTrackActive && (isYT ? ytIsPlaying : isPlaying)
+    const showPause   = isThisTrackActive && ytIsPlaying
 
     function scrubTo(e: React.MouseEvent<HTMLDivElement>) {
         const rect  = e.currentTarget.getBoundingClientRect()
         const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
-        if (isYT) ytSeek(ratio * ytDurationMs)
-        else seek(ratio * durationMs)
+        ytSeek(ratio * durationMs)
     }
 
     const handlePlayPause = async () => {
-        // If already playing via YT — just toggle
-        if (isYT && isThisTrackActive) {
+        if (isThisTrackActive) {
             ytIsPlaying ? ytPause() : ytResume()
             return
         }
-
-        // Route through the playback router (propTrack preserves youtubeVideoId)
         if (onPlay && focusTrack) {
             setPlayLoading(true)
             try { await onPlay(focusTrack) }
             finally { setPlayLoading(false) }
-            return
         }
-
-        // Fallback — toggle if active
-        if (isThisTrackActive) { await togglePlay() }
     }
-
-    const handleNext = () => {
-        if (!isYT && currentTrackRef.current && onSignal) {
-            const t = currentTrackRef.current
-            onSignal({
-                type: 'skip', weight: -1.0,
-                track: { id: '', trackId: '', owner: '', manifestCid: '', title: t.name, artist: t.artist, year: null, durationMs: null, spotifyTrackId: null },
-            })
-        }
-        ;(onNext ?? next)?.()
-    }
-
-    const handlePrev = () => { ;(onPrev ?? prev)?.() }
 
     const handlePlayRow = async (t: SimilarTrack) => {
         setPlayingId(t.id)
@@ -395,8 +330,6 @@ export function NowPlaying({
             artist:         t.artist,
             year:           t.year,
             durationMs:     null,
-            spotifyTrackId: t.spotifyTrackId,
-            // Pass through the platformId so the router can play directly
             youtubeVideoId: t.youtubeVideoId,
         }
         onTrackSelect?.(asTrack)
@@ -462,14 +395,10 @@ export function NowPlaying({
                         <div className="np-scrubber-wrap">
                             <div className="np-progress" onClick={scrubTo}>
                                 <div className="np-progress-track">
-                                    {isYT ? (
-                                        <div style={{ height: '100%', width: `${progress * 100}%`, background: 'rgba(248,113,113,0.7)', borderRadius: 2 }} />
-                                    ) : (
-                                        <>
-                                            <div className="np-progress-fill" style={{ width: `${progress * 100}%` }} />
-                                            <div className="np-progress-thumb" style={{ left: `${progress * 100}%` }} />
-                                        </>
-                                    )}
+                                    <div style={{
+                                        height: '100%', width: `${progress * 100}%`,
+                                        background: 'rgba(248,113,113,0.7)', borderRadius: 2,
+                                    }} />
                                 </div>
                             </div>
                             <div className="np-times">
@@ -480,30 +409,26 @@ export function NowPlaying({
                     )}
 
                     <div className="np-controls">
-                        <button className="np-btn np-btn--skip" onClick={handlePrev}
-                            style={{ opacity: isThisTrackActive && !isYT ? 1 : 0.2, pointerEvents: isThisTrackActive && !isYT ? 'auto' : 'none' }}>
+                        <button className="np-btn np-btn--skip" disabled style={{ opacity: 0.2 }}>
                             <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z" /></svg>
                         </button>
                         <button
                             className={`np-btn np-btn--play${showPause ? ' np-btn--playing' : ''}`}
                             onClick={handlePlayPause}
-                            disabled={connecting || playLoading}
-                            style={{ background: isYT ? 'rgba(248,113,113,0.8)' : accentColor } as React.CSSProperties}
+                            disabled={playLoading}
+                            style={{ background: 'rgba(248,113,113,0.8)' } as React.CSSProperties}
                         >
-                            {connecting || playLoading
+                            {playLoading
                                 ? <span className="upload-spinner" style={{ width: 20, height: 20, borderWidth: 2, borderTopColor: 'var(--bg)' }} />
                                 : showPause
                                     ? <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><rect x="5" y="4" width="4" height="16" rx="1" /><rect x="15" y="4" width="4" height="16" rx="1" /></svg>
                                     : <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M8 5.14v14l11-7-11-7z" /></svg>
                             }
                         </button>
-                        <button className="np-btn np-btn--skip" onClick={handleNext}
-                            style={{ opacity: isThisTrackActive && !isYT ? 1 : 0.2, pointerEvents: isThisTrackActive && !isYT ? 'auto' : 'none' }}>
+                        <button className="np-btn np-btn--skip" disabled style={{ opacity: 0.2 }}>
                             <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M16 6h2v12h-2zM6 18l8.5-6L6 6v12z" /></svg>
                         </button>
                     </div>
-
-                    {error && !isYT && <div className="np-error">{error}</div>}
                 </div>
 
                 {/* ══ RIGHT COL ══ */}
@@ -554,20 +479,12 @@ export function NowPlaying({
                             </div>
                         )}
 
-                        {(focusTrack.spotifyTrackId || focusTrack.owner) && (
+                        {focusTrack.owner && (
                             <div className="np-fields">
-                                {focusTrack.spotifyTrackId && (
-                                    <div className="np-field">
-                                        <span className="np-field-key">spotify id</span>
-                                        <span className="np-field-val np-mono">{focusTrack.spotifyTrackId}</span>
-                                    </div>
-                                )}
-                                {focusTrack.owner && (
-                                    <div className="np-field">
-                                        <span className="np-field-key">artist address</span>
-                                        <span className="np-field-val np-mono">{focusTrack.owner.slice(0, 6)}…{focusTrack.owner.slice(-4)}</span>
-                                    </div>
-                                )}
+                                <div className="np-field">
+                                    <span className="np-field-key">artist address</span>
+                                    <span className="np-field-val np-mono">{focusTrack.owner.slice(0, 6)}…{focusTrack.owner.slice(-4)}</span>
+                                </div>
                             </div>
                         )}
 

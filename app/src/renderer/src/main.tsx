@@ -37,7 +37,7 @@ root.render(
           logo: '/fangorn-mark.svg',
           showWalletLoginFirst: false,
         },
-        loginMethods: ['email', 'spotify'],
+        loginMethods: ['email'],
       }}
     >
       <App />

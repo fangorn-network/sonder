@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 import type { RecommendedTracks, TasteSignal, Track } from '../types'
 import './mobile.css'
 import './Browse-Filters.css'
-import { useSpotifyContext } from '../providers/SpotifyProvider'
 import { PublishModal } from '../components/PublishModal'
 import type { Fangorn } from '@fangorn-network/sdk'
 import type { Hex } from 'viem'
@@ -58,9 +57,6 @@ interface BrowseViewProps {
   ambientStatus?: 'idle' | 'fetching' | 'error'
   ambientQueueSize?: number
   ambientLastReason?: string
-  showSpotifyNudge?: boolean
-  onSpotifyNudgeConnect?: () => void
-  onSpotifyNudgeDismiss?: () => void
   fallbackTracks?: Track[]
   fallbackLoading?: boolean
   onFallbackSearch?: (query: string) => void
@@ -113,7 +109,6 @@ export function BrowseView({
   recommendedTracks, recommendLoading, onClearRecommendations, onCallAgent,
   onFilteredChange, onPlayingIdChange, onSignal, onTrackClick,
   ambientStatus, ambientQueueSize, ambientLastReason,
-  showSpotifyNudge, onSpotifyNudgeConnect, onSpotifyNudgeDismiss,
   fallbackTracks, fallbackLoading, onFallbackSearch, onFallbackClear,
   fangorn, publisherAddress, contextBar,
   onYtClear, onYtSearch, ytLoading, ytTracks,
@@ -170,15 +165,12 @@ export function BrowseView({
 
   const showTabs = !!search.trim() && !!onFallbackSearch
 
-  const { connect, connected } = useSpotifyContext()
-
   const handlePlay = async (e: React.MouseEvent, track: Track) => {
     e.stopPropagation()
     setPlayingId(track.id)
     onPlayingIdChange?.(track.id)
     onSignal?.({ type: 'play', track, weight: 1.0 })
     if (onPlay) { await onPlay(track); return }
-    if (!connected) { await connect(); return }
   }
 
   const filtered = tracks
@@ -377,9 +369,9 @@ export function BrowseView({
         <div style={{ display: 'flex', gap: 4, marginBottom: 14, borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
           {([
             { id: 'library' as SearchTab, label: 'Library' },
-            { id: 'mb'      as SearchTab, label: 'MusicBrainz', icon: <MbIcon size={10} /> },
-            { id: 'yt'      as SearchTab, label: 'YouTube',     icon: <YtIcon size={10} /> },
-            { id: 'sc'      as SearchTab, label: 'SoundCloud',  icon: <ScIcon size={10} /> },
+            // { id: 'mb'      as SearchTab, label: 'MusicBrainz', icon: <MbIcon size={10} /> },
+            { id: 'yt'      as SearchTab, label: 'Deep Exploration',     icon: <YtIcon size={10} /> },
+            // { id: 'sc'      as SearchTab, label: 'SoundCloud',  icon: <ScIcon size={10} /> },
           ]).map(({ id, label, icon }) => {
             const active = activeTab === id
             return (
@@ -402,20 +394,6 @@ export function BrowseView({
               </button>
             )
           })}
-        </div>
-      )}
-
-      {showSpotifyNudge && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', marginBottom: 10, borderRadius: 6, background: 'rgba(30,215,96,0.06)', border: '1px solid rgba(30,215,96,0.18)', fontSize: 11, letterSpacing: '0.03em', color: 'var(--fg3, #a3a3a3)' }}>
-          <span style={{ flex: 1 }}>Connect Spotify to personalize your taste profile</span>
-          <button onClick={onSpotifyNudgeConnect} style={{ background: 'rgba(30,215,96,0.12)', border: '1px solid rgba(30,215,96,0.3)', borderRadius: 4, color: '#1DB954', fontFamily: 'var(--font-mono, monospace)', fontSize: 10, letterSpacing: '0.08em', padding: '3px 10px', cursor: 'pointer', flexShrink: 0 }}
-            onMouseEnter={e => (e.currentTarget.style.background = 'rgba(30,215,96,0.22)')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'rgba(30,215,96,0.12)')}
-          >SET UP</button>
-          <button onClick={onSpotifyNudgeDismiss} aria-label="Dismiss" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--fg3, #a3a3a3)', fontSize: 12, padding: '0 2px', lineHeight: 1, opacity: 0.5, flexShrink: 0 }}
-            onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
-            onMouseLeave={e => (e.currentTarget.style.opacity = '0.5')}
-          >✕</button>
         </div>
       )}
 

@@ -3,11 +3,9 @@
  * All operations are pure (no mutation) unless suffixed with `_`.
  * d = 384 (all-MiniLM-L6-v2, L2 space)
  */
-
 export type Vec = Float32Array
 
 export const zeros = (d: number): Vec => new Float32Array(d)
-
 export const clone = (a: Vec): Vec => new Float32Array(a)
 
 export const add = (a: Vec, b: Vec): Vec => {
@@ -62,8 +60,21 @@ export const weightedMean = (vecs: Vec[], weights: number[]): Vec => {
 }
 
 /**
- * Project b onto the subspace orthogonal to a.
- * Used for velocity deflection: removes the component of b pointing toward a.
+ * Unweighted centroid of a set of vectors.
+ * Equivalent to weightedMean with uniform weights.
+ */
+export const centroid = (vecs: Vec[]): Vec => {
+  if (vecs.length === 0) throw new Error('centroid: empty input')
+  const d = vecs[0].length
+  const out = new Float32Array(d)
+  for (const v of vecs) for (let j = 0; j < d; j++) out[j] += v[j]
+  for (let j = 0; j < d; j++) out[j] /= vecs.length
+  return out
+}
+
+/**
+ * Project b onto the subspace orthogonal to a (unconditional).
+ * Removes the full component of b along a, regardless of sign.
  *   b_perp = b - (b · â) â
  */
 export const projectOut = (b: Vec, a: Vec): Vec => {
@@ -71,3 +82,32 @@ export const projectOut = (b: Vec, a: Vec): Vec => {
   const proj = dot(b, ahat)
   return sub(b, scale(ahat, proj))
 }
+
+/**
+ * Sign-aware velocity deflection (Gram-Schmidt, conditional).
+ *
+ * Removes the component of b pointing *toward* a only when that component
+ * exists (b · â > 0).  If b already points away from a (b · â ≤ 0),
+ * b is returned unchanged — removing it would dampen escape-directed velocity.
+ *
+ * Used in onSkip in place of projectOut.
+ */
+export const deflect = (b: Vec, a: Vec): Vec => {
+  const an = norm(a)
+  if (an < 1e-10) return clone(b)
+  const ahat = scale(a, 1 / an)
+  const proj = dot(b, ahat)
+  if (proj <= 0) return clone(b)          // already pointing away — preserve
+  return sub(b, scale(ahat, proj))        // remove toward-skip component only
+}
+
+/**
+ * Convert a plain number[] to a Float32Array Vec.
+ * Used when rehydrating embeddings from JSON or Chroma responses.
+ */
+export const fromArray = (a: number[]): Vec => new Float32Array(a)
+
+/**
+ * Convert a Vec to a plain number[] for JSON serialisation.
+ */
+export const toArray = (a: Vec): number[] => Array.from(a)

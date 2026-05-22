@@ -36,7 +36,7 @@ function normalizeHit(hit: any): Track | null {
 function dedup(tracks: Track[]): Track[] {
   const seen = new Map<string, Track>()
   for (const t of tracks) {
-    const key = t.spotifyTrackId || t.trackId
+    const key = t.trackId
     if (!seen.has(key)) seen.set(key, t)
   }
   return Array.from(seen.values())

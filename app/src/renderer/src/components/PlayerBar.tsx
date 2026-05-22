@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import { useSpotifyContext } from '../providers/SpotifyProvider'
 import { useYouTubeContext } from '../hooks/useYoutubeContext'
 import type { PlaybackState } from '../types/playback'
 import './PlayerBar.css'
@@ -26,94 +25,27 @@ export function PlayerBar({
   onPlayNext,
 }: PlayerBarProps) {
   const {
-    currentTrack, isPlaying, lastPollTime,
-    connecting, error, togglePlay, seek, next, prev, onNext, onPrev, onSignal,
-  } = useSpotifyContext()
-
-  const {
     currentTitle,
     currentArtist,
     currentVideoId,
     currentThumb,
-    isPlaying:  ytIsPlaying,
-    progressMs: ytProgressMs,
-    durationMs: ytDurationMs,
-    pause:      ytPause,
-    resume:     ytResume,
-    seek:       ytSeek,
+    isPlaying,
+    progressMs,
+    durationMs,
+    pause,
+    resume,
+    seek,
   } = useYouTubeContext()
 
-  const isYT = playbackState?.activeSource === 'youtube'
+  const progress = durationMs > 0 ? Math.min(progressMs / durationMs, 1) : 0
 
-  // ── Spotify progress ───────────────────────────────────────────────────────
-  const [liveProgressMs, setLiveProgressMs] = useState(0)
-  const rafRef          = useRef<number | null>(null)
-  const currentTrackRef = useRef(currentTrack)
-  useEffect(() => { currentTrackRef.current = currentTrack }, [currentTrack])
-
-  useEffect(() => {
-    if (isYT) {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current)
-      return
-    }
-    if (rafRef.current) cancelAnimationFrame(rafRef.current)
-    if (!currentTrack) return
-    const base     = currentTrack.progressMs
-    const pollTime = lastPollTime ?? Date.now()
-    const tick = () => {
-      const elapsed = isPlaying ? Date.now() - pollTime : 0
-      setLiveProgressMs(Math.min(base + elapsed, currentTrack.durationMs))
-      if (isPlaying) rafRef.current = requestAnimationFrame(tick)
-    }
-    rafRef.current = requestAnimationFrame(tick)
-    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current) }
-  }, [currentTrack?.progressMs, currentTrack?.durationMs, isPlaying, lastPollTime, isYT])
-
-  // ── Derived display values ─────────────────────────────────────────────────
-  const playing    = isYT ? ytIsPlaying : isPlaying
-  const name       = isYT ? (currentTitle  ?? '—') : (currentTrack?.name   ?? '')
-  const artist     = isYT ? (currentArtist ?? '—') : (currentTrack?.artist ?? '')
-  const albumArt   = isYT ? currentThumb : (currentTrack?.albumArt ?? null)
-  const progressMs = isYT ? ytProgressMs : liveProgressMs
-  const durationMs = isYT ? ytDurationMs : (currentTrack?.durationMs ?? 0)
-  const progress   = durationMs > 0 ? Math.min(progressMs / durationMs, 1) : 0
-
-  if (!isYT && !currentTrack) return null
-  if (isYT && !currentVideoId) return null
-
-  // ── Handlers ───────────────────────────────────────────────────────────────
+  if (!currentVideoId) return null
 
   function scrubTo(e: React.MouseEvent<HTMLDivElement>) {
     const rect  = e.currentTarget.getBoundingClientRect()
     const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
-    if (isYT) ytSeek(ratio * ytDurationMs)
-    else seek(ratio * durationMs)
+    seek(ratio * durationMs)
   }
-
-  const handleTogglePlay = () => {
-    if (isYT) { ytIsPlaying ? ytPause() : ytResume() }
-    else togglePlay()
-  }
-
-  const handleNext = () => {
-    if (isYT) { onPlayNext?.(); return }
-    if (currentTrackRef.current && onSignal) {
-      const t = currentTrackRef.current
-      onSignal({
-        type: 'skip', weight: -1.0,
-        track: {
-          id: '', trackId: '', title: t.name, artist: t.artist, year: null,
-          genres: [], moods: [], contexts: [], themes: [],
-          owner: '', manifestCid: '', durationMs: 0, spotifyTrackId: null,
-        },
-      })
-    }
-    ;(onNext ?? next)?.()
-  }
-
-  const handlePrev = () => { ;(onPrev ?? prev)?.() }
-
-  // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <div className="player-bar" style={hidden ? { display: 'none' } : undefined}>
@@ -121,27 +53,21 @@ export function PlayerBar({
       {/* ── Left: track info ─────────────────────────────────────────────── */}
       <div className="player-track" onClick={onExpand} style={{ cursor: 'pointer' }}>
         <div className="player-art-wrap">
-          {albumArt
-            ? <img className="player-art" src={albumArt} alt={name} />
+          {currentThumb
+            ? <img className="player-art" src={currentThumb} alt={currentTitle ?? ''} />
             : (
-              <div
-                className="player-art player-art--fallback"
-                style={isYT ? {
-                  background: 'rgba(248,113,113,0.1)',
-                  border: '1px solid rgba(248,113,113,0.2)',
-                } : undefined}
-              >
-                {isYT
-                  ? <YtIcon />
-                  : <span className="player-art-initials">{name.slice(0, 1).toUpperCase()}</span>
-                }
+              <div className="player-art player-art--fallback" style={{
+                background: 'rgba(248,113,113,0.1)',
+                border: '1px solid rgba(248,113,113,0.2)',
+              }}>
+                <YtIcon />
               </div>
             )
           }
         </div>
         <div className="player-track-info">
-          <div className="player-title">{name}</div>
-          <div className="player-artist">{artist}</div>
+          <div className="player-title">{currentTitle ?? '—'}</div>
+          <div className="player-artist">{currentArtist ?? '—'}</div>
         </div>
       </div>
 
@@ -150,10 +76,9 @@ export function PlayerBar({
         <div className="player-controls">
           <button
             className="player-btn player-btn--skip"
-            onClick={handlePrev}
+            disabled
+            style={{ opacity: 0.2 }}
             title="Previous"
-            disabled={isYT}
-            style={{ opacity: isYT ? 0.3 : 1 }}
           >
             <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
               <path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/>
@@ -161,27 +86,24 @@ export function PlayerBar({
           </button>
 
           <button
-            className={`player-btn player-btn--play${playing ? ' player-btn--playing' : ''}`}
-            onClick={handleTogglePlay}
-            disabled={connecting}
-            title={playing ? 'Pause' : 'Play'}
+            className={`player-btn player-btn--play${isPlaying ? ' player-btn--playing' : ''}`}
+            onClick={() => isPlaying ? pause() : resume()}
+            title={isPlaying ? 'Pause' : 'Play'}
           >
-            {connecting
-              ? <span className="upload-spinner" />
-              : playing
-                ? <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-                    <rect x="5" y="4" width="4" height="16" rx="1"/>
-                    <rect x="15" y="4" width="4" height="16" rx="1"/>
-                  </svg>
-                : <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-                    <path d="M8 5.14v14l11-7-11-7z"/>
-                  </svg>
+            {isPlaying
+              ? <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                  <rect x="5" y="4" width="4" height="16" rx="1"/>
+                  <rect x="15" y="4" width="4" height="16" rx="1"/>
+                </svg>
+              : <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                  <path d="M8 5.14v14l11-7-11-7z"/>
+                </svg>
             }
           </button>
 
           <button
             className="player-btn player-btn--skip"
-            onClick={handleNext}
+            onClick={onPlayNext}
             title="Next"
           >
             <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
@@ -198,22 +120,20 @@ export function PlayerBar({
                 className="player-progress-fill"
                 style={{
                   width: `${progress * 100}%`,
-                  background: isYT ? 'rgba(248,113,113,0.8)' : undefined,
+                  background: 'rgba(248,113,113,0.8)',
                 }}
               />
               <div
                 className="player-progress-thumb"
                 style={{
                   left: `${progress * 100}%`,
-                  background: isYT ? 'rgba(248,113,113,0.9)' : undefined,
+                  background: 'rgba(248,113,113,0.9)',
                 }}
               />
             </div>
           </div>
           <span className="player-time">{fmtTime(durationMs)}</span>
         </div>
-
-        {error && !isYT && <div className="player-error">{error}</div>}
       </div>
 
       {/* ── Right: up next ───────────────────────────────────────────────── */}

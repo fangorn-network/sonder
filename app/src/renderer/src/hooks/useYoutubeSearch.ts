@@ -66,7 +66,6 @@ export function useYouTubeSearch() {
                             ? parseInt(r.upload_date.slice(0, 4)) || null
                             : null,
                         durationMs: r.duration ? Math.round(r.duration * 1000) : null,
-                        spotifyTrackId: null,
                         youtubeVideoId: r.id,
                         thumbnailUrl: r.thumbnail ?? undefined,
                     }

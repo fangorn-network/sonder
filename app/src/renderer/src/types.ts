@@ -36,7 +36,6 @@ export function asTrack(r: JoinedRecord): Track {
       ? parseInt(f.datePublished.slice(0, 4)) || null
       : null,
     durationMs: (f.durationMs as number) ?? null,
-    spotifyTrackId: (f.externalId as string) ?? null,
     // platformId comes from the joined source schema record
     youtubeVideoId: (f.platformId as string) ?? undefined,
     contributors: Array.isArray(f.contributors)
@@ -59,7 +58,6 @@ export interface Track {
   artist: string
   year: number | null
   durationMs: number | null
-  spotifyTrackId: string | null
   contributors?: { role: string | null; name: string | null; id: string | null }[]
   embedding?: number[]
   genres?: string[]

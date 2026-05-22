@@ -23,9 +23,6 @@ function resolveSource(track: Track): { platform: string; platformId: string } |
         }
         return { platform: 'youtube', platformId: track.youtubeVideoId }
     }
-    if (track.spotifyTrackId) {
-        return { platform: 'spotify', platformId: track.spotifyTrackId }
-    }
     if (track.manifestCid) {
         return { platform: 'fangorn', platformId: track.manifestCid }
     }
@@ -167,7 +164,6 @@ export function PublishModal({ track, onClose, onPublished, fangorn, accentColor
                                 <option value="">none</option>
                                 <option value="youtube">youtube</option>
                                 <option value="soundcloud">soundcloud</option>
-                                <option value="spotify">spotify</option>
                                 <option value="fangorn">fangorn</option>
                             </select>
                         </div>

@@ -62,23 +62,78 @@ const streamCache = new Map<string, StreamEntry>()
 let streamServer: http.Server | null = null
 let streamPort = 0
 
+// ─── Download-to-disk cache ────────────────────────────────────────────────────
+
+interface DownloadEntry {
+  filePath: string
+  contentType: string
+  done: boolean
+  size: number           // bytes written so far
+  totalSize: number      // -1 if unknown
+  error?: Error
+  waiters: Array<() => void>   // callbacks waiting for MIN_BUFFER
+}
+
+const MIN_BUFFER = 512 * 1024          // 512 KB before we resolve
+const MAX_AGE_MS = 2 * 60 * 60 * 1000 // evict disk files after 2h
+const downloadCache = new Map<string, DownloadEntry>()
+
+// Evict old entries on a timer so the temp dir doesn't bloat
+setInterval(() => {
+  const now = Date.now()
+  for (const [id, entry] of downloadCache) {
+    if (entry.done) {
+      try {
+        const stat = fs.statSync(entry.filePath)
+        if (now - stat.mtimeMs > MAX_AGE_MS) {
+          fs.unlinkSync(entry.filePath)
+          downloadCache.delete(id)
+        }
+      } catch { downloadCache.delete(id) }
+    }
+  }
+}, 30 * 60 * 1000)
+// ─── Stream cache ─────────────────────────────────────────────────────────────
+
+interface StreamEntry {
+  url: string
+  headers: Record<string, string>
+  sourceQuery: string
+}
+
 function startYtStreamProxy() {
   streamServer = http.createServer(async (req, res) => {
     const videoId = req.url?.slice(1)
     if (!videoId) { res.writeHead(400); res.end(); return }
 
-    const entry = streamCache.get(videoId)
+    let entry = streamCache.get(videoId)
     if (!entry) { res.writeHead(404); res.end(); return }
 
-    res.on('error', () => { })
+    res.on('error', () => {})
+
+    const tryStream = async (e: StreamEntry) => {
+      const fetchHeaders: Record<string, string> = { ...e.headers }
+      if (req.headers.range) fetchHeaders['Range'] = req.headers.range as string
+      const upstream = await fetch(e.url, { headers: fetchHeaders })
+      if (upstream.status === 403 || upstream.status === 401) return null
+      return upstream
+    }
 
     try {
-      const fetchHeaders: Record<string, string> = { ...entry.headers }
-      if (req.headers.range) fetchHeaders['Range'] = req.headers.range as string
+      let upstream = await tryStream(entry)
 
-      const upstream = await fetch(entry.url, { headers: fetchHeaders })
+      if (!upstream) {
+        console.warn(`[yt-stream] URL expired for ${videoId}, re-resolving...`)
+        try {
+          await resolveYt(entry.sourceQuery)
+          entry = streamCache.get(videoId)!
+          upstream = await tryStream(entry)
+        } catch {
+          upstream = null
+        }
+        if (!upstream) { res.writeHead(502); res.end(); return }
+      }
 
-      const status = req.headers.range ? 206 : 200
       const outHeaders: Record<string, string> = {
         'Content-Type': upstream.headers.get('content-type') || 'audio/mp4',
         'Accept-Ranges': 'bytes',
@@ -88,10 +143,10 @@ function startYtStreamProxy() {
       if (cl) outHeaders['Content-Length'] = cl
       if (cr) outHeaders['Content-Range'] = cr
 
-      res.writeHead(status, outHeaders)
+      res.writeHead(req.headers.range ? 206 : 200, outHeaders)
 
       const reader = upstream.body!.getReader()
-      req.on('close', () => reader.cancel().catch(() => { }))
+      req.on('close', () => reader.cancel().catch(() => {}))
 
       while (true) {
         const { done, value } = await reader.read()
@@ -113,61 +168,7 @@ function startYtStreamProxy() {
 }
 
 // ─── resolveYt ────────────────────────────────────────────────────────────────
-// function resolveYt(query: string): Promise<YtResolveResult> {
-//   return new Promise((resolve, reject) => {
-//     // Accept: 11-char YouTube IDs, SoundCloud URLs, or freeform search strings
-//     const isBareId = /^[A-Za-z0-9_-]{11}$/.test(query)
-//     const isUrl = query.startsWith('http')
-//     const target = (isBareId || isUrl) ? query : `ytsearch1:${query} music`
 
-//     const proc = spawn(getYtDlpBin(), [
-//       target,
-//       '--dump-json',
-//       '--no-playlist',
-//       '--no-warnings',
-//       '--cookies-from-browser', 'chrome',
-//       // '--extractor-args', 'youtube:player_client=tv_embedded',
-//     ])
-
-//     //     // tv_embedded client only helps with YouTube — skip for SoundCloud and other URLs
-// //     if (isYouTube || (!isUrl && !isSoundCloud)) {
-// //       args.push('--extractor-args', 'youtube:player_client=tv_embedded')
-// //     }
-
-//     let out = '', err = ''
-//     proc.stdout.on('data', (d: Buffer) => { out += d.toString() })
-//     proc.stderr.on('data', (d: Buffer) => { console.error('[yt:search]', d.toString().trim()) })
-//     proc.on('error', reject)
-//     proc.on('close', (code: number) => {
-//       if (code !== 0) { reject(new Error(`yt-dlp exited ${code}: ${err.slice(0, 200)}`)); return }
-//       try {
-//         const info = JSON.parse(out.trim().split('\n')[0])
-
-//         const fmt = (info.formats ?? [])
-//           .filter((f: any) => f.url && f.acodec !== 'none' && (!f.vcodec || f.vcodec === 'none'))
-//           .sort((a: any, b: any) => (b.abr ?? b.tbr ?? 0) - (a.abr ?? a.tbr ?? 0))[0]
-
-//         if (!fmt?.url) throw new Error('No audio format found')
-
-//         streamCache.set(info.id, {
-//           url: fmt.url,
-//           headers: fmt.http_headers ?? {},
-//         })
-
-//         resolve({
-//           streamUrl: `http://127.0.0.1:${streamPort}/${info.id}`,
-//           videoId: info.id,
-//           title: info.title ?? 'Unknown Title',
-//           artist: info.uploader ?? info.channel ?? 'Unknown Artist',
-//           thumbnail: info.thumbnail ?? '',
-//           durationMs: Math.round((info.duration ?? 0) * 1000),
-//         })
-//       } catch (e: any) {
-//         reject(new Error(`resolve failed: ${e.message}`))
-//       }
-//     })
-//   })
-// }
 function resolveYt(query: string): Promise<YtResolveResult> {
   return new Promise((resolve, reject) => {
     const isBareId = /^[A-Za-z0-9_-]{11}$/.test(query)
@@ -209,32 +210,32 @@ function resolveYt(query: string): Promise<YtResolveResult> {
       try {
         const info = JSON.parse(out.trim().split('\n')[0])
 
-        const formats = (info.formats ?? [])
+        const formats: any[] = (info.formats ?? [])
           .filter((f: any) => {
-            if (!f.url) return false
-            if (f.acodec === 'none') return false
+            if (!f.url)                          return false
+            if (f.acodec === 'none')             return false
             if (f.vcodec && f.vcodec !== 'none') return false
-
-            // 🚨 CRITICAL: exclude streaming manifests
-            if (f.protocol?.includes('m3u8')) return false
-            if (f.protocol?.includes('m3u8_native')) return false
-            if (f.protocol?.includes('dash')) return false
-
+            if (f.protocol?.includes('m3u8'))    return false
+            if (f.protocol?.includes('dash'))    return false
             return true
           })
-          .sort((a: any, b: any) =>
-            (b.abr ?? b.tbr ?? 0) - (a.abr ?? a.tbr ?? 0)
-          )
+          .sort((a: any, b: any) => {
+            const aBr = a.abr ?? a.tbr ?? 0
+            const bBr = b.abr ?? b.tbr ?? 0
+            const aScore = (aBr >= 128 ? 10000 : aBr * 10) +
+                           (a.acodec?.startsWith('opus') ? 50 : 0)
+            const bScore = (bBr >= 128 ? 10000 : bBr * 10) +
+                           (b.acodec?.startsWith('opus') ? 50 : 0)
+            return bScore - aScore
+          })
 
         const fmt = formats[0]
-
-        if (!fmt?.url) {
-          throw new Error('No compatible progressive audio format found')
-        }
+        if (!fmt?.url) throw new Error('No compatible audio format found')
 
         streamCache.set(info.id, {
           url: fmt.url,
           headers: fmt.http_headers ?? {},
+          sourceQuery: query,
         })
 
         resolve({
@@ -423,7 +424,7 @@ function registerIpcHandlers() {
         '--no-warnings',
         '--flat-playlist',
       ])
- 
+
       let out = ''
       proc.stdout.on('data', (d: Buffer) => { out += d.toString() })
       proc.stderr.on('data', (d: Buffer) => { console.error('[yt:search:music]', d.toString().trim()) })

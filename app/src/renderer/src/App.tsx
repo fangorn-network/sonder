@@ -77,6 +77,9 @@ function Main() {
   const [entropy, setEntropy] = useState(0.2)
   const kernel = useSessionKernel({ entropy })
 
+  // for pre-populating the browseview on load
+  const [genreWeights, setGenreWeights] = useState<Record<string, number>>({})
+
   const [showConnectors, setShowConnectors] = useState(false)
   const [view, setView] = useState<ViewName>('Discover')
   const [nowPlaying, setNowPlaying] = useState<null | 'player' | { track: Track; color: string }>(null)
@@ -96,7 +99,6 @@ function Main() {
   // const { scTracks, scLoading, search: scSearch, clear: scClear } = useSoundCloudSearch()
 
   const { tracks: ytTracks, loading: ytLoading, search: ytSearch, clear: ytClear } = useMediaSearch();
-
 
   // ─── Agent context ──────────────────────────────────────────────────────────
 
@@ -200,7 +202,20 @@ function Main() {
         contexts: (track as any).contexts ?? [],
         durationMs: track.durationMs ?? 0,
       }
-      if (type === 'play') { kernel.onTrackPlay(embedding, meta); pushPlay(label) }
+      if (type === 'play') {
+        kernel.onTrackPlay(embedding, meta)
+        pushPlay(label)
+        // accumulate genre weights for prepopulating browseview
+        if (meta.genres.length > 0) {
+          setGenreWeights(prev => {
+            const next = { ...prev }
+            for (const genre of meta.genres) {
+              next[genre] = (next[genre] ?? 0) + 1
+            }
+            return next
+          })
+        }
+      }
       if (type === 'skip') { kernel.onTrackSkip(embedding, meta); pushSkip(label) }
       setSessionHistory(h => [...h, {
         type, t: Date.now(),
@@ -253,6 +268,75 @@ function Main() {
   useEffect(() => {
     setEntropy(agentContext.context?.kernelOverrides?.entropy ?? 0.2)
   }, [agentContext.context])
+
+  // ─── Startup prefetch ────────────────────────────────────────────────────────
+  const startupFiredRef = useRef(false)
+
+  const kernelTopGenres = Object.entries(genreWeights)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 6)
+    .map(([genre]) => genre)
+
+
+  useEffect(() => {
+    if (!chromaReady) return
+    if (loading) return
+    if (startupFiredRef.current) return
+
+    startupFiredRef.current = true
+    const query = buildStartupQuery(kernelTopGenres)
+    console.log('[app] startup prefetch →', query)
+
+    kernel.embedText(query)
+      .then(vec => applyKernelQuery(Array.from(vec), true))
+      .catch(e => console.warn('[app] startup embed failed:', e))
+  }, [chromaReady, loading, kernelTopGenres])
+
+  function buildStartupQuery(kernelTopGenres?: string[]): string {
+    const slot = getTimeSlot()
+    const mood = pick(slot.moods)
+    // Bias toward kernel genres if the Markov state has signal; fall back to time-of-day pool
+    const genrePool = kernelTopGenres && kernelTopGenres.length > 0
+      ? kernelTopGenres.slice(0, 4)   // top 4 kernel genres only — avoid noisy tail
+      : slot.genres
+    const genre = pick(genrePool)
+    return `${mood} ${genre}`
+  }
+
+
+  interface TimeSlot {
+    moods: string[]
+    genres: string[]
+  }
+
+  function getTimeSlot(): TimeSlot {
+    const h = new Date().getHours()
+    if (h >= 5 && h < 11) return {
+      moods: ['energetic', 'uplifting', 'focused', 'bright'],
+      genres: ['indie pop', 'math rock', 'post-rock', 'funk', 'electronic'],
+    }
+    if (h >= 11 && h < 14) return {
+      moods: ['driving', 'confident', 'punchy'],
+      genres: ['alternative', 'rock', 'electronic', 'hip hop'],
+    }
+    if (h >= 14 && h < 18) return {
+      moods: ['focused', 'deep', 'hypnotic', 'complex'],
+      genres: ['post-rock', 'math rock', 'prog', 'industrial', 'ambient'],
+    }
+    if (h >= 18 && h < 22) return {
+      moods: ['chill', 'warm', 'melodic', 'emotional'],
+      genres: ['shoegaze', 'dream pop', 'indie', 'post-hardcore', 'chillwave'],
+    }
+    return {
+      moods: ['dark', 'introspective', 'atmospheric', 'melancholic'],
+      genres: ['darkwave', 'ambient', 'post-punk', 'industrial', 'doom'],
+    }
+  }
+
+  function pick<T>(arr: T[]): T {
+    return arr[Math.floor(Math.random() * arr.length)]
+  }
+
 
   // ─── UI callbacks ────────────────────────────────────────────────────────────
 
@@ -324,6 +408,7 @@ function Main() {
           {!showConnectors && view === 'Discover' && (
             <BrowseView
               tracks={tracks}
+              kernelTopGenres={kernelTopGenres}
               loading={loading}
               loadingMore={loadingMore}
               error={error}

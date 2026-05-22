@@ -66,7 +66,7 @@ export function PlayerBar({
           durationMs: durationMs || null,
           youtubeVideoId: currentVideoId,
           thumbnailUrl: currentThumb ?? undefined
-        })}
+        }, 'blue')}
         style={{ cursor: 'pointer' }}
       >
         <div className="player-art-wrap">

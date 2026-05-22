@@ -13,7 +13,7 @@ const GENRE_PALETTE = [
   '#f97316', '#7c5de8', '#f87171', '#34d399',
 ]
 
-function hashColor(str: string): string {
+export function hashColor(str: string): string {
   let h = 0
   for (let i = 0; i < str.length; i++) h = (Math.imul(31, h) + str.charCodeAt(i)) | 0
   return GENRE_PALETTE[Math.abs(h) % GENRE_PALETTE.length]

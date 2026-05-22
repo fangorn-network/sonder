@@ -3,6 +3,7 @@ import { useYouTubeContext } from '../hooks/useYoutubeContext'
 import type { PlaybackState } from '../types/playback'
 import './PlayerBar.css'
 import { Track } from '../types'
+import { hashColor } from '../views/BrowseView'
 
 function fmtTime(ms: number) {
   if (!ms || !isFinite(ms) || ms <= 0) return '0:00'
@@ -66,7 +67,7 @@ export function PlayerBar({
           durationMs: durationMs || null,
           youtubeVideoId: currentVideoId,
           thumbnailUrl: currentThumb ?? undefined
-        }, 'blue')}
+        }, hashColor(currentVideoId))}
         style={{ cursor: 'pointer' }}
       >
         <div className="player-art-wrap">

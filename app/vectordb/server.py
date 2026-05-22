@@ -1,5 +1,6 @@
 import certifi
 import os
+import sys
 os.environ['SSL_CERT_FILE'] = certifi.where()
 import argparse
 import asyncio
@@ -7,7 +8,6 @@ import aiohttp
 import chromadb
 import hashlib
 import json
-import os
 import requests
 import uvicorn
 from chromadb.utils import embedding_functions
@@ -16,6 +16,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from chromadb.config import Settings
 from pydantic import BaseModel
+
+
+if sys.platform == 'win32':
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
 # ---------------------------------------------------------------------------
 # ARGS
@@ -317,7 +322,7 @@ async def fetch_schema_entries(
             all_entries.append({"entry": entry, "entryIndex": i, "meta": meta})
 
     deduped = _dedup_entries(all_entries)
-    print(f"  [{schema_name}] entries from new CIDs: {len(all_entries)} raw → {len(deduped)} after dedup")
+    print(f"  [{schema_name}] entries from new CIDs: {len(all_entries)} raw -> {len(deduped)} after dedup")
 
     return deduped, new_checkpoint
 

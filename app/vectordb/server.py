@@ -1,5 +1,6 @@
 import certifi
 import os
+import io
 import sys
 os.environ['SSL_CERT_FILE'] = certifi.where()
 import argparse

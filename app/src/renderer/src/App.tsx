@@ -380,7 +380,7 @@ function Main() {
         </main>
 
         <PlayerBar
-          onExpand={() => setNowPlaying('player')}
+          onTrackClick={handleTrackClick}
           hidden={nowPlayingOpen}
           playbackState={playbackState}
           nextTrack={nextTrack}

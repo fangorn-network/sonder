@@ -417,7 +417,7 @@ function registerIpcHandlers() {
   ipcMain.handle('yt:search:music', async (_event, query: string): Promise<any[]> => {
     return new Promise((resolve) => {
       const proc = spawn(getYtDlpBin(), [
-        `ytmsearch15:${query}`,
+        `ytsearch15:${query}`,
         '--dump-json',
         '--no-playlist',
         '--no-warnings',

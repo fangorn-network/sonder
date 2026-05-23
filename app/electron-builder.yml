@@ -11,13 +11,16 @@ files:
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
   - '!vectordb/**'
 extraResources:
-  - from: "vectordb/dist/server"
-    to: "server"
+  - from: "vectordb/dist/${os}/"
+    to: ""
+    filter: ["server*"]
   - from: "out/renderer"
     to: "renderer"
-  - from:  "resources/bin"
+  - from: ".env"
+    to: ".env"
+  - from:  "resources/bin/${os}/"
     to: "bin"
-    filter: ["yt-dlp"]
+    filter: ["yt-dlp*"]
 asarUnpack:
   - resources/**
 win:

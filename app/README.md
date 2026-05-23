@@ -106,6 +106,7 @@ pip install pyinstaller
 Then build your binary
 ```bash
 pyinstaller --onefile --name server \
+  --distpath dist/linux \
   $(pip list --format=freeze | cut -d= -f1 | xargs -I{} echo "--collect-submodules {}") \
   server.py
 ```

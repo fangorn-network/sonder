@@ -17,19 +17,21 @@ import { ToolboxConfigManager } from './agent/toolbox-config-manager'
 // ─── yt-dlp helpers ───────────────────────────────────────────────────────────
 
 function getYtDlpBin(): string {
-  const updatable = path.join(app.getPath('userData'), 'yt-dlp')
+  const ext = process.platform === 'win32' ? '.exe' : ''
+  const updatable = path.join(app.getPath('userData'), `yt-dlp${ext}`)
   if (fs.existsSync(updatable)) return updatable
-  if (app.isPackaged) return path.join(process.resourcesPath, 'bin', 'yt-dlp')
-  return path.join(app.getAppPath(), 'resources', 'bin', 'yt-dlp')
+  if (app.isPackaged) return path.join(process.resourcesPath, 'bin', `yt-dlp${ext}`)
+  return path.join(app.getAppPath(), 'resources', 'bin', `yt-dlp${ext}`)
 }
 
 async function updateYtDlp(): Promise<void> {
   return new Promise((resolve) => {
-    const updatable = path.join(app.getPath('userData'), 'yt-dlp')
+    const ext = process.platform === 'win32' ? '.exe' : ''
+    const updatable = path.join(app.getPath('userData'), `yt-dlp${ext}`)
     const bin = getYtDlpBin()
 
     if (!fs.existsSync(updatable)) {
-      try { fs.copyFileSync(bin, updatable); fs.chmodSync(updatable, 0o755) }
+      try { fs.copyFileSync(bin, updatable); if (process.platform !== 'win32') fs.chmodSync(updatable, 0o755) }
       catch { resolve(); return }
     }
 
@@ -266,10 +268,12 @@ if (app.isPackaged) {
 function startPython() {
   const root = is.dev ? app.getAppPath() : process.resourcesPath
 
+  const serverName = process.platform === 'win32' ? 'server.exe' : 'server'
+
   const apiKey = (import.meta as any).env.VITE_GRAPH_API_KEY ?? "";
   const [bin, args, cwd]: [string, string[], string] = app.isPackaged
     ? [
-      path.join(root, 'server'),
+      path.join(root, serverName),
       [
         '--graph-api-key', apiKey,
         '-s', 'tony.test.invariants.track.2=0xdd2ff7c1afae71333aac86f18316093fb017e4a47e7c6ef2b1c37b8ca62d53a6',
@@ -562,7 +566,13 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', async () => {
-  pyProcess?.kill()
+  if (pyProcess && !pyProcess.killed) {
+    if (process.platform === 'win32') {
+      spawn('taskkill', ['/PID', String(pyProcess.pid), '/F', '/T'])
+    } else {
+      pyProcess.kill()
+    }
+  }
   if (rendererServer) {
     await new Promise<void>((resolve) => rendererServer?.close(() => resolve()))
   }

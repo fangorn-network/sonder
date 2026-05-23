@@ -3,7 +3,7 @@ import './Support.css'
 
 const QUICK_AMOUNTS = [10, 25, 50, 100, 250]
 const MAX = 250
-const STRIPE_BASE_URL = 'https://buy.stripe.com/test_8x2dRa0yE67s6ZS0f4bo400'
+const STRIPE_BASE_URL = 'https://donate.stripe.com/fZu14meFv9vy3Rjb3ZeZ200'
 
 export default function Support() {
   const [amount, setAmount] = useState(25)

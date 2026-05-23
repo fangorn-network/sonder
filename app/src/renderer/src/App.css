@@ -2892,7 +2892,7 @@ textarea {
   /* Changed 'right: 32px' to these two lines to perfectly center it */
   left: 50%;
   transform: translateX(-50%);
-  
+
   width: 40px;
   height: 40px;
   border-radius: 0;
@@ -2918,6 +2918,7 @@ textarea {
   /* Updated to keep the horizontal centering while lifting it on the Y-axis */
   transform: translate(-50%, -2px);
 }
+
 /* =============================================================================
    MOBILE
    ─────────────────────────────────────────────────────────────────────────── */
@@ -3038,4 +3039,180 @@ textarea {
 
 .app-nav-tab:focus:not(:focus-visible) {
   outline: none;
+}
+
+/* Container Layouts */
+.tg-tab-container {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+}
+
+.tg-track-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tg-tab-spacer {
+  height: 120px;
+}
+
+/* Glassy Empty State */
+.tg-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  background: rgba(255, 255, 255, 0.02);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  color: rgba(255, 255, 255, 0.5);
+  text-align: center;
+}
+
+.tg-empty-icon {
+  font-size: 32px;
+  margin-bottom: 8px;
+  opacity: 0.8;
+}
+
+.tg-empty-text {
+  margin: 0;
+  font-size: 14px;
+  letter-spacing: -0.01em;
+}
+
+/* Glass Track Rows */
+.tg-track-row {
+  display: flex;
+  align-items: center;
+  padding: 10px 16px;
+  gap: 16px;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: background 0.2s ease, border-color 0.2s ease, transform 0.1s ease;
+
+  /* Glass Baseline */
+  background: rgba(255, 255, 255, 0.02);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.tg-track-row:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.09);
+}
+
+.tg-track-row:active {
+  transform: scale(0.995);
+}
+
+/* Playing State Override */
+.tg-track-row.is-playing {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: calc(var(--accent-color) + "44");
+  /* Soft accent border fallback handled below */
+  border: 1px solid var(--accent-color);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* Inline Elements styling */
+.tg-row-play-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.6);
+  width: 24px;
+  height: 24px;
+  transition: color 0.2s;
+}
+
+.tg-track-row:hover .tg-row-play-btn {
+  color: #ffffff;
+}
+
+.tg-track-row.is-playing .tg-row-play-btn {
+  color: var(--accent-color);
+}
+
+/* Main row typography layout */
+.tg-row-info {
+  display: flex;
+  flex: 1;
+  align-items: baseline;
+  gap: 12px;
+  min-width: 0;
+}
+
+.tg-row-title {
+  font-weight: 500;
+  color: #ffffff;
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tg-track-row.is-playing .tg-row-title {
+  color: var(--accent-color);
+}
+
+.tg-row-meta {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.4);
+  display: flex;
+  gap: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Utilities Area (Right Aligned) */
+.tg-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-left: auto;
+}
+
+.tg-row-duration {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.4);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Dynamic Publish Button */
+.tg-row-publish-btn {
+  background: none;
+  border: 1px solid var(--accent-color);
+  border-color: rgba(255, 255, 255, 0.15);
+  /* Soft baseline border */
+  border-radius: 4px;
+  color: var(--accent-color);
+  opacity: 0.7;
+  font-size: 9px;
+  letter-spacing: '0.07em';
+  text-transform: uppercase;
+  padding: 2px 7px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.tg-row-publish-btn:hover {
+  opacity: 1;
+  border-color: var(--accent-color);
+  background: rgba(255, 255, 255, 0.02);
 }

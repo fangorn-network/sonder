@@ -13,11 +13,15 @@ const GENRE_PALETTE = [
   '#f97316', '#7c5de8', '#f87171', '#34d399',
 ]
 
-function hashColor(str: string): string {
+export function hashColor(str: string): string {
   let h = 0
   for (let i = 0; i < str.length; i++) h = (Math.imul(31, h) + str.charCodeAt(i)) | 0
   return GENRE_PALETTE[Math.abs(h) % GENRE_PALETTE.length]
 }
+
+// ─── NEW: startup query helpers ───────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 type SearchTab = 'library' | 'mb' | 'yt' | 'sc'
 
@@ -76,6 +80,9 @@ interface BrowseViewProps {
   scLoading?: boolean
   onScSearch?: (query: string) => void
   onScClear?: () => void
+
+  // NEW: top genres from the Markov kernel (optional — gracefully absent on first boot)
+  kernelTopGenres?: string[]
 }
 
 async function fetchAlbumArt(title: string, artist: string): Promise<string | null> {
@@ -85,7 +92,7 @@ async function fetchAlbumArt(title: string, artist: string): Promise<string | nu
       url: `https://itunes.apple.com/search?term=${q}&entity=song&limit=3`
     })
     const data = JSON.parse(body)
-    const url  = data.results?.[0]?.artworkUrl100
+    const url = data.results?.[0]?.artworkUrl100
     if (url) return url.replace('100x100bb', '600x600bb')
   } catch { }
   try {
@@ -94,7 +101,7 @@ async function fetchAlbumArt(title: string, artist: string): Promise<string | nu
       url: `https://api.deezer.com/search?q=${q}&limit=1`
     })
     const data = JSON.parse(body)
-    const url  = data.data?.[0]?.album?.cover_xl
+    const url = data.data?.[0]?.album?.cover_xl
     if (url) return url
   } catch { }
   return null
@@ -113,11 +120,12 @@ export function BrowseView({
   fangorn, publisherAddress, contextBar,
   onYtClear, onYtSearch, ytLoading, ytTracks,
   onScClear, onScSearch, scLoading, scTracks,
+  kernelTopGenres,   // NEW
 }: BrowseViewProps) {
-  const sentinelRef   = useRef<HTMLDivElement>(null)
+  const sentinelRef = useRef<HTMLDivElement>(null)
   const [playingId, setPlayingId] = useState<string | null>(null)
   const [albumArtCache, setAlbumArtCache] = useState<Record<string, string>>({})
-  const fetchingRef   = useRef<Set<string>>(new Set())
+  const fetchingRef = useRef<Set<string>>(new Set())
   const [reasonExpanded, setReasonExpanded] = useState(false)
   const [publishingTrack, setPublishingTrack] = useState<{ track: Track; color: string } | null>(null)
 
@@ -127,11 +135,29 @@ export function BrowseView({
     isPlaying: ytIsPlaying,
   } = useYouTubeContext()
 
-  const [activeTab, setActiveTab]   = useState<SearchTab>('library')
-  const mbFetchedRef  = useRef<string>('')
-  const ytFetchedRef  = useRef<string>('')
-  const scFetchedRef  = useRef<string>('')
+  const [activeTab, setActiveTab] = useState<SearchTab>('library')
+  const mbFetchedRef = useRef<string>('')
+  const ytFetchedRef = useRef<string>('')
+  const scFetchedRef = useRef<string>('')
   const prevSearchRef = useRef(search)
+
+  // // ─── NEW: stochastic startup prefetch ──────────────────────────────────────
+  // // Fires once when: chroma is ready, tracks have loaded, no recommendations yet.
+  // // Uses time-of-day + Markov kernel top genres to seed the ambient agent.
+  // const startupFiredRef = useRef(false)
+
+  // useEffect(() => {
+  //   if (!chromaReady)               return  // backend not ready
+  //   if (loading)                    return  // initial track load still in flight
+  //   if (startupFiredRef.current)    return  // already fired this session
+  //   if (recommendedTracks?.tracks?.length) return  // already have recs — don't overwrite
+
+  //   startupFiredRef.current = true
+  //   const query = buildStartupQuery(kernelTopGenres)
+  //   console.log('[browse] startup prefetch →', query)
+  //   onCallAgent(query)
+  // }, [chromaReady, loading, recommendedTracks, kernelTopGenres])
+  // // ──────────────────────────────────────────────────────────────────────────
 
   useEffect(() => {
     if (prevSearchRef.current !== search) {
@@ -220,7 +246,6 @@ export function BrowseView({
     if (ambientStatus === 'idle' && ambientLastReason) setReasonExpanded(false)
   }, [ambientLastReason])
 
-  // Cache thumbnails for YT and SC tracks
   useEffect(() => {
     const allExternal = [...(ytTracks ?? []), ...(scTracks ?? [])]
     if (allExternal.length === 0) return
@@ -231,16 +256,16 @@ export function BrowseView({
     })
   }, [ytTracks, scTracks])
 
-  const showAmbientBar  = ambientStatus !== undefined
-  const isFetching      = ambientStatus === 'fetching'
-  const isAmbientError  = ambientStatus === 'error'
+  const showAmbientBar = ambientStatus !== undefined
+  const isFetching = ambientStatus === 'fetching'
+  const isAmbientError = ambientStatus === 'error'
 
   const renderCard = (track: Track) => {
-    const accentColor  = hashColor(track.id)
+    const accentColor = hashColor(track.id)
     const isThisPlaying =
       (playbackState?.trackId === track.id && playbackState?.playing) ||
       (track.youtubeVideoId != null && track.youtubeVideoId === ytCurrentId && ytIsPlaying)
-    const isMbTrack  = !track.manifestCid
+    const isMbTrack = !track.manifestCid
     const durationStr = track.durationMs
       ? `${Math.floor(track.durationMs / 60000)}:${String(Math.floor((track.durationMs % 60000) / 1000)).padStart(2, '0')}`
       : null
@@ -295,6 +320,59 @@ export function BrowseView({
     )
   }
 
+  const renderRow = (track: Track) => {
+    const accentColor = hashColor(track.id)
+    const isThisPlaying =
+      (playbackState?.trackId === track.id && playbackState?.playing) ||
+      (track.youtubeVideoId != null && track.youtubeVideoId === ytCurrentId && ytIsPlaying)
+    const isMbTrack = !track.manifestCid
+    const durationStr = track.durationMs
+      ? `${Math.floor(track.durationMs / 60000)}:${String(Math.floor((track.durationMs % 60000) / 1000)).padStart(2, '0')}`
+      : null
+
+    return (
+      <div
+        key={track.id}
+        onClick={() => onTrackClick(track, accentColor)}
+        className={`tg-track-row ${isThisPlaying ? 'is-playing' : ''}`}
+        style={{ '--accent-color': accentColor } as React.CSSProperties}
+      >
+        <button
+          aria-label="Play"
+          onClick={e => handlePlay(e, track)}
+          className="tg-row-play-btn"
+        >
+          {isThisPlaying
+            ? <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><rect x="5" y="4" width="4" height="16" rx="1" /><rect x="15" y="4" width="4" height="16" rx="1" /></svg>
+            : <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
+          }
+        </button>
+        <div className="tg-row-info">
+          <span className="tg-row-title">{track.title}</span>
+          <span className="tg-row-meta">
+            <span className="tg-row-artist">{track.artist}</span>
+            {track.year !== null && <span className="tg-row-dot">·</span>}
+            {track.year !== null && <span className="tg-row-year">{track.year}</span>}
+          </span>
+        </div>
+        <div className="tg-row-actions">
+          {isMbTrack && fangorn && (
+            <button
+              onClick={e => { e.stopPropagation(); setPublishingTrack({ track, color: accentColor }) }}
+              className="tg-row-publish-btn"
+            >
+              <svg viewBox="0 0 12 12" width="9" height="9" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                <path d="M6 8V2M3 5l3-3 3 3M2 10h8" />
+              </svg>
+              publish
+            </button>
+          )}
+          {durationStr && <span className="tg-row-duration">{durationStr}</span>}
+        </div>
+      </div>
+    )
+  }
+
   const renderSkeleton = (n = 12) =>
     Array.from({ length: n }).map((_, i) => (
       <div key={i} className="tg-card tg-card--skeleton">
@@ -305,8 +383,6 @@ export function BrowseView({
         </div>
       </div>
     ))
-
-  // ── Connecting splash ──────────────────────────────────────────────────────
 
   if (!chromaReady) {
     const timedOut = !!error
@@ -337,11 +413,8 @@ export function BrowseView({
     )
   }
 
-  // ── Main view ──────────────────────────────────────────────────────────────
-
   return (
     <div className="browse-view">
-
       <div className="browse-toolbar">
         <div className="search-box">
           <span className="search-icon">⌕</span>
@@ -369,9 +442,7 @@ export function BrowseView({
         <div style={{ display: 'flex', gap: 4, marginBottom: 14, borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
           {([
             { id: 'library' as SearchTab, label: 'Library' },
-            // { id: 'mb'      as SearchTab, label: 'MusicBrainz', icon: <MbIcon size={10} /> },
-            { id: 'yt'      as SearchTab, label: 'Deep Exploration',     icon: <YtIcon size={10} /> },
-            // { id: 'sc'      as SearchTab, label: 'SoundCloud',  icon: <ScIcon size={10} /> },
+            { id: 'yt' as SearchTab, label: 'Deep Exploration', icon: <YtIcon size={10} /> },
           ]).map(({ id, label, icon }) => {
             const active = activeTab === id
             return (
@@ -388,9 +459,7 @@ export function BrowseView({
                 }}
               >
                 {icon}{label}
-                {id === 'mb' && fallbackLoading && <span className="upload-spinner" style={{ width: 8, height: 8, borderWidth: 1.5, marginLeft: 2 }} />}
-                {id === 'yt' && ytLoading      && <span className="upload-spinner" style={{ width: 8, height: 8, borderWidth: 1.5, marginLeft: 2 }} />}
-                {id === 'sc' && scLoading      && <span className="upload-spinner" style={{ width: 8, height: 8, borderWidth: 1.5, marginLeft: 2 }} />}
+                {id === 'yt' && ytLoading && <span className="upload-spinner" style={{ width: 8, height: 8, borderWidth: 1.5, marginLeft: 2 }} />}
               </button>
             )
           })}
@@ -416,7 +485,6 @@ export function BrowseView({
         </div>
       )}
 
-      {/* ── Library tab ─────────────────────────────────────────────────── */}
       {activeTab === 'library' && (
         <>
           {recommendedTracks?.tracks && recommendedTracks.tracks.length > 0 && !recommendLoading && (
@@ -468,7 +536,6 @@ export function BrowseView({
         </>
       )}
 
-      {/* ── MusicBrainz tab ─────────────────────────────────────────────── */}
       {activeTab === 'mb' && (
         <>
           {fallbackLoading && <div className="track-grid">{renderSkeleton(6)}</div>}
@@ -482,21 +549,24 @@ export function BrowseView({
         </>
       )}
 
-      {/* ── YouTube tab ─────────────────────────────────────────────────── */}
       {activeTab === 'yt' && (
-        <>
-          {ytLoading && <div className="track-grid">{renderSkeleton(6)}</div>}
+        <div className="tg-tab-container">
+          {ytLoading && <div>{renderSkeleton(6)}</div>}
           {!ytLoading && ytTracks && ytTracks.length > 0 && (
-            <div className="track-grid">{ytTracks.map(renderCard)}</div>
+            <div className="tg-track-list">
+              {ytTracks.map(renderRow)}
+            </div>
           )}
           {!ytLoading && (!ytTracks || ytTracks.length === 0) && (
-            <div className="empty-state"><div className="empty-icon">♪</div><p>No results on YouTube.</p></div>
+            <div className="tg-empty-state">
+              <div className="tg-empty-icon">♪</div>
+              <p className="tg-empty-text">No results on YouTube.</p>
+            </div>
           )}
-          <div style={{ height: 200 }} />
-        </>
+          <div className="tg-tab-spacer" />
+        </div>
       )}
 
-      {/* ── SoundCloud tab ──────────────────────────────────────────────── */}
       {activeTab === 'sc' && (
         <>
           {scLoading && <div className="track-grid">{renderSkeleton(6)}</div>}
@@ -527,8 +597,6 @@ export function BrowseView({
     </div>
   )
 }
-
-// ─── Icons ────────────────────────────────────────────────────────────────────
 
 function MbIcon({ size = 14 }: { size?: number }) {
   return (

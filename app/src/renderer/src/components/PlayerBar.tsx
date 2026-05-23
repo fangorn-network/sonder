@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { useYouTubeContext } from '../hooks/useYoutubeContext'
 import type { PlaybackState } from '../types/playback'
 import './PlayerBar.css'
+import { Track } from '../types'
+import { hashColor } from '../views/BrowseView'
 
 function fmtTime(ms: number) {
   if (!ms || !isFinite(ms) || ms <= 0) return '0:00'
@@ -10,15 +12,15 @@ function fmtTime(ms: number) {
 }
 
 interface PlayerBarProps {
-  onExpand:       () => void
-  hidden?:        boolean
+  onTrackClick: (track: Track, color: string) => void
+  hidden?: boolean
   playbackState?: PlaybackState
-  nextTrack?:     { title: string; artist: string } | null
-  onPlayNext?:    () => void
+  nextTrack?: { title: string; artist: string } | null
+  onPlayNext?: () => void
 }
 
 export function PlayerBar({
-  onExpand,
+  onTrackClick,
   hidden,
   playbackState,
   nextTrack,
@@ -42,7 +44,7 @@ export function PlayerBar({
   if (!currentVideoId) return null
 
   function scrubTo(e: React.MouseEvent<HTMLDivElement>) {
-    const rect  = e.currentTarget.getBoundingClientRect()
+    const rect = e.currentTarget.getBoundingClientRect()
     const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
     seek(ratio * durationMs)
   }
@@ -51,7 +53,23 @@ export function PlayerBar({
     <div className="player-bar" style={hidden ? { display: 'none' } : undefined}>
 
       {/* ── Left: track info ─────────────────────────────────────────────── */}
-      <div className="player-track" onClick={onExpand} style={{ cursor: 'pointer' }}>
+      <div
+        className="player-track"
+        onClick={() => onTrackClick({
+          // Required properties from your Track interface
+          id: currentVideoId,            // Fallback to video ID if unique envelop ID isn't present
+          trackId: currentVideoId,
+          owner: 'system',               // Placeholder string to fulfill the Track interface typing
+          manifestCid: '',               // Empty string fallback for local/streaming types
+          title: currentTitle ?? 'Unknown',
+          artist: currentArtist ?? '',
+          year: null,
+          durationMs: durationMs || null,
+          youtubeVideoId: currentVideoId,
+          thumbnailUrl: currentThumb ?? undefined
+        }, hashColor(currentVideoId))}
+        style={{ cursor: 'pointer' }}
+      >
         <div className="player-art-wrap">
           {currentThumb
             ? <img className="player-art" src={currentThumb} alt={currentTitle ?? ''} />
@@ -60,7 +78,6 @@ export function PlayerBar({
                 background: 'rgba(248,113,113,0.1)',
                 border: '1px solid rgba(248,113,113,0.2)',
               }}>
-                <YtIcon />
               </div>
             )
           }
@@ -81,7 +98,7 @@ export function PlayerBar({
             title="Previous"
           >
             <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-              <path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/>
+              <path d="M6 6h2v12H6zm3.5 6 8.5 6V6z" />
             </svg>
           </button>
 
@@ -92,12 +109,12 @@ export function PlayerBar({
           >
             {isPlaying
               ? <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-                  <rect x="5" y="4" width="4" height="16" rx="1"/>
-                  <rect x="15" y="4" width="4" height="16" rx="1"/>
-                </svg>
+                <rect x="5" y="4" width="4" height="16" rx="1" />
+                <rect x="15" y="4" width="4" height="16" rx="1" />
+              </svg>
               : <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-                  <path d="M8 5.14v14l11-7-11-7z"/>
-                </svg>
+                <path d="M8 5.14v14l11-7-11-7z" />
+              </svg>
             }
           </button>
 
@@ -107,7 +124,7 @@ export function PlayerBar({
             title="Next"
           >
             <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-              <path d="M16 6h2v12h-2zM6 18l8.5-6L6 6v12z"/>
+              <path d="M16 6h2v12h-2zM6 18l8.5-6L6 6v12z" />
             </svg>
           </button>
         </div>

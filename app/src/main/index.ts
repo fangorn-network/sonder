@@ -52,20 +52,21 @@ export interface YtResolveResult {
 }
 
 // ─── Stream cache ─────────────────────────────────────────────────────────────
-
 interface StreamEntry {
-  url: string
-  headers: Record<string, string>
+  tmpPath:     string
+  contentType: string
+  sourceQuery: string
 }
+
 const streamCache = new Map<string, StreamEntry>()
 
-// ─── Stream proxy — serves cached URLs with yt-dlp headers ───────────────────
+// ─── Stream proxy — serves complete files only ────────────────────────────────
 
 let streamServer: http.Server | null = null
 let streamPort = 0
 
 function startYtStreamProxy() {
-  streamServer = http.createServer(async (req, res) => {
+  streamServer = http.createServer((req, res) => {
     const videoId = req.url?.slice(1)
     if (!videoId) { res.writeHead(400); res.end(); return }
 
@@ -74,38 +75,39 @@ function startYtStreamProxy() {
 
     res.on('error', () => { })
 
-    try {
-      const fetchHeaders: Record<string, string> = { ...entry.headers }
-      if (req.headers.range) fetchHeaders['Range'] = req.headers.range as string
+    let fileSize: number
+    try { fileSize = fs.statSync(entry.tmpPath).size }
+    catch { res.writeHead(503); res.end(); return }
 
-      const upstream = await fetch(entry.url, { headers: fetchHeaders })
+    const range = req.headers.range
+    let start = 0
+    let end = fileSize - 1
 
-      const status = req.headers.range ? 206 : 200
-      const outHeaders: Record<string, string> = {
-        'Content-Type': upstream.headers.get('content-type') || 'audio/mp4',
-        'Accept-Ranges': 'bytes',
+    if (range) {
+      const m = range.match(/bytes=(\d*)-(\d*)/)
+      if (m) {
+        start = m[1] ? parseInt(m[1], 10) : 0
+        end = m[2] ? Math.min(parseInt(m[2], 10), fileSize - 1) : fileSize - 1
       }
-      const cl = upstream.headers.get('content-length')
-      const cr = upstream.headers.get('content-range')
-      if (cl) outHeaders['Content-Length'] = cl
-      if (cr) outHeaders['Content-Range'] = cr
-
-      res.writeHead(status, outHeaders)
-
-      const reader = upstream.body!.getReader()
-      req.on('close', () => reader.cancel().catch(() => { }))
-
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        if (res.writableEnded) break
-        const ok = res.write(Buffer.from(value))
-        if (!ok) await new Promise(r => res.once('drain', r))
-      }
-      if (!res.writableEnded) res.end()
-    } catch {
-      if (!res.writableEnded) res.end()
     }
+
+    res.writeHead(range ? 206 : 200, {
+      'Content-Type': entry.contentType,
+      'Accept-Ranges': 'bytes',
+      'Content-Length': end - start + 1,
+      'Cache-Control': 'no-store',
+      ...(range ? { 'Content-Range': `bytes ${start}-${end}/${fileSize}` } : {}),
+    })
+
+    if (req.method === 'HEAD') { res.end(); return }
+
+    const stream = fs.createReadStream(entry.tmpPath, {
+      start,
+      end,
+      highWaterMark: 256 * 1024,
+    })
+    stream.pipe(res)
+    req.on('close', () => stream.destroy())
   })
 
   streamServer.listen(0, '127.0.0.1', () => {
@@ -115,137 +117,113 @@ function startYtStreamProxy() {
 }
 
 // ─── resolveYt ────────────────────────────────────────────────────────────────
-// function resolveYt(query: string): Promise<YtResolveResult> {
-//   return new Promise((resolve, reject) => {
-//     // Accept: 11-char YouTube IDs, SoundCloud URLs, or freeform search strings
-//     const isBareId = /^[A-Za-z0-9_-]{11}$/.test(query)
-//     const isUrl = query.startsWith('http')
-//     const target = (isBareId || isUrl) ? query : `ytsearch1:${query} music`
 
-//     const proc = spawn(getYtDlpBin(), [
-//       target,
-//       '--dump-json',
-//       '--no-playlist',
-//       '--no-warnings',
-//       '--cookies-from-browser', 'chrome',
-//       // '--extractor-args', 'youtube:player_client=tv_embedded',
-//     ])
-
-//     //     // tv_embedded client only helps with YouTube — skip for SoundCloud and other URLs
-// //     if (isYouTube || (!isUrl && !isSoundCloud)) {
-// //       args.push('--extractor-args', 'youtube:player_client=tv_embedded')
-// //     }
-
-//     let out = '', err = ''
-//     proc.stdout.on('data', (d: Buffer) => { out += d.toString() })
-//     proc.stderr.on('data', (d: Buffer) => { console.error('[yt:search]', d.toString().trim()) })
-//     proc.on('error', reject)
-//     proc.on('close', (code: number) => {
-//       if (code !== 0) { reject(new Error(`yt-dlp exited ${code}: ${err.slice(0, 200)}`)); return }
-//       try {
-//         const info = JSON.parse(out.trim().split('\n')[0])
-
-//         const fmt = (info.formats ?? [])
-//           .filter((f: any) => f.url && f.acodec !== 'none' && (!f.vcodec || f.vcodec === 'none'))
-//           .sort((a: any, b: any) => (b.abr ?? b.tbr ?? 0) - (a.abr ?? a.tbr ?? 0))[0]
-
-//         if (!fmt?.url) throw new Error('No audio format found')
-
-//         streamCache.set(info.id, {
-//           url: fmt.url,
-//           headers: fmt.http_headers ?? {},
-//         })
-
-//         resolve({
-//           streamUrl: `http://127.0.0.1:${streamPort}/${info.id}`,
-//           videoId: info.id,
-//           title: info.title ?? 'Unknown Title',
-//           artist: info.uploader ?? info.channel ?? 'Unknown Artist',
-//           thumbnail: info.thumbnail ?? '',
-//           durationMs: Math.round((info.duration ?? 0) * 1000),
-//         })
-//       } catch (e: any) {
-//         reject(new Error(`resolve failed: ${e.message}`))
-//       }
-//     })
-//   })
-// }
 function resolveYt(query: string): Promise<YtResolveResult> {
   return new Promise((resolve, reject) => {
     const isBareId = /^[A-Za-z0-9_-]{11}$/.test(query)
     const isUrl = query.startsWith('http')
     const isYouTube =
-      isBareId ||
-      (isUrl && (query.includes('youtube.com') || query.includes('youtu.be')))
+      isBareId || (isUrl && (query.includes('youtube.com') || query.includes('youtu.be')))
 
-    const target = (isBareId || isUrl)
-      ? query
-      : `ytsearch1:${query} music`
+    const target = (isBareId || isUrl) ? query : `ytsearch1:${query} music`
 
-    const args: string[] = [
-      target,
-      '--dump-json',
-      '--no-playlist',
-      '--no-warnings',
-    ]
+    const infoArgs = ['--dump-json', '--no-playlist', '--no-warnings', target]
+    if (isYouTube) infoArgs.push('--extractor-args', 'youtube:player_client=tv_embedded')
 
-    if (isYouTube) {
-      args.push('--extractor-args', 'youtube:player_client=tv_embedded')
-    }
+    const infoProc = spawn(getYtDlpBin(), infoArgs)
+    let out = '', err = ''
+    infoProc.stdout.on('data', (d: Buffer) => { out += d.toString() })
+    infoProc.stderr.on('data', (d: Buffer) => { err += d.toString() })
+    infoProc.on('error', reject)
 
-    const proc = spawn(getYtDlpBin(), args)
-
-    let out = ''
-    let err = ''
-
-    proc.stdout.on('data', (d: Buffer) => { out += d.toString() })
-    proc.stderr.on('data', (d: Buffer) => { err += d.toString() })
-    proc.on('error', reject)
-
-    proc.on('close', (code: number) => {
+    infoProc.on('close', (code: number) => {
       if (code !== 0) {
-        reject(new Error(`yt-dlp exited ${code}: ${err.slice(0, 300)}`))
+        reject(new Error(`yt-dlp info exited ${code}: ${err.slice(0, 300)}`))
         return
       }
 
       try {
         const info = JSON.parse(out.trim().split('\n')[0])
 
-        const formats = (info.formats ?? [])
-          .filter((f: any) => {
-            if (!f.url) return false
-            if (f.acodec === 'none') return false
-            if (f.vcodec && f.vcodec !== 'none') return false
-
-            // 🚨 CRITICAL: exclude streaming manifests
-            if (f.protocol?.includes('m3u8')) return false
-            if (f.protocol?.includes('m3u8_native')) return false
-            if (f.protocol?.includes('dash')) return false
-
-            return true
-          })
-          .sort((a: any, b: any) =>
-            (b.abr ?? b.tbr ?? 0) - (a.abr ?? a.tbr ?? 0)
-          )
-
-        const fmt = formats[0]
-
-        if (!fmt?.url) {
-          throw new Error('No compatible progressive audio format found')
-        }
-
-        streamCache.set(info.id, {
-          url: fmt.url,
-          headers: fmt.http_headers ?? {},
-        })
-
-        resolve({
+        const result: YtResolveResult = {
           streamUrl: `http://127.0.0.1:${streamPort}/${info.id}`,
           videoId: info.id,
           title: info.title ?? 'Unknown Title',
           artist: info.uploader ?? info.channel ?? 'Unknown Artist',
           thumbnail: info.thumbnail ?? '',
           durationMs: Math.round((info.duration ?? 0) * 1000),
+        }
+
+        // Already fully downloaded — resolve immediately
+        if (streamCache.has(info.id)) {
+          return resolve(result)
+        }
+
+        // Format selection
+        const formats: any[] = (info.formats ?? [])
+          .filter((f: any) => {
+            if (!f.format_id) return false
+            if (f.acodec === 'none') return false
+            if (f.vcodec && f.vcodec !== 'none') return false
+            if (f.protocol?.includes('m3u8')) return false
+            if (f.protocol?.includes('dash')) return false
+            return true
+          })
+          .sort((a: any, b: any) => {
+            const aBr = a.abr ?? a.tbr ?? 0
+            const bBr = b.abr ?? b.tbr ?? 0
+            const aScore = (aBr >= 128 ? 10000 : aBr * 10) + (a.acodec?.startsWith('opus') ? 50 : 0)
+            const bScore = (bBr >= 128 ? 10000 : bBr * 10) + (b.acodec?.startsWith('opus') ? 50 : 0)
+            return bScore - aScore
+          })
+
+        const fmt = formats[0]
+        if (!fmt?.format_id) throw new Error('No compatible audio format found')
+
+        const ext = fmt.ext ?? 'm4a'
+        const contentType = ext === 'webm' ? 'audio/webm'
+          : ext === 'opus' ? 'audio/ogg'
+            : 'audio/mp4'
+        const sourceUrl = isUrl
+          ? query
+          : `https://www.youtube.com/watch?v=${info.id}`
+        const tmpPath = path.join(app.getPath('userData'), `sond3r-${info.id}.${ext}`)
+
+        // Disk hit from previous session
+        if (fs.existsSync(tmpPath)) {
+          const size = fs.statSync(tmpPath).size
+          if (size > 32 * 1024) {
+            streamCache.set(info.id, { tmpPath, contentType, sourceQuery: query })
+            return resolve(result)
+          }
+          // Partial/corrupt — delete and re-download
+          try { fs.unlinkSync(tmpPath) } catch { }
+        }
+
+        // Download fully before resolving — eliminates partial-file EOF bug
+        const dlArgs = [
+          sourceUrl,
+          '-f', fmt.format_id,
+          '--no-playlist', '--no-warnings',
+          '--no-part',
+          '-o', tmpPath,
+        ]
+        if (isYouTube) dlArgs.push('--extractor-args', 'youtube:player_client=tv_embedded')
+
+        console.log(`[yt:dl] starting: ${info.id} (${fmt.format_id} ${ext})`)
+        const dlProc = spawn(getYtDlpBin(), dlArgs)
+        dlProc.stderr.on('data', (d: Buffer) => console.error('[yt:dl]', d.toString().trimEnd()))
+
+        dlProc.on('error', reject)
+        dlProc.on('close', (code) => {
+          if (code !== 0) {
+            try { fs.unlinkSync(tmpPath) } catch { }
+            reject(new Error(`yt-dlp download exited ${code}`))
+            return
+          }
+          console.log(`[yt:dl] done: ${info.id}`)
+          streamCache.set(info.id, { tmpPath, contentType, sourceQuery: query })
+          resolve(result)
         })
       } catch (e: any) {
         reject(new Error(`resolve failed: ${e.message}`))
@@ -421,13 +399,13 @@ function registerIpcHandlers() {
   ipcMain.handle('yt:search:music', async (_event, query: string): Promise<any[]> => {
     return new Promise((resolve) => {
       const proc = spawn(getYtDlpBin(), [
-        `ytmsearch15:${query}`,
+        `ytsearch15:${query}`,
         '--dump-json',
         '--no-playlist',
         '--no-warnings',
         '--flat-playlist',
       ])
- 
+
       let out = ''
       proc.stdout.on('data', (d: Buffer) => { out += d.toString() })
       proc.stderr.on('data', (d: Buffer) => { console.error('[yt:search:music]', d.toString().trim()) })

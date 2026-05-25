@@ -442,7 +442,7 @@ export function BrowseView({
         <div style={{ display: 'flex', gap: 4, marginBottom: 14, borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
           {([
             { id: 'library' as SearchTab, label: 'Library' },
-            { id: 'yt' as SearchTab, label: 'Deep Exploration', icon: <YtIcon size={10} /> },
+            { id: 'yt' as SearchTab, label: 'Deep Exploration' },
           ]).map(({ id, label, icon }) => {
             const active = activeTab === id
             return (

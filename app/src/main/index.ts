@@ -21,7 +21,9 @@ function getYtDlpBin(): string {
   const updatable = path.join(app.getPath('userData'), `yt-dlp${ext}`)
   if (fs.existsSync(updatable)) return updatable
   if (app.isPackaged) return path.join(process.resourcesPath, 'bin', `yt-dlp${ext}`)
-  return path.join(app.getAppPath(), 'resources', 'bin', `yt-dlp${ext}`)
+  
+  const platformDir = process.platform === 'win32' ? 'win' : 'linux'
+  return path.join(app.getAppPath(), 'resources', 'bin', platformDir, `yt-dlp${ext}`)
 }
 
 async function updateYtDlp(): Promise<void> {

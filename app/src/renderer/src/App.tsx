@@ -20,7 +20,7 @@ import { type SessionEvent } from './kernel/Visualizer'
 import { useChromaSync } from './hooks/useChromaSync'
 import KernelDebugHUD from './kernel/HUD'
 import { useAgentContext } from './context/useAgentContext'
-import { ContextBar } from './views/ContextBar'
+// import { ContextBar } from './views/ContextBar'
 import { useYouTubeSearch } from './hooks/useYoutubeSearch'
 import { useSoundCloudSearch } from './hooks/useSoundcloudSearch'
 import { YouTubeProvider } from './hooks/useYoutubeContext'
@@ -440,15 +440,15 @@ function Main() {
               fallbackLoading={fallbackLoading}
               onFallbackSearch={handleMusicBrainzSearch}
               onFallbackClear={handleFallbackClear}
-              contextBar={
-                <ContextBar
-                  context={agentContext.context}
-                  loading={agentContext.loading}
-                  error={agentContext.error}
-                  onActivate={agentContext.activate}
-                  onClear={agentContext.clear}
-                />
-              }
+              // contextBar={
+              //   <ContextBar
+              //     context={agentContext.context}
+              //     loading={agentContext.loading}
+              //     error={agentContext.error}
+              //     onActivate={agentContext.activate}
+              //     onClear={agentContext.clear}
+              //   />
+              // }
               ytTracks={ytTracks}
             ytLoading={ytLoading}
               onYtSearch={ytSearch}

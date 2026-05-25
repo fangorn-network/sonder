@@ -17,7 +17,7 @@ export default function Nav() {
       <a href="/" className="nav-logo">SOND3R</a>
       <div className="nav-links">
         <a href={GITHUB_URL} target="_blank" rel="noopener noreferrer">GitHub</a>
-      <a href={DISCORD_URL} target="_blank" rel="noopener noreferrer">Discord</a>
+        <a href={DISCORD_URL} target="_blank" rel="noopener noreferrer">Discord</a>
         <a href="#support" className="nav-cta">Support us</a>
       </div>
     </nav>

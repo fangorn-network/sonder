@@ -69,6 +69,7 @@ export function PublishModal({ track, onClose, onPublished, fangorn, accentColor
                             trackId,
                             title:         title.trim(),
                             byArtist:      artist.trim(),
+                            albumName: '',
                             datePublished: year.trim() || '',
                             durationMs:    parseInt(durationMs) || 0,
                             contributors:  [],

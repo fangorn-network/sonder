@@ -70,7 +70,7 @@ export interface Track {
 
 export type PlayState = 'idle' | 'loading' | 'playing' | 'error'
 export type UploadStatus = 'idle' | 'uploading' | 'done' | 'error'
-export type ViewName = 'Discover' | 'Library' | 'Agent'
+export type ViewName = 'Discover' | 'Library' | 'Agent' | 'Analyze'
 export type UploadPanel = 'upload' | 'manage'
 
 export interface ManifestEntry {

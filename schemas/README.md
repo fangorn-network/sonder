@@ -1,17 +1,42 @@
+# Schemas
 
-track invariants schema
+This directory holds a colletion of schemas using in Sond3r and their deployment information.
 
-tony.test.invariants.track.2
-0xdd2ff7c1afae71333aac86f18316093fb017e4a47e7c6ef2b1c37b8ca62d53a6
-bafkreifgzp7kz6n3veprcr26ncye6xrvfzyaa6o4wdgw6gvxkqu4ukdubq
+## Track Invariants
 
-labels schema
-tony.test.tags.track.0
-0x43a911728ed43457b145f5c4c0d89145b7c8d352b2c6ba0d86fff1f005166935
-bafkreib2ecnzk44q2jmb7hjiska5vadumxsntcl4mvzf73z6ovguo6yw7a
+[test.sond3r.track.invariants.1](./TrackInvariantSchema.json)
 
-audio source schema
-tony.test.source.track.0
-0x8dfc44d7707713b38bc3fa714f1b256ce6899e8e3f1fc3bfa3d62d5cefad26e4
-bafkreiezhrltwfwdusvxl3pzfpzp42gb4eogsm4usgtstifwrfhg4igqme
----
+``` sh
+fangorn schema register test.sond3r.track.invariants.1
+```
+| Field     | Value                                                              |
+| --------- | ------------------------------------------------------------------ |
+| Schema Id | 0x4717598a3d3995ec7a8e9897d29cda00cb750f6e0e9f52f82aeb16365edc1ab6 |
+| CID       | bafkreibbmkbhr5uplqddaqxcvqmxszi4mqffbdw6r6yh37tfnqquyqr7uy        |
+
+## Track Taxonomy 
+
+[test.sond3r.track.taxonomy.0](./TrackTaxonomySchema.json)
+
+``` sh
+fangorn schema register test.sond3r.track.taxonomy.0
+```
+
+| Field     | Value                                                              |
+| --------- | ------------------------------------------------------------------ |
+| Schema Id | 0xa29392f3d443285ffd2e3b03f4d966fb47dac4f8a1691c3c5eb91859ec1f7f7a |
+| CID       | bafkreifdl45cicaub6iiozhme35lmcppbvvdkjmndcp7kv4qwhbgvziwzm        |
+
+
+## Track Audio Source 
+
+test.sond3r.track.source.0
+``` sh
+fangorn schema register test.sond3r.track.source.0
+```
+
+| Field     | Value                                                              |
+| --------- | ------------------------------------------------------------------ |
+| Schema Id | 0x052f754de156c31a8ef35e3a50a1eae452dd79abb3f32a76a4663ab182f261da |
+| CID       | bafkreigxkdfjh4akkijmdfue5rqhfwtyr5eueyxwf7yl3bqvmsfkidoxme        |
+

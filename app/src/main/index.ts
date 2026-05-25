@@ -335,6 +335,28 @@ function createWindow(): void {
     },
   })
 
+  // ── CSP: allow Privy's iframe signing bridge and all required origins ────────
+  mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [
+          [
+            "default-src 'self' http://127.0.0.1:*",
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+            "style-src 'self' 'unsafe-inline'",
+            "frame-src https://auth.privy.io https://*.privy.io https://verify.walletconnect.com https://verify.walletconnect.org",
+            "connect-src 'self' http://127.0.0.1:* https://*.privy.io https://*.alchemy.com wss://*.alchemy.com https://*.pinata.cloud https://api.spotify.com https://*.googleapis.com https://api.deezer.com",
+            "img-src 'self' data: blob: https:",
+            "media-src 'self' blob: http://127.0.0.1:*",
+            "font-src 'self' data: https:",
+            "worker-src 'self' blob:",
+          ].join('; ')
+        ],
+      },
+    })
+  })
+
   mainWindow.webContents.openDevTools({ mode: 'detach' })
   mainWindow.on('ready-to-show', () => mainWindow.show())
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -519,9 +541,17 @@ app.whenReady().then(async () => {
 
   if (!is.dev) await startRendererServer()
 
+  // ── Session setup — must happen before createWindow ──────────────────────
   const targetSession = session.fromPartition('persist:main')
-  const ytFilter = { urls: ['https://*.youtube.com/*', 'https://*.youtube-nocookie.com/*'] }
 
+  // Allow Privy's embedded wallet iframe to request media/clipboard permissions
+  targetSession.setPermissionRequestHandler((_webContents, permission, callback) => {
+    const allowed = ['media', 'notifications', 'clipboard-read', 'clipboard-sanitized-write']
+    callback(allowed.includes(permission))
+  })
+
+  // YouTube header injection
+  const ytFilter = { urls: ['https://*.youtube.com/*', 'https://*.youtube-nocookie.com/*'] }
   targetSession.webRequest.onBeforeSendHeaders(ytFilter, (details, callback) => {
     details.requestHeaders['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     details.requestHeaders['Cookie'] = 'PREF=f4=4000000&f6=40000000&volume=100;'

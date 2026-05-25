@@ -173,7 +173,7 @@ export function BrowseView({
   }, [search])
 
   const handleTabSwitch = (tab: SearchTab) => {
-    if (activeTab === 'yt' && tab !== 'yt') stopYt()
+    // if (activeTab === 'yt' && tab !== 'yt') stopYt()
     setActiveTab(tab)
     if (tab === 'mb' && onFallbackSearch && mbFetchedRef.current !== search.trim()) {
       mbFetchedRef.current = search.trim()

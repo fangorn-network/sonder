@@ -1,18 +1,9 @@
 {
-    "mbid": {
-        "@type": "string"
-    },
-    "title": {
-        "@type": "string"
-    },
-    "artist": {
-        "@type": "string"
-    },
-    "year": {
+    "schemaVersion": {
         "@type": "number"
     },
-    "energy": {
-        "@type": "number"
+    "trackId": {
+        "@type": "string"
     },
     "genres": {
         "@type": "array",

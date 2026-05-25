@@ -27,6 +27,10 @@ import { YouTubeProvider } from './hooks/useYoutubeContext'
 import { usePlaybackRouter } from './hooks/usePlaybackRouter'
 import { useAutoplay } from './hooks/useAutoplay'
 import { useMediaSearch } from './hooks/useMediaSearch'
+import { ArtistNeighborhoodView } from './views/ArtistNeighborhoodView'
+
+// ─── CHANGE: Add 'Analyze' to ViewName in ./types.ts ─────────────────────────
+// export type ViewName = 'Discover' | 'Agent' | 'Analyze'
 
 const SNAPSHOT_HISTORY_DEPTH = 5
 const SCROLL_THRESHOLD = 10
@@ -77,12 +81,33 @@ function Main() {
   const [entropy, setEntropy] = useState(0.2)
   const kernel = useSessionKernel({ entropy })
 
-  // for pre-populating the browseview on load
   const [genreWeights, setGenreWeights] = useState<Record<string, number>>({})
 
   const [showConnectors, setShowConnectors] = useState(false)
   const [view, setView] = useState<ViewName>('Discover')
   const [nowPlaying, setNowPlaying] = useState<null | 'player' | { track: Track; color: string }>(null)
+
+  // ─── Analyze view: pre-populated query passed from NowPlaying ─────────────
+  // When the user taps "Analyze" on a track in NowPlaying, we:
+  //   1. Close NowPlaying
+  //   2. Switch to the Analyze tab
+  //   3. Pass the track query string as initialQuery — ArtistNeighborhoodView
+  //      auto-fires its search when it receives this.
+  const [analyzeQuery, setAnalyzeQuery] = useState<string | null>(null)
+
+  const handleAnalyzeTrack = useCallback((track: Track) => {
+    const q = [track.artist, track.title].filter(Boolean).join(' – ')
+    setAnalyzeQuery(q)
+    setView('Analyze')
+    setShowConnectors(false)
+    setNowPlaying(null)
+  }, [])
+
+  // Clear analyzeQuery once ArtistNeighborhoodView has consumed it,
+  // so navigating away and back doesn't re-trigger the search.
+  const handleAnalyzeQueryConsumed = useCallback(() => {
+    setAnalyzeQuery(null)
+  }, [])
 
   const [genreFilter, setGenreFilter] = useState('all')
   const [moodFilter, setMoodFilter] = useState('all')
@@ -95,10 +120,7 @@ function Main() {
     chromaReady, seeding, retryConnect,
   } = useChroma({ genreFilter, moodFilter, contextFilter })
 
-  // const { ytTracks, ytLoading, search: ytSearch, clear: ytClear } = useYouTubeSearch()
-  // const { scTracks, scLoading, search: scSearch, clear: scClear } = useSoundCloudSearch()
-
-  const { tracks: ytTracks, loading: ytLoading, search: ytSearch, clear: ytClear } = useMediaSearch();
+  const { tracks: ytTracks, loading: ytLoading, search: ytSearch, clear: ytClear } = useMediaSearch()
 
   // ─── Agent context ──────────────────────────────────────────────────────────
 
@@ -205,13 +227,10 @@ function Main() {
       if (type === 'play') {
         kernel.onTrackPlay(embedding, meta)
         pushPlay(label)
-        // accumulate genre weights for prepopulating browseview
         if (meta.genres.length > 0) {
           setGenreWeights(prev => {
             const next = { ...prev }
-            for (const genre of meta.genres) {
-              next[genre] = (next[genre] ?? 0) + 1
-            }
+            for (const genre of meta.genres) next[genre] = (next[genre] ?? 0) + 1
             return next
           })
         }
@@ -232,10 +251,8 @@ function Main() {
   handleSignalRef.current = handleSignal
 
   const ytTracksRef = useRef(ytTracks)
-  // const scTracksRef = useRef(scTracks)
   const fallbackTracksRef = useRef(fallbackTracks)
   useEffect(() => { ytTracksRef.current = ytTracks }, [ytTracks])
-  // useEffect(() => { scTracksRef.current = scTracks }, [scTracks])
   useEffect(() => { fallbackTracksRef.current = fallbackTracks }, [fallbackTracks])
 
   // ─── Playback router ─────────────────────────────────────────────────────────
@@ -245,7 +262,6 @@ function Main() {
       const skipped =
         filteredTracksRef.current.find(t => t.id === trackId) ??
         ytTracksRef.current.find(t => t.id === trackId) ??
-        // scTracksRef.current.find(t => t.id === trackId) ??
         fallbackTracksRef.current.find(t => t.id === trackId)
       if (skipped) handleSignalRef.current({ type: 'skip', track: skipped, weight: 1.0 })
     }, []),
@@ -270,13 +286,13 @@ function Main() {
   }, [agentContext.context])
 
   // ─── Startup prefetch ────────────────────────────────────────────────────────
+
   const startupFiredRef = useRef(false)
 
   const kernelTopGenres = Object.entries(genreWeights)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 6)
     .map(([genre]) => genre)
-
 
   useEffect(() => {
     if (!chromaReady) return
@@ -295,48 +311,25 @@ function Main() {
   function buildStartupQuery(kernelTopGenres?: string[]): string {
     const slot = getTimeSlot()
     const mood = pick(slot.moods)
-    // Bias toward kernel genres if the Markov state has signal; fall back to time-of-day pool
     const genrePool = kernelTopGenres && kernelTopGenres.length > 0
-      ? kernelTopGenres.slice(0, 4)   // top 4 kernel genres only — avoid noisy tail
+      ? kernelTopGenres.slice(0, 4)
       : slot.genres
     const genre = pick(genrePool)
     return `${mood} ${genre}`
   }
 
-
-  interface TimeSlot {
-    moods: string[]
-    genres: string[]
-  }
+  interface TimeSlot { moods: string[]; genres: string[] }
 
   function getTimeSlot(): TimeSlot {
     const h = new Date().getHours()
-    if (h >= 5 && h < 11) return {
-      moods: ['energetic', 'uplifting', 'focused', 'bright'],
-      genres: ['indie pop', 'math rock', 'post-rock', 'funk', 'electronic'],
-    }
-    if (h >= 11 && h < 14) return {
-      moods: ['driving', 'confident', 'punchy'],
-      genres: ['alternative', 'rock', 'electronic', 'hip hop'],
-    }
-    if (h >= 14 && h < 18) return {
-      moods: ['focused', 'deep', 'hypnotic', 'complex'],
-      genres: ['post-rock', 'math rock', 'prog', 'industrial', 'ambient'],
-    }
-    if (h >= 18 && h < 22) return {
-      moods: ['chill', 'warm', 'melodic', 'emotional'],
-      genres: ['shoegaze', 'dream pop', 'indie', 'post-hardcore', 'chillwave'],
-    }
-    return {
-      moods: ['dark', 'introspective', 'atmospheric', 'melancholic'],
-      genres: ['darkwave', 'ambient', 'post-punk', 'industrial', 'doom'],
-    }
+    if (h >= 5 && h < 11) return { moods: ['energetic', 'uplifting', 'focused', 'bright'], genres: ['indie pop', 'math rock', 'post-rock', 'funk', 'electronic'] }
+    if (h >= 11 && h < 14) return { moods: ['driving', 'confident', 'punchy'], genres: ['alternative', 'rock', 'electronic', 'hip hop'] }
+    if (h >= 14 && h < 18) return { moods: ['focused', 'deep', 'hypnotic', 'complex'], genres: ['post-rock', 'math rock', 'prog', 'industrial', 'ambient'] }
+    if (h >= 18 && h < 22) return { moods: ['chill', 'warm', 'melodic', 'emotional'], genres: ['shoegaze', 'dream pop', 'indie', 'post-hardcore', 'chillwave'] }
+    return { moods: ['dark', 'introspective', 'atmospheric', 'melancholic'], genres: ['darkwave', 'ambient', 'post-punk', 'industrial', 'doom'] }
   }
 
-  function pick<T>(arr: T[]): T {
-    return arr[Math.floor(Math.random() * arr.length)]
-  }
-
+  function pick<T>(arr: T[]): T { return arr[Math.floor(Math.random() * arr.length)] }
 
   // ─── UI callbacks ────────────────────────────────────────────────────────────
 
@@ -377,6 +370,12 @@ function Main() {
 
   const nowPlayingOpen = nowPlaying !== null
 
+  // ─── Nav tabs ─────────────────────────────────────────────────────────────────
+  // 'Analyze' sits after 'Agent'. It's a tool tab — distinct in purpose from
+  // Discover (listener) and Agent (conversational). The listener entry point
+  // is the "Analyze" button on the NowPlaying overlay (see onAnalyze below).
+  const NAV_TABS: ViewName[] = ['Discover', 'Agent', 'Analyze']
+
   return (
     <PlayerProvider tracks={tracks}>
       <div className="app">
@@ -385,7 +384,7 @@ function Main() {
           <div className="header-brand">
             <span className="brand-name">SOND3R</span>
             <nav style={{ display: 'flex', gap: '16px', marginLeft: '24px' }}>
-              {(['Discover', 'Agent'] as ViewName[]).map(v => (
+              {NAV_TABS.map(v => (
                 <button
                   key={v}
                   onClick={() => { setView(v); setShowConnectors(false) }}
@@ -405,6 +404,7 @@ function Main() {
 
         <main className="main">
           {showConnectors && <ConnectorsView />}
+
           {!showConnectors && view === 'Discover' && (
             <BrowseView
               tracks={tracks}
@@ -450,18 +450,25 @@ function Main() {
                 />
               }
               ytTracks={ytTracks}
-              ytLoading={ytLoading}
+            ytLoading={ytLoading}
               onYtSearch={ytSearch}
               onYtClear={ytClear}
-              // scTracks={scTracks}
-              // scLoading={scLoading}
-              // onScSearch={scSearch}
-              // onScClear={scClear}
               playbackState={playbackState}
               onPlay={play}
             />
           )}
+
           {!showConnectors && view === 'Agent' && <AgentView />}
+
+          {/* ── Analyze view ────────────────────────────────────────────────── */}
+          {/* Mounted/unmounted with the tab — state resets on each visit unless
+              initialQuery is passed, in which case it auto-fires a fresh search. */}
+          {!showConnectors && view === 'Analyze' && (
+            <ArtistNeighborhoodView
+              initialQuery={analyzeQuery ?? undefined}
+              onQueryConsumed={handleAnalyzeQueryConsumed}
+            />
+          )}
         </main>
 
         <PlayerBar
@@ -482,6 +489,8 @@ function Main() {
             onFilter={(type, value) => { handleFilter(type, value); setNowPlaying(null) }}
             onCallAgent={handleFindSimilar}
             onTrackSelect={(track, color) => setNowPlaying({ track, color: color ?? '' })}
+            // ── New: opens Analyze tab pre-loaded with this track ──────────
+            onAnalyze={handleAnalyzeTrack}
           />,
           document.body
         )}

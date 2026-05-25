@@ -51,7 +51,7 @@ export interface YtResolveResult {
 
 // ─── Stream cache ─────────────────────────────────────────────────────────────
 interface StreamEntry {
-  tmpPath:     string
+  tmpPath: string
   contentType: string
   sourceQuery: string
 }
@@ -250,10 +250,10 @@ function startPython() {
       path.join(root, 'server'),
       [
         '--graph-api-key', apiKey,
-        '-s', 'tony.test.invariants.track.2=0xdd2ff7c1afae71333aac86f18316093fb017e4a47e7c6ef2b1c37b8ca62d53a6',
-        '-s', 'tony.test.tags.track.0=0x43a911728ed43457b145f5c4c0d89145b7c8d352b2c6ba0d86fff1f005166935',
-        '-s', 'tony.test.source.track.0=0x8dfc44d7707713b38bc3fa714f1b256ce6899e8e3f1fc3bfa3d62d5cefad26e4',
-        '--primary', 'tony.test.invariants.track.2',
+        '-s', 'test.sond3r.track.invariants.1=0x4717598a3d3995ec7a8e9897d29cda00cb750f6e0e9f52f82aeb16365edc1ab6',
+        '-s', 'test.sond3r.track.taxonomy.0=0xa29392f3d443285ffd2e3b03f4d966fb47dac4f8a1691c3c5eb91859ec1f7f7a',
+        '-s', 'test.sond3r.track.source.0=0x052f754de156c31a8ef35e3a50a1eae452dd79abb3f32a76a4663ab182f261da',
+        '--primary', 'test.sond3r.track.invariants.1',
       ],
       root,
     ]
@@ -262,10 +262,10 @@ function startPython() {
       [
         path.join(root, 'vectordb/server.py'),
         '--graph-api-key', apiKey,
-        '-s', 'tony.test.invariants.track.2=0xdd2ff7c1afae71333aac86f18316093fb017e4a47e7c6ef2b1c37b8ca62d53a6',
-        '-s', 'tony.test.tags.track.0=0x43a911728ed43457b145f5c4c0d89145b7c8d352b2c6ba0d86fff1f005166935',
-        '-s', 'tony.test.source.track.0=0x8dfc44d7707713b38bc3fa714f1b256ce6899e8e3f1fc3bfa3d62d5cefad26e4',
-        '--primary', 'tony.test.invariants.track.2',
+        '-s', 'test.sond3r.track.invariants.1=0x4717598a3d3995ec7a8e9897d29cda00cb750f6e0e9f52f82aeb16365edc1ab6',
+        '-s', 'test.sond3r.track.taxonomy.0=0xa29392f3d443285ffd2e3b03f4d966fb47dac4f8a1691c3c5eb91859ec1f7f7a',
+        '-s', 'test.sond3r.track.source.0=0x052f754de156c31a8ef35e3a50a1eae452dd79abb3f32a76a4663ab182f261da',
+        '--primary', 'test.sond3r.track.invariants.1',
       ],
       path.join(root, 'vectordb'),
     ]
@@ -501,10 +501,10 @@ async function bootstrap() {
 
 // ─── App lifecycle ────────────────────────────────────────────────────────────
 
-app.commandLine.appendSwitch('enable-unsafe-swiftshader')
-app.commandLine.appendSwitch('use-gl', 'swiftshader')
-app.commandLine.appendSwitch('audio-output-rate', '48000')
-app.commandLine.appendSwitch('disable-audio-output-resampler')
+// app.commandLine.appendSwitch('enable-unsafe-swiftshader')
+// app.commandLine.appendSwitch('use-gl', 'swiftshader')
+// app.commandLine.appendSwitch('audio-output-rate', '48000')
+// app.commandLine.appendSwitch('disable-audio-output-resampler')
 
 app.whenReady().then(async () => {
   electronApp.setAppUserModelId('com.electron')

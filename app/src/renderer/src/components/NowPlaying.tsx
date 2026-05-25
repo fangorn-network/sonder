@@ -160,6 +160,12 @@ interface NowPlayingProps {
     onTrackSelect?: (track: Track, color?: string) => void
     onPlay?:        (track: Track) => Promise<void>
     playbackState?: PlaybackState
+    /**
+     * Called when the user taps the Analyze button.
+     * App closes NowPlaying, switches to the Analyze tab, and pre-populates
+     * the neighborhood search with this track.
+     */
+    onAnalyze?:     (track: Track) => void
 }
 
 export function NowPlaying({
@@ -169,6 +175,7 @@ export function NowPlaying({
     onTrackSelect,
     onPlay,
     playbackState,
+    onAnalyze,
 }: NowPlayingProps) {
     const {
         currentTitle:  ytTitle,
@@ -184,7 +191,6 @@ export function NowPlaying({
 
     const { fangorn, address } = useFangorn()
 
-    // focusTrack — propTrack preserves youtubeVideoId for the router
     const focusTrack: Track | null = propTrack ?? (
         ytTitle ? {
             id: '', trackId: '', owner: '', manifestCid: '',
@@ -237,7 +243,6 @@ export function NowPlaying({
         : []
     const tagged = allTags.length > 0
 
-    // Album art — YT thumb first, then iTunes
     useEffect(() => {
         if (ytThumb) { setAlbumArt(ytThumb); return }
     }, [ytThumb])
@@ -256,12 +261,10 @@ export function NowPlaying({
         if (!ytThumb) go()
     }, [focusTrack?.title, focusTrack?.artist, ytThumb])
 
-    // Progress
     useEffect(() => {
         setLiveProgressMs(ytProgressMs)
     }, [ytProgressMs])
 
-    // Similar tracks
     useEffect(() => {
         if (!focusTrack) return
         setSimilarLoading(true)
@@ -276,7 +279,6 @@ export function NowPlaying({
         })().finally(() => setSimilarLoading(false))
     }, [focusTrack?.id, focusTrack?.title])
 
-    // Artist tracks
     useEffect(() => {
         if (!focusTrack?.artist) return
         setArtistLoading(true)
@@ -286,7 +288,6 @@ export function NowPlaying({
             .finally(() => setArtistLoading(false))
     }, [focusTrack?.artist, focusTrack?.id])
 
-    // Keyboard + scroll lock
     useEffect(() => {
         const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !showTagModal) onCollapse() }
         window.addEventListener('keydown', onKey)
@@ -429,6 +430,55 @@ export function NowPlaying({
                             <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M16 6h2v12h-2zM6 18l8.5-6L6 6v12z" /></svg>
                         </button>
                     </div>
+
+                    {/* ── Analyze button ───────────────────────────────────────────
+                        Visible only when the parent has wired up onAnalyze.
+                        Sits below the playback controls as a tertiary action —
+                        distinct from the listening flow, clearly a navigation gesture. */}
+                    {onAnalyze && focusTrack && (
+                        <button
+                            onClick={() => onAnalyze(focusTrack)}
+                            title="View where this track sits in the embedding space"
+                            style={{
+                                display:        'flex',
+                                alignItems:     'center',
+                                gap:            6,
+                                marginTop:      16,
+                                padding:        '6px 14px',
+                                background:     'rgba(0,255,231,0.07)',
+                                border:         '1px solid rgba(0,255,231,0.2)',
+                                borderRadius:   0,
+                                color:          '#00ffe7',
+                                fontSize:       11,
+                                fontFamily:     'var(--font-mono, "DM Mono", monospace)',
+                                letterSpacing:  '0.07em',
+                                textTransform:  'uppercase',
+                                cursor:         'pointer',
+                                alignSelf:      'center',
+                                transition:     'background 0.15s, border-color 0.15s',
+                            }}
+                            onMouseEnter={e => {
+                                (e.currentTarget as HTMLButtonElement).style.background    = 'rgba(0,255,231,0.13)'
+                                ;(e.currentTarget as HTMLButtonElement).style.borderColor  = 'rgba(0,255,231,0.4)'
+                            }}
+                            onMouseLeave={e => {
+                                (e.currentTarget as HTMLButtonElement).style.background    = 'rgba(0,255,231,0.07)'
+                                ;(e.currentTarget as HTMLButtonElement).style.borderColor  = 'rgba(0,255,231,0.2)'
+                            }}
+                        >
+                            {/* Scatter-plot icon */}
+                            <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor">
+                                <circle cx="3"  cy="3"  r="1.4"/>
+                                <circle cx="9"  cy="2"  r="1.4"/>
+                                <circle cx="14" cy="5"  r="1.4"/>
+                                <circle cx="5"  cy="9"  r="1.4"/>
+                                <circle cx="12" cy="10" r="1.4"/>
+                                <circle cx="7"  cy="13" r="1.4"/>
+                                <circle cx="2"  cy="13" r="1.4"/>
+                            </svg>
+                            Analyze in embedding space
+                        </button>
+                    )}
                 </div>
 
                 {/* ══ RIGHT COL ══ */}

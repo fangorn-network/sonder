@@ -3,6 +3,7 @@ name: Build
 on:
   push:
     tags: ['v*']
+    branches: ['executables']
   workflow_dispatch:
 
 jobs:

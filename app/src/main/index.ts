@@ -337,28 +337,6 @@ function createWindow(): void {
     },
   })
 
-  // ── CSP: allow Privy's iframe signing bridge and all required origins ────────
-  mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
-    callback({
-      responseHeaders: {
-        ...details.responseHeaders,
-        'Content-Security-Policy': [
-          [
-            "default-src 'self' http://127.0.0.1:*",
-            "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
-            "style-src 'self' 'unsafe-inline'",
-            "frame-src https://auth.privy.io https://*.privy.io https://verify.walletconnect.com https://verify.walletconnect.org",
-            "connect-src 'self' http://127.0.0.1:* https://*.privy.io https://*.alchemy.com wss://*.alchemy.com https://*.pinata.cloud https://api.spotify.com https://*.googleapis.com https://api.deezer.com",
-            "img-src 'self' data: blob: https:",
-            "media-src 'self' blob: http://127.0.0.1:*",
-            "font-src 'self' data: https:",
-            "worker-src 'self' blob:",
-          ].join('; ')
-        ],
-      },
-    })
-  })
-
   mainWindow.webContents.openDevTools({ mode: 'detach' })
   mainWindow.on('ready-to-show', () => mainWindow.show())
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -545,12 +523,6 @@ app.whenReady().then(async () => {
 
   // ── Session setup — must happen before createWindow ──────────────────────
   const targetSession = session.fromPartition('persist:main')
-
-  // Allow Privy's embedded wallet iframe to request media/clipboard permissions
-  targetSession.setPermissionRequestHandler((_webContents, permission, callback) => {
-    const allowed = ['media', 'notifications', 'clipboard-read', 'clipboard-sanitized-write']
-    callback(allowed.includes(permission))
-  })
 
   // YouTube header injection
   const ytFilter = { urls: ['https://*.youtube.com/*', 'https://*.youtube-nocookie.com/*'] }

@@ -386,6 +386,16 @@ function registerIpcHandlers() {
     return text
   })
 
+  // chroma db
+  ipcMain.handle('chroma:api', async (_event, { path, method, body }) => {
+    const res = await fetch(`http://127.0.0.1:8080${path}`, {
+      method: method ?? 'GET',
+      headers: { 'Content-Type': 'application/json' },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    })
+    return { status: res.status, body: await res.text() }
+  })
+
   // ── yt-dlp ──────────────────────────────────────────────────────────────────
 
   ipcMain.handle('yt:resolve', async (_event, query: string): Promise<YtResolveResult> => {

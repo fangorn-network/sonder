@@ -59,42 +59,72 @@ function resolveFilter(f: TagFilter): string[] {
   return f === 'all' ? [] : [f]
 }
 
-// ── api ───────────────────────────────────────────────────────────────────────
+// api
+// Thin IPC wrapper
+async function chromaFetch(path: string, method = 'GET', body?: object): Promise<any> {
+  const { status, body: text } = await (window as any).electron.ipcRenderer.invoke('chroma:api', {
+    path, method, body,
+  })
+  if (status >= 400) throw new Error(`Chroma error: ${status}`)
+  return JSON.parse(text)
+}
 
 async function chromaHealth(): Promise<boolean> {
   try {
-    const resp = await fetch(`${CHROMA_URL}/browse?limit=1`, {
-      signal: AbortSignal.timeout(3000),
-    })
-    return resp.ok
-  } catch {
-    return false
-  }
+    await chromaFetch('/browse?limit=1')
+    return true
+  } catch { return false }
 }
 
 async function chromaBrowse(nResults: number, offset: number): Promise<any[]> {
-  const params = new URLSearchParams({ limit: String(nResults), offset: String(offset) })
-  const resp = await fetch(`${CHROMA_URL}/browse?${params}`)
-  if (!resp.ok) throw new Error(`Chroma error: ${resp.status}`)
-  return (await resp.json()).results ?? []
+  const data = await chromaFetch(`/browse?limit=${nResults}&offset=${offset}`)
+  return data.results ?? []
 }
 
 async function chromaSearch(query: string, nResults: number, offset: number): Promise<any[]> {
-  const params = new URLSearchParams({ q: query, n_results: String(nResults + offset) })
-  const resp = await fetch(`${CHROMA_URL}/search?${params}`)
-  if (!resp.ok) throw new Error(`Chroma error: ${resp.status}`)
-  return ((await resp.json()).results ?? []).slice(offset)
+  const data = await chromaFetch(`/search?q=${encodeURIComponent(query)}&n_results=${nResults + offset}`)
+  return (data.results ?? []).slice(offset)
 }
 
 async function chromaSearchVector(embedding: number[], nResults = 100): Promise<any[]> {
-  const resp = await fetch(`${CHROMA_URL}/search/vector`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ embedding, n_results: nResults }),
-  })
-  if (!resp.ok) throw new Error(`Chroma vector search error: ${resp.status}`)
-  return (await resp.json()).results ?? []
+  const data = await chromaFetch('/search/vector', 'POST', { embedding, n_results: nResults })
+  return data.results ?? []
 }
+
+// async function chromaHealth(): Promise<boolean> {
+//   try {
+//     const resp = await fetch(`${CHROMA_URL}/browse?limit=1`, {
+//       signal: AbortSignal.timeout(3000),
+//     })
+//     return resp.ok
+//   } catch {
+//     return false
+//   }
+// }
+
+// async function chromaBrowse(nResults: number, offset: number): Promise<any[]> {
+//   const params = new URLSearchParams({ limit: String(nResults), offset: String(offset) })
+//   const resp = await fetch(`${CHROMA_URL}/browse?${params}`)
+//   if (!resp.ok) throw new Error(`Chroma error: ${resp.status}`)
+//   return (await resp.json()).results ?? []
+// }
+
+// async function chromaSearch(query: string, nResults: number, offset: number): Promise<any[]> {
+//   const params = new URLSearchParams({ q: query, n_results: String(nResults + offset) })
+//   const resp = await fetch(`${CHROMA_URL}/search?${params}`)
+//   if (!resp.ok) throw new Error(`Chroma error: ${resp.status}`)
+//   return ((await resp.json()).results ?? []).slice(offset)
+// }
+
+// async function chromaSearchVector(embedding: number[], nResults = 100): Promise<any[]> {
+//   const resp = await fetch(`${CHROMA_URL}/search/vector`, {
+//     method: 'POST',
+//     headers: { 'Content-Type': 'application/json' },
+//     body: JSON.stringify({ embedding, n_results: nResults }),
+//   })
+//   if (!resp.ok) throw new Error(`Chroma vector search error: ${resp.status}`)
+//   return (await resp.json()).results ?? []
+// }
 
 // ── hook ──────────────────────────────────────────────────────────────────────
 

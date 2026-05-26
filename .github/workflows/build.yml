@@ -94,7 +94,9 @@ jobs:
 
       - name: Install dependencies
         working-directory: app
-        run: pnpm install
+        run: |
+            pnpm install --ignore-scripts
+            pnpm exec electron-builder install-app-deps
 
       - name: Download server binary
         uses: actions/download-artifact@v4

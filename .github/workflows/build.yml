@@ -1,0 +1,132 @@
+name: Build
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  build-python:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+            ext: ''
+          - os: windows-latest
+            platform: win
+            ext: '.exe'
+          - os: macos-latest
+            platform: mac
+            ext: ''
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python dependencies
+        run: |
+          cd app/vectordb
+          pip install -r requirements.txt
+          pip install pyinstaller certifi
+
+      - name: Build server binary (Linux/macOS)
+        if: matrix.platform != 'win'
+        run: |
+          cd app/vectordb
+          CERT_PATH=$(python -c "import certifi; print(certifi.where())")
+          pyinstaller --onefile --name server \
+            --add-data "$CERT_PATH:certifi" \
+            $(pip list --format=freeze | cut -d= -f1 | xargs -I{} echo "--collect-submodules {}") \
+            server.py
+
+      - name: Build server binary (Windows)
+        if: matrix.platform == 'win'
+        shell: pwsh
+        run: |
+          cd app/vectordb
+          $certPath = python -c "import certifi; print(certifi.where())"
+          $pyiArgs = @("--onefile", "--name", "server", "--add-data", "$certPath;certifi")
+          pip list --format=freeze | ForEach-Object { $_.Split('=')[0] } | ForEach-Object { $pyiArgs += "--collect-submodules"; $pyiArgs += $_ }
+          $pyiArgs += "server.py"
+          & pyinstaller @pyiArgs
+
+      - name: Upload server binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-${{ matrix.platform }}
+          path: app/vectordb/dist/server${{ matrix.ext }}
+
+  build-electron:
+    needs: build-python
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+            build_cmd: build:linux
+            ytdlp_asset: yt-dlp
+          - os: windows-latest
+            platform: win
+            build_cmd: build:win
+            ytdlp_asset: yt-dlp.exe
+          - os: macos-latest
+            platform: mac
+            build_cmd: build:mac
+            ytdlp_asset: yt-dlp_macos
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+          cache-dependency-path: app/pnpm-lock.yaml
+
+      - name: Install dependencies
+        working-directory: app
+        run: pnpm install
+
+      - name: Download server binary
+        uses: actions/download-artifact@v4
+        with:
+          name: server-${{ matrix.platform }}
+          path: app/vectordb/dist/${{ matrix.platform }}/
+
+      - name: Make server binary executable (Linux/macOS)
+        if: matrix.platform != 'win'
+        run: chmod +x app/vectordb/dist/${{ matrix.platform }}/server
+
+      - name: Download yt-dlp
+        run: |
+          mkdir -p app/resources/bin/${{ matrix.platform }}
+          curl -L -o app/resources/bin/${{ matrix.platform }}/${{ matrix.ytdlp_asset }} \
+            https://github.com/yt-dlp/yt-dlp/releases/latest/download/${{ matrix.ytdlp_asset }}
+        shell: bash
+
+      - name: Make yt-dlp executable (Linux/macOS)
+        if: matrix.platform != 'win'
+        run: chmod +x app/resources/bin/${{ matrix.platform }}/${{ matrix.ytdlp_asset }}
+
+      - name: Build Electron app
+        working-directory: app
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: pnpm run ${{ matrix.build_cmd }}
+
+      - name: Upload Electron build
+        uses: actions/upload-artifact@v4
+        with:
+          name: sond3r-${{ matrix.platform }}
+          path: |
+            app/dist/*.exe
+            app/dist/*.dmg
+            app/dist/*.AppImage
+            app/dist/*.deb
+            app/dist/*.snap

@@ -39,6 +39,7 @@ yt-dlp --update-to nightly
 which ffmpeg || sudo apt install ffmpeg -y
 ```
 
+
 Windows
 
 ``` sh
@@ -86,8 +87,7 @@ $ pnpm dev
 ``` 
 
 ### Chroma DB
-Chroma DB uses python which requries a binary to be built
-
+Chroma DB uses python which requires a binary to be built. 
 
 #### Linux
 Navigate to `vectordb` and activate your venv
@@ -113,16 +113,22 @@ pyinstaller --onefile --name server \
 
 #### Windows
 
-Windows operates slightly differently.
+Windows operates slightly differently. We recommend that you use [conda]() for a hassle-free build experience.
 
 ```sh
-python -m venv venv
-.\venv\Scripts\activate
+conda create -n vectordb-build python=3.11 -y
+conda activate vectordb-build
 # install reqs
 pip install -r requirements.txt
 pip install pyinstaller
-pyinstaller --onefile --name server $(pip list --format=freeze | cut -d= -f1 | xargs -I{} echo "--collect-submodules {}") server.py
+$certPath = python -c "import certifi; print(certifi.where())"
+$pyiArgs = @("--onefile", "--name", "server", "--add-data", "$certPath;certifi")
+pip list --format=freeze | ForEach-Object { $_.Split('=')[0] } | ForEach-Object { $pyiArgs += "--collect-submodules"; $pyiArgs += $_ }
+$pyiArgs += "server.py" 
+& pyinstaller @pyiArgs
 ```
+
+Move the file to `vectordb/dist/win` for windows, `vectordb/dist/linux`, and so on
 
 ### Build
 

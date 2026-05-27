@@ -95,7 +95,6 @@ jobs:
       - name: Install dependencies
         working-directory: app
         run: |
-          echo "node-linker=hoisted" > .npmrc
           pnpm install --ignore-scripts
           pnpm exec electron-builder install-app-deps
 

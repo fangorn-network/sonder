@@ -3,25 +3,8 @@ import { defineConfig } from 'electron-vite'
 import react from '@vitejs/plugin-react'
 
 export default defineConfig({
-  main: {
-    build: {
-      externalizeDeps: {
-        exclude: [
-          '@electron-toolkit/utils',
-          'mime-types',
-          'dotenv',
-          'mime',
-          "@fangorn-network/sdk*",
-          "@fangorn-network/fetch*"
-        ]
-      }
-    }
-  },
-  preload: {
-    build: {
-      externalizeDeps: true
-    }
-  },
+  main: {},
+  preload: {},
   renderer: {
     resolve: {
       alias: {

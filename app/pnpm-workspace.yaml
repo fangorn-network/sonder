@@ -1,1 +1,2 @@
 shamefullyHoist: true
+nodeLinker: hoisted

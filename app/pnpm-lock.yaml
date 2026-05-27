@@ -15,8 +15,8 @@ importers:
         specifier: ^4.0.0
         version: 4.0.0(electron@39.8.9)
       '@fangorn-network/agent':
-        specifier: ^0.0.3
-        version: 0.0.3(@cfworker/json-schema@4.1.1)(@types/snarkjs@0.7.9)(bufferutil@4.1.0)(encoding@0.1.13)(express@5.2.1)(graphql@16.13.2)(react-dom@19.2.5(react@19.2.5))(react-native@0.85.3(@babel/core@7.29.0)(@types/react@19.2.14)(bufferutil@4.1.0)(react@19.2.5)(utf-8-validate@5.0.10))(react@19.2.5)(typescript@5.9.3)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.1.0)(utf-8-validate@5.0.10))(zod-to-json-schema@3.25.2(zod@4.4.3))(zod@4.4.3)
+        specifier: ^0.0.4
+        version: 0.0.4(@cfworker/json-schema@4.1.1)(@types/snarkjs@0.7.9)(bufferutil@4.1.0)(encoding@0.1.13)(express@5.2.1)(graphql@16.13.2)(react-dom@19.2.5(react@19.2.5))(react-native@0.85.3(@babel/core@7.29.0)(@types/react@19.2.14)(bufferutil@4.1.0)(react@19.2.5)(utf-8-validate@5.0.10))(react@19.2.5)(typescript@5.9.3)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.1.0)(utf-8-validate@5.0.10))(zod-to-json-schema@3.25.2(zod@4.4.3))(zod@4.4.3)
       '@fangorn-network/agent-tools':
         specifier: 0.0.2
         version: 0.0.2(@cfworker/json-schema@4.1.1)(@types/snarkjs@0.7.9)(bufferutil@4.1.0)(encoding@0.1.13)(express@5.2.1)(graphql@16.13.2)(react-dom@19.2.5(react@19.2.5))(react-native@0.85.3(@babel/core@7.29.0)(@types/react@19.2.14)(bufferutil@4.1.0)(react@19.2.5)(utf-8-validate@5.0.10))(react@19.2.5)(typescript@5.9.3)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.1.0)(utf-8-validate@5.0.10))(zod-to-json-schema@3.25.2(zod@4.4.3))
@@ -24,11 +24,11 @@ importers:
         specifier: 0.0.3
         version: 0.0.3(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.1.0)(utf-8-validate@5.0.10))(zod@4.4.3)
       '@fangorn-network/fetch':
-        specifier: 2026.04.27
+        specifier: 2026.4.27
         version: 2026.4.27(@types/snarkjs@0.7.9)(bufferutil@4.1.0)(encoding@0.1.13)(express@5.2.1)(graphql@16.13.2)(react-dom@19.2.5(react@19.2.5))(react-native@0.85.3(@babel/core@7.29.0)(@types/react@19.2.14)(bufferutil@4.1.0)(react@19.2.5)(utf-8-validate@5.0.10))(react@19.2.5)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.4.3)
       '@fangorn-network/sdk':
-        specifier: 2026.05.11.0
-        version: 2026.5.1-1.0(@types/snarkjs@0.7.9)(bufferutil@4.1.0)(encoding@0.1.13)(express@5.2.1)(graphql@16.13.2)(react-dom@19.2.5(react@19.2.5))(react-native@0.85.3(@babel/core@7.29.0)(@types/react@19.2.14)(bufferutil@4.1.0)(react@19.2.5)(utf-8-validate@5.0.10))(react@19.2.5)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.4.3)
+        specifier: 2026.5.11
+        version: 2026.5.11(@types/snarkjs@0.7.9)(bufferutil@4.1.0)(encoding@0.1.13)(express@5.2.1)(graphql@16.13.2)(react-dom@19.2.5(react@19.2.5))(react-native@0.85.3(@babel/core@7.29.0)(@types/react@19.2.14)(bufferutil@4.1.0)(react@19.2.5)(utf-8-validate@5.0.10))(react@19.2.5)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.4.3)
       '@privy-io/react-auth':
         specifier: ^3.16.0
         version: 3.23.1(@solana-program/system@0.10.0(@solana/kit@5.5.1(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)))(@solana-program/token@0.9.0(@solana/kit@5.5.1(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)))(@solana/kit@5.5.1(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10))(@solana/sysvars@5.5.1(typescript@5.9.3))(@tanstack/query-core@5.100.9)(@tanstack/react-query@5.100.9(react@19.2.5))(@types/react@19.2.14)(bufferutil@4.1.0)(encoding@0.1.13)(react-dom@19.2.5(react@19.2.5))(react-native@0.85.3(@babel/core@7.29.0)(@types/react@19.2.14)(bufferutil@4.1.0)(react@19.2.5)(utf-8-validate@5.0.10))(react@19.2.5)(typescript@5.9.3)(use-sync-external-store@1.4.0(react@19.2.5))(utf-8-validate@5.0.10)(zod@4.4.3)
@@ -92,7 +92,7 @@ importers:
         version: 9.39.4
       '@graphprotocol/client-cli':
         specifier: ^3.0.7
-        version: 3.0.7(@envelop/core@5.5.1)(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/store@0.102.13)(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-mesh/utils@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/delegate@12.0.15(graphql@16.13.2))(@graphql-tools/merge@9.1.9(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(@graphql-tools/wrap@10.1.4(graphql@16.13.2))(@types/node@24.12.2)(bufferutil@4.1.0)(crossws@0.3.5)(encoding@0.1.13)(graphql-tag@2.12.6(graphql@16.13.2))(graphql-yoga@5.21.0(graphql@16.13.2))(graphql@16.13.2)(utf-8-validate@5.0.10)
+        version: 3.0.7(e1467ff0c72d4f86f9b8564157d43b47)
       '@types/jsmediatags':
         specifier: ^3.9.6
         version: 3.9.6
@@ -1029,8 +1029,8 @@ packages:
   '@fangorn-network/agent-types@0.0.3':
     resolution: {integrity: sha512-p+A1aoq2GKifT9tDlpEGtrA3xYN2WM76r41DZMymLj2D1kMdtkzEG7LDiTE01DHXOgncJQ7gco9gPSojPZBsHA==}
 
-  '@fangorn-network/agent@0.0.3':
-    resolution: {integrity: sha512-3H13jqfSxBzirXReyo17giyrjBqEyKOWuJgZJCiNuQ/MDlETiIl2tsOtakzr0C+0vHrE9WV3P8sOAjAV83SgLg==}
+  '@fangorn-network/agent@0.0.4':
+    resolution: {integrity: sha512-9GjGDm7a5Rv1Z9onbzjsVN5Rp676HhTg++0kEanBw+kLhLE9C9cnWcACTz65BylI1x7CLqTCSANBLvSHiKw4oQ==}
 
   '@fangorn-network/client-types@0.0.2':
     resolution: {integrity: sha512-bvrmt6ug1uGvn/RDJ59suMeyQvZzUuK75Xmuvn5DC0W1AyfKvDnZKYKs2ugaiyzFou6df1BSo5+jo7cZoiGWAw==}
@@ -1040,11 +1040,6 @@ packages:
 
   '@fangorn-network/sdk@2026.4.23':
     resolution: {integrity: sha512-wbtQt42sCnOfJnjaqE/X/nlnwkXf2dZX3R6twfWSUVBjujl7f8kZQAT+Bcbw+pFbZDtXtRnJzEQeDVHbueB6tg==}
-    engines: {node: '>=20.19.0'}
-    hasBin: true
-
-  '@fangorn-network/sdk@2026.5.1-1.0':
-    resolution: {integrity: sha512-Y64VrH/pSIN7Kb6m/eGodA/LZC0DUgY2qxBlJ3JnhP5QLnE383Mhah1ZLg9wJ5ze/rcw+mZT+S0zmDI4KmMNWw==}
     engines: {node: '>=20.19.0'}
     hasBin: true
 
@@ -10633,11 +10628,10 @@ snapshots:
       - ws
       - zod
 
-  '@fangorn-network/agent@0.0.3(@cfworker/json-schema@4.1.1)(@types/snarkjs@0.7.9)(bufferutil@4.1.0)(encoding@0.1.13)(express@5.2.1)(graphql@16.13.2)(react-dom@19.2.5(react@19.2.5))(react-native@0.85.3(@babel/core@7.29.0)(@types/react@19.2.14)(bufferutil@4.1.0)(react@19.2.5)(utf-8-validate@5.0.10))(react@19.2.5)(typescript@5.9.3)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.1.0)(utf-8-validate@5.0.10))(zod-to-json-schema@3.25.2(zod@4.4.3))(zod@4.4.3)':
+  '@fangorn-network/agent@0.0.4(@cfworker/json-schema@4.1.1)(@types/snarkjs@0.7.9)(bufferutil@4.1.0)(encoding@0.1.13)(express@5.2.1)(graphql@16.13.2)(react-dom@19.2.5(react@19.2.5))(react-native@0.85.3(@babel/core@7.29.0)(@types/react@19.2.14)(bufferutil@4.1.0)(react@19.2.5)(utf-8-validate@5.0.10))(react@19.2.5)(typescript@5.9.3)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.1.0)(utf-8-validate@5.0.10))(zod-to-json-schema@3.25.2(zod@4.4.3))(zod@4.4.3)':
     dependencies:
       '@fangorn-network/agent-tools': 0.0.2(@cfworker/json-schema@4.1.1)(@types/snarkjs@0.7.9)(bufferutil@4.1.0)(encoding@0.1.13)(express@5.2.1)(graphql@16.13.2)(react-dom@19.2.5(react@19.2.5))(react-native@0.85.3(@babel/core@7.29.0)(@types/react@19.2.14)(bufferutil@4.1.0)(react@19.2.5)(utf-8-validate@5.0.10))(react@19.2.5)(typescript@5.9.3)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.1.0)(utf-8-validate@5.0.10))(zod-to-json-schema@3.25.2(zod@4.4.3))
       '@fangorn-network/agent-types': 0.0.3(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(ws@8.18.3(bufferutil@4.1.0)(utf-8-validate@5.0.10))(zod@4.4.3)
-      '@fangorn-network/sdk': 2026.5.11(@types/snarkjs@0.7.9)(bufferutil@4.1.0)(encoding@0.1.13)(express@5.2.1)(graphql@16.13.2)(react-dom@19.2.5(react@19.2.5))(react-native@0.85.3(@babel/core@7.29.0)(@types/react@19.2.14)(bufferutil@4.1.0)(react@19.2.5)(utf-8-validate@5.0.10))(react@19.2.5)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.4.3)
       '@langchain/anthropic': 1.3.29(@langchain/core@1.1.45(ws@8.18.3(bufferutil@4.1.0)(utf-8-validate@5.0.10)))
       '@langchain/core': 1.1.45(ws@8.18.3(bufferutil@4.1.0)(utf-8-validate@5.0.10))
       '@langchain/ollama': 1.2.7(@langchain/core@1.1.45(ws@8.18.3(bufferutil@4.1.0)(utf-8-validate@5.0.10)))
@@ -10698,39 +10692,6 @@ snapshots:
       - zod
 
   '@fangorn-network/sdk@2026.4.23(@types/snarkjs@0.7.9)(bufferutil@4.1.0)(encoding@0.1.13)(express@5.2.1)(graphql@16.13.2)(react-dom@19.2.5(react@19.2.5))(react-native@0.85.3(@babel/core@7.29.0)(@types/react@19.2.14)(bufferutil@4.1.0)(react@19.2.5)(utf-8-validate@5.0.10))(react@19.2.5)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.4.3)':
-    dependencies:
-      '@a2a-js/sdk': 0.3.13(express@5.2.1)
-      '@clack/prompts': 1.3.0
-      '@semaphore-protocol/group': 4.14.2(bufferutil@4.1.0)(utf-8-validate@5.0.10)
-      '@semaphore-protocol/identity': 4.14.2
-      '@semaphore-protocol/proof': 4.14.2(@semaphore-protocol/group@4.14.2(bufferutil@4.1.0)(utf-8-validate@5.0.10))(@semaphore-protocol/identity@4.14.2)(@types/snarkjs@0.7.9)(bufferutil@4.1.0)(commander@14.0.3)(utf-8-validate@5.0.10)
-      '@storacha/client': 2.1.3(encoding@0.1.13)
-      agent0-sdk: 1.7.1(bufferutil@4.1.0)(encoding@0.1.13)(graphql@16.13.2)(react-native@0.85.3(@babel/core@7.29.0)(@types/react@19.2.14)(bufferutil@4.1.0)(react@19.2.5)(utf-8-validate@5.0.10))(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.4.3)
-      commander: 14.0.3
-      dotenv: 17.4.2
-      ethers: 6.16.0(bufferutil@4.1.0)(utf-8-validate@5.0.10)
-      pinata: 2.5.6(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
-      solc: 0.8.35
-      viem: 2.48.8(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.4.3)
-    transitivePeerDependencies:
-      - '@bufbuild/protobuf'
-      - '@grpc/grpc-js'
-      - '@types/snarkjs'
-      - bufferutil
-      - debug
-      - encoding
-      - express
-      - graphql
-      - react
-      - react-dom
-      - react-native
-      - react-native-b4a
-      - supports-color
-      - typescript
-      - utf-8-validate
-      - zod
-
-  '@fangorn-network/sdk@2026.5.1-1.0(@types/snarkjs@0.7.9)(bufferutil@4.1.0)(encoding@0.1.13)(express@5.2.1)(graphql@16.13.2)(react-dom@19.2.5(react@19.2.5))(react-native@0.85.3(@babel/core@7.29.0)(@types/react@19.2.14)(bufferutil@4.1.0)(react@19.2.5)(utf-8-validate@5.0.10))(react@19.2.5)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.4.3)':
     dependencies:
       '@a2a-js/sdk': 0.3.13(express@5.2.1)
       '@clack/prompts': 1.3.0
@@ -11185,9 +11146,9 @@ snapshots:
     transitivePeerDependencies:
       - '@graphql-mesh/utils'
 
-  '@graphprotocol/client-block-tracking@2.0.6(@graphql-mesh/store@0.102.13)(@graphql-tools/delegate@12.0.15(graphql@16.13.2))(@types/node@24.12.2)(graphql@16.13.2)':
+  '@graphprotocol/client-block-tracking@2.0.6(@graphql-mesh/store@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-mesh/utils@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/delegate@12.0.15(graphql@16.13.2))(@types/node@24.12.2)(graphql@16.13.2)':
     dependencies:
-      '@graphql-mesh/fusion-runtime': 0.8.14(@graphql-mesh/store@0.102.13)(@types/node@24.12.2)(graphql@16.13.2)
+      '@graphql-mesh/fusion-runtime': 0.8.14(@graphql-mesh/store@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-mesh/utils@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@types/node@24.12.2)(graphql@16.13.2)
       '@graphql-tools/delegate': 12.0.15(graphql@16.13.2)
       '@graphql-tools/utils': 10.11.0(graphql@16.13.2)
       graphql: 16.13.2
@@ -11198,15 +11159,15 @@ snapshots:
       - '@types/node'
       - ioredis
 
-  '@graphprotocol/client-cli@3.0.7(@envelop/core@5.5.1)(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/store@0.102.13)(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-mesh/utils@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/delegate@12.0.15(graphql@16.13.2))(@graphql-tools/merge@9.1.9(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(@graphql-tools/wrap@10.1.4(graphql@16.13.2))(@types/node@24.12.2)(bufferutil@4.1.0)(crossws@0.3.5)(encoding@0.1.13)(graphql-tag@2.12.6(graphql@16.13.2))(graphql-yoga@5.21.0(graphql@16.13.2))(graphql@16.13.2)(utf-8-validate@5.0.10)':
+  '@graphprotocol/client-cli@3.0.7(e1467ff0c72d4f86f9b8564157d43b47)':
     dependencies:
       '@graphprotocol/client-add-source-name': 2.0.7(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/delegate@12.0.15(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(@graphql-tools/wrap@10.1.4(graphql@16.13.2))(graphql@16.13.2)
       '@graphprotocol/client-auto-pagination': 2.0.7(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/delegate@12.0.15(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(@graphql-tools/wrap@10.1.4(graphql@16.13.2))(graphql@16.13.2)
       '@graphprotocol/client-auto-type-merging': 2.0.7(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-mesh/utils@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/delegate@12.0.15(graphql@16.13.2))(graphql@16.13.2)
-      '@graphprotocol/client-block-tracking': 2.0.6(@graphql-mesh/store@0.102.13)(@graphql-tools/delegate@12.0.15(graphql@16.13.2))(@types/node@24.12.2)(graphql@16.13.2)
+      '@graphprotocol/client-block-tracking': 2.0.6(@graphql-mesh/store@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-mesh/utils@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/delegate@12.0.15(graphql@16.13.2))(@types/node@24.12.2)(graphql@16.13.2)
       '@graphprotocol/client-polling-live': 2.0.1(@envelop/core@5.5.1)(@graphql-tools/merge@9.1.9(graphql@16.13.2))(graphql@16.13.2)
       '@graphql-mesh/cli': 0.95.4(bufferutil@4.1.0)(encoding@0.1.13)(graphql-tag@2.12.6(graphql@16.13.2))(graphql-yoga@5.21.0(graphql@16.13.2))(graphql@16.13.2)(utf-8-validate@5.0.10)
-      '@graphql-mesh/graphql': 0.102.16(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/store@0.102.13)(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-mesh/utils@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(@types/node@24.12.2)(bufferutil@4.1.0)(crossws@0.3.5)(graphql@16.13.2)(tslib@2.8.1)(utf-8-validate@5.0.10)
+      '@graphql-mesh/graphql': 0.102.16(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/store@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-mesh/utils@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-mesh/utils@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(@types/node@24.12.2)(bufferutil@4.1.0)(crossws@0.3.5)(graphql@16.13.2)(tslib@2.8.1)(utf-8-validate@5.0.10)
       graphql: 16.13.2
       tslib: 2.8.1
     transitivePeerDependencies:
@@ -11387,7 +11348,7 @@ snapshots:
 
   '@graphql-mesh/cache-localforage@0.102.13(@graphql-mesh/types@0.102.13)(@graphql-mesh/utils@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(graphql@16.13.2)(tslib@2.8.1)':
     dependencies:
-      '@graphql-mesh/types': 0.102.13(@graphql-mesh/store@0.102.13)(@graphql-tools/utils@10.11.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1)
+      '@graphql-mesh/types': 0.102.13(@graphql-mesh/store@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-mesh/utils@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@10.11.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1)
       '@graphql-mesh/utils': 0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1)
       graphql: 16.13.2
       localforage: 1.10.0
@@ -11401,14 +11362,14 @@ snapshots:
       '@graphql-codegen/typescript-generic-sdk': 3.1.0(encoding@0.1.13)(graphql-tag@2.12.6(graphql@16.13.2))(graphql@16.13.2)
       '@graphql-codegen/typescript-operations': 4.6.1(graphql@16.13.2)
       '@graphql-codegen/typescript-resolvers': 4.5.2(graphql@16.13.2)
-      '@graphql-mesh/config': 0.104.12(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/runtime@0.103.12(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.102.13)(@graphql-mesh/utils@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@10.11.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-mesh/store@0.102.13)(@graphql-mesh/types@0.102.13)(@graphql-mesh/utils@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@10.11.0(graphql@16.13.2))(graphql-yoga@5.21.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1)
+      '@graphql-mesh/config': 0.104.12(5bd3d5871fe47b8a0a27301d826df1b7)
       '@graphql-mesh/cross-helpers': 0.4.14(graphql@16.13.2)
       '@graphql-mesh/http': 0.103.12(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/runtime@0.103.12(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.102.13)(@graphql-mesh/utils@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@10.11.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-mesh/types@0.102.13)(@graphql-mesh/utils@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@10.11.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1)
       '@graphql-mesh/include': 0.1.0
       '@graphql-mesh/runtime': 0.103.12(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-mesh/utils@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1)
       '@graphql-mesh/store': 0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.102.13)(@graphql-mesh/utils@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@10.11.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1)
-      '@graphql-mesh/types': 0.102.13(@graphql-mesh/store@0.102.13)(@graphql-tools/utils@10.11.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1)
-      '@graphql-mesh/utils': 0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.102.13)(@graphql-tools/utils@10.11.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1)
+      '@graphql-mesh/types': 0.102.13(@graphql-mesh/store@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-mesh/utils@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@10.11.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1)
+      '@graphql-mesh/utils': 0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.102.13(@graphql-mesh/store@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-mesh/utils@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@10.11.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@10.11.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1)
       '@graphql-tools/utils': 10.11.0(graphql@16.13.2)
       ajv: 8.20.0
       change-case: 4.1.2
@@ -11439,16 +11400,16 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@graphql-mesh/config@0.104.12(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/runtime@0.103.12(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.102.13)(@graphql-mesh/utils@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@10.11.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-mesh/store@0.102.13)(@graphql-mesh/types@0.102.13)(@graphql-mesh/utils@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@10.11.0(graphql@16.13.2))(graphql-yoga@5.21.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1)':
+  '@graphql-mesh/config@0.104.12(5bd3d5871fe47b8a0a27301d826df1b7)':
     dependencies:
       '@envelop/core': 5.5.1
       '@graphql-mesh/cache-localforage': 0.102.13(@graphql-mesh/types@0.102.13)(@graphql-mesh/utils@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(graphql@16.13.2)(tslib@2.8.1)
       '@graphql-mesh/cross-helpers': 0.4.14(graphql@16.13.2)
-      '@graphql-mesh/merger-bare': 0.102.11(@graphql-mesh/store@0.102.13)(@graphql-mesh/types@0.102.13)(@graphql-mesh/utils@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@10.11.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1)
-      '@graphql-mesh/merger-stitching': 0.102.11(@graphql-mesh/store@0.102.13)(@graphql-mesh/types@0.102.13)(@graphql-mesh/utils@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@10.11.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1)
+      '@graphql-mesh/merger-bare': 0.102.11(@graphql-mesh/store@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-mesh/utils@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-mesh/types@0.102.13)(@graphql-mesh/utils@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@10.11.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1)
+      '@graphql-mesh/merger-stitching': 0.102.11(@graphql-mesh/store@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-mesh/utils@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-mesh/types@0.102.13)(@graphql-mesh/utils@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@10.11.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1)
       '@graphql-mesh/runtime': 0.103.12(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-mesh/utils@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1)
       '@graphql-mesh/store': 0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-mesh/utils@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1)
-      '@graphql-mesh/types': 0.102.13(@graphql-mesh/store@0.102.13)(@graphql-tools/utils@10.11.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1)
+      '@graphql-mesh/types': 0.102.13(@graphql-mesh/store@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-mesh/utils@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@10.11.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1)
       '@graphql-mesh/utils': 0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1)
       '@graphql-tools/code-file-loader': 8.1.32(graphql@16.13.2)
       '@graphql-tools/graphql-file-loader': 8.1.14(graphql@16.13.2)
@@ -11471,14 +11432,14 @@ snapshots:
       graphql: 16.13.2
       path-browserify: 1.0.1
 
-  '@graphql-mesh/fusion-runtime@0.8.14(@graphql-mesh/store@0.102.13)(@types/node@24.12.2)(graphql@16.13.2)':
+  '@graphql-mesh/fusion-runtime@0.8.14(@graphql-mesh/store@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-mesh/utils@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@types/node@24.12.2)(graphql@16.13.2)':
     dependencies:
       '@envelop/core': 5.5.1
       '@graphql-mesh/cross-helpers': 0.4.14(graphql@16.13.2)
-      '@graphql-mesh/runtime': 0.103.12(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.102.13)(@graphql-mesh/utils@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@10.11.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1)
+      '@graphql-mesh/runtime': 0.103.12(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.102.13(@graphql-mesh/store@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-mesh/utils@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@10.11.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-mesh/utils@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@10.11.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1)
       '@graphql-mesh/transport-common': 0.7.39(graphql@16.13.2)
-      '@graphql-mesh/types': 0.102.13(@graphql-mesh/store@0.102.13)(@graphql-tools/utils@10.11.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1)
-      '@graphql-mesh/utils': 0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.102.13)(@graphql-tools/utils@10.11.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1)
+      '@graphql-mesh/types': 0.102.13(@graphql-mesh/store@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-mesh/utils@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@10.11.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1)
+      '@graphql-mesh/utils': 0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.102.13(@graphql-mesh/store@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-mesh/utils@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@10.11.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@10.11.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1)
       '@graphql-tools/delegate': 10.2.23(graphql@16.13.2)
       '@graphql-tools/executor': 1.5.3(graphql@16.13.2)
       '@graphql-tools/federation': 2.2.40(@types/node@24.12.2)(graphql@16.13.2)
@@ -11497,7 +11458,7 @@ snapshots:
       - '@types/node'
       - ioredis
 
-  '@graphql-mesh/graphql@0.102.16(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/store@0.102.13)(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-mesh/utils@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(@types/node@24.12.2)(bufferutil@4.1.0)(crossws@0.3.5)(graphql@16.13.2)(tslib@2.8.1)(utf-8-validate@5.0.10)':
+  '@graphql-mesh/graphql@0.102.16(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/store@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-mesh/utils@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-mesh/utils@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(@types/node@24.12.2)(bufferutil@4.1.0)(crossws@0.3.5)(graphql@16.13.2)(tslib@2.8.1)(utf-8-validate@5.0.10)':
     dependencies:
       '@graphql-mesh/cross-helpers': 0.4.14(graphql@16.13.2)
       '@graphql-mesh/store': 0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-mesh/utils@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1)
@@ -11522,7 +11483,7 @@ snapshots:
     dependencies:
       '@graphql-mesh/cross-helpers': 0.4.14(graphql@16.13.2)
       '@graphql-mesh/runtime': 0.103.12(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-mesh/utils@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1)
-      '@graphql-mesh/types': 0.102.13(@graphql-mesh/store@0.102.13)(@graphql-tools/utils@10.11.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1)
+      '@graphql-mesh/types': 0.102.13(@graphql-mesh/store@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-mesh/utils@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@10.11.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1)
       '@graphql-mesh/utils': 0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1)
       '@graphql-tools/utils': 10.11.0(graphql@16.13.2)
       '@whatwg-node/server': 0.9.71
@@ -11536,10 +11497,10 @@ snapshots:
       get-tsconfig: 4.14.0
       jiti: 1.21.7
 
-  '@graphql-mesh/merger-bare@0.102.11(@graphql-mesh/store@0.102.13)(@graphql-mesh/types@0.102.13)(@graphql-mesh/utils@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@10.11.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1)':
+  '@graphql-mesh/merger-bare@0.102.11(@graphql-mesh/store@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-mesh/utils@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-mesh/types@0.102.13)(@graphql-mesh/utils@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@10.11.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1)':
     dependencies:
-      '@graphql-mesh/merger-stitching': 0.102.11(@graphql-mesh/store@0.102.13)(@graphql-mesh/types@0.102.13)(@graphql-mesh/utils@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@10.11.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1)
-      '@graphql-mesh/types': 0.102.13(@graphql-mesh/store@0.102.13)(@graphql-tools/utils@10.11.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1)
+      '@graphql-mesh/merger-stitching': 0.102.11(@graphql-mesh/store@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-mesh/utils@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-mesh/types@0.102.13)(@graphql-mesh/utils@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@10.11.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1)
+      '@graphql-mesh/types': 0.102.13(@graphql-mesh/store@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-mesh/utils@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@10.11.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1)
       '@graphql-mesh/utils': 0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1)
       '@graphql-tools/schema': 10.0.7(graphql@16.13.2)
       '@graphql-tools/utils': 10.11.0(graphql@16.13.2)
@@ -11548,10 +11509,10 @@ snapshots:
     transitivePeerDependencies:
       - '@graphql-mesh/store'
 
-  '@graphql-mesh/merger-stitching@0.102.11(@graphql-mesh/store@0.102.13)(@graphql-mesh/types@0.102.13)(@graphql-mesh/utils@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@10.11.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1)':
+  '@graphql-mesh/merger-stitching@0.102.11(@graphql-mesh/store@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-mesh/utils@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-mesh/types@0.102.13)(@graphql-mesh/utils@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@10.11.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1)':
     dependencies:
       '@graphql-mesh/store': 0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-mesh/utils@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1)
-      '@graphql-mesh/types': 0.102.13(@graphql-mesh/store@0.102.13)(@graphql-tools/utils@10.11.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1)
+      '@graphql-mesh/types': 0.102.13(@graphql-mesh/store@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-mesh/utils@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@10.11.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1)
       '@graphql-mesh/utils': 0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1)
       '@graphql-tools/delegate': 10.2.23(graphql@16.13.2)
       '@graphql-tools/schema': 10.0.33(graphql@16.13.2)
@@ -11560,14 +11521,14 @@ snapshots:
       graphql: 16.13.2
       tslib: 2.8.1
 
-  '@graphql-mesh/runtime@0.103.12(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.102.13)(@graphql-mesh/utils@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@10.11.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1)':
+  '@graphql-mesh/runtime@0.103.12(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.102.13(@graphql-mesh/store@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-mesh/utils@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@10.11.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-mesh/utils@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@10.11.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1)':
     dependencies:
       '@envelop/core': 5.5.1
       '@envelop/extended-validation': 4.1.0(@envelop/core@5.5.1)(graphql@16.13.2)
       '@envelop/graphql-jit': 8.0.4(@envelop/core@5.5.1)(graphql@16.13.2)
       '@graphql-mesh/cross-helpers': 0.4.14(graphql@16.13.2)
       '@graphql-mesh/string-interpolation': 0.5.16(graphql@16.13.2)
-      '@graphql-mesh/types': 0.102.13(@graphql-mesh/store@0.102.13)(@graphql-tools/utils@10.11.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1)
+      '@graphql-mesh/types': 0.102.13(@graphql-mesh/store@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-mesh/utils@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@10.11.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1)
       '@graphql-mesh/utils': 0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1)
       '@graphql-tools/batch-delegate': 9.0.41(graphql@16.13.2)
       '@graphql-tools/delegate': 10.2.23(graphql@16.13.2)
@@ -11602,7 +11563,7 @@ snapshots:
     dependencies:
       '@graphql-inspector/core': 6.2.0(graphql@16.13.2)
       '@graphql-mesh/cross-helpers': 0.4.14(graphql@16.13.2)
-      '@graphql-mesh/types': 0.102.13(@graphql-mesh/store@0.102.13)(@graphql-tools/utils@10.11.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1)
+      '@graphql-mesh/types': 0.102.13(@graphql-mesh/store@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-mesh/utils@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@10.11.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1)
       '@graphql-mesh/utils': 0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1)
       '@graphql-tools/utils': 10.11.0(graphql@16.13.2)
       graphql: 16.13.2
@@ -11650,7 +11611,7 @@ snapshots:
       - '@nats-io/nats-core'
       - ioredis
 
-  '@graphql-mesh/types@0.102.13(@graphql-mesh/store@0.102.13)(@graphql-tools/utils@10.11.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1)':
+  '@graphql-mesh/types@0.102.13(@graphql-mesh/store@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-mesh/utils@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@10.11.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1)':
     dependencies:
       '@graphql-mesh/store': 0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-mesh/utils@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1)
       '@graphql-tools/batch-delegate': 9.0.41(graphql@16.13.2)
@@ -11675,11 +11636,11 @@ snapshots:
       - '@nats-io/nats-core'
       - ioredis
 
-  '@graphql-mesh/utils@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.102.13)(@graphql-tools/utils@10.11.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1)':
+  '@graphql-mesh/utils@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.102.13(@graphql-mesh/store@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-mesh/utils@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@10.11.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@10.11.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1)':
     dependencies:
       '@graphql-mesh/cross-helpers': 0.4.14(graphql@16.13.2)
       '@graphql-mesh/string-interpolation': 0.5.16(graphql@16.13.2)
-      '@graphql-mesh/types': 0.102.13(@graphql-mesh/store@0.102.13)(@graphql-tools/utils@10.11.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1)
+      '@graphql-mesh/types': 0.102.13(@graphql-mesh/store@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-mesh/utils@0.102.13(@graphql-mesh/cross-helpers@0.4.14(graphql@16.13.2))(@graphql-mesh/types@0.104.28(graphql@16.13.2))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@11.1.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1))(@graphql-tools/utils@10.11.0(graphql@16.13.2))(graphql@16.13.2)(tslib@2.8.1)
       '@graphql-tools/delegate': 10.2.23(graphql@16.13.2)
       '@graphql-tools/utils': 10.11.0(graphql@16.13.2)
       '@whatwg-node/disposablestack': 0.0.5

@@ -518,6 +518,9 @@ def _parse_hits(results: dict, include_embeddings: bool = False) -> list[dict]:
     raw_ids   = results["ids"]
     raw_docs  = results["documents"]
     raw_metas = results["metadatas"]
+    
+    if not raw_ids or not raw_docs or not raw_metas:
+        return []
 
     ids   = raw_ids[0]   if isinstance(raw_ids[0],   list) else raw_ids
     docs  = raw_docs[0]  if isinstance(raw_docs[0],  list) else raw_docs

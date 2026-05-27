@@ -116,15 +116,15 @@ pyinstaller --onefile --name server \
 Windows operates slightly differently. We recommend that you use [conda]() for a hassle-free build experience.
 
 ```sh
-conda create -n vectordb-build python=3.11 -y
+conda create -n vectordb-build python=3.1 -y
 conda activate vectordb-build
-# install reqs
 pip install -r requirements.txt
 pip install pyinstaller
-$certPath = python -c "import certifi; print(certifi.where())"
+
+$certPath = (python -c "import certifi; print(certifi.where())").Trim()
 $pyiArgs = @("--onefile", "--name", "server", "--add-data", "$certPath;certifi")
-pip list --format=freeze | ForEach-Object { $_.Split('=')[0] } | ForEach-Object { $pyiArgs += "--collect-submodules"; $pyiArgs += $_ }
-$pyiArgs += "server.py" 
+pip list --format=freeze | ForEach-Object { $_.Split('=')[0] } | ForEach-Object { $pyiArgs += "--collect-all"; $pyiArgs += $_ }
+$pyiArgs += "server.py"
 & pyinstaller @pyiArgs
 ```
 

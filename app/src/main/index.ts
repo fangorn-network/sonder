@@ -3,7 +3,7 @@ import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { spawn } from 'child_process'
 import path from 'path'
-import fs from 'fs'
+import fs, { createWriteStream } from 'fs'
 import http from 'http'
 import mime from 'mime-types'
 import dotenv from 'dotenv'
@@ -251,11 +251,14 @@ function startPython() {
   const serverName = process.platform === 'win32' ? 'server.exe' : 'server'
 
   const apiKey = (import.meta as any).env.VITE_GRAPH_API_KEY ?? "";
+  const userDataPath = app.getPath('userData')
   const [bin, args, cwd]: [string, string[], string] = app.isPackaged
     ? [
       path.join(root, serverName),
       [
         '--graph-api-key', apiKey,
+        '--chroma-path', path.join(userDataPath, 'chroma_db'),
+        '--checkpoint-file', path.join(userDataPath, 'ingest_checkpoint.json'),
         '-s', 'test.sond3r.track.invariants.1=0x4717598a3d3995ec7a8e9897d29cda00cb750f6e0e9f52f82aeb16365edc1ab6',
         '-s', 'test.sond3r.track.taxonomy.0=0xa29392f3d443285ffd2e3b03f4d966fb47dac4f8a1691c3c5eb91859ec1f7f7a',
         '-s', 'test.sond3r.track.source.0=0x052f754de156c31a8ef35e3a50a1eae452dd79abb3f32a76a4663ab182f261da',
@@ -285,6 +288,10 @@ function startPython() {
   pyProcess.stderr?.on('data', (d) => console.error('[py]', d.toString().trimEnd()))
   pyProcess.on('error', (err) => console.error('[py] failed to start:', err))
   pyProcess.on('exit', (code) => console.log('[py] exited with code', code))
+
+  const pyLog = createWriteStream(path.join(app.getPath('userData'), 'py-stderr.log'))
+  pyProcess.stderr?.on('data', (d) => pyLog.write(d))
+  pyProcess.stdout?.on('data', (d) => pyLog.write(d))
 }
 
 // ─── Local renderer server ────────────────────────────────────────────────────
@@ -523,6 +530,33 @@ app.whenReady().then(async () => {
 
   // ── Session setup — must happen before createWindow ──────────────────────
   const targetSession = session.fromPartition('persist:main')
+
+  // Allow Privy's embedded wallet iframe to request media/clipboard permissions
+  targetSession.setPermissionRequestHandler((_webContents, permission, callback) => {
+    const allowed = ['media', 'notifications', 'clipboard-read', 'clipboard-sanitized-write']
+    callback(allowed.includes(permission))
+  })
+
+  // // Allow renderer to reach local Python/ChromaDB backend
+  // const chromaFilter = { urls: ['http://127.0.0.1:8080/*'] }
+  // targetSession.webRequest.onHeadersReceived(chromaFilter, (details, callback) => {
+  //   callback({
+  //     responseHeaders: {
+  //       ...details.responseHeaders,
+  //       'Access-Control-Allow-Origin': ['*'],
+  //       'Access-Control-Allow-Methods': ['GET, POST, OPTIONS'],
+  //       'Access-Control-Allow-Headers': ['Content-Type'],
+  //     },
+  //   })
+  // })
+
+  // Also intercept preflight OPTIONS so they don't 500 before the real request
+  targetSession.webRequest.onBeforeRequest(
+    { urls: ['http://127.0.0.1:8080/*', 'http://0.0.0.0:8080/*'] },
+    (details, callback) => {
+      callback({}) // pass through; headers above handle CORS on the response side
+    }
+  )
 
   // YouTube header injection
   const ytFilter = { urls: ['https://*.youtube.com/*', 'https://*.youtube-nocookie.com/*'] }

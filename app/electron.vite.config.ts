@@ -11,6 +11,8 @@ export default defineConfig({
           'mime-types',
           'dotenv',
           'mime',
+          "@fangorn-network/sdk*",
+          "@fangorn-network/fetch*"
         ]
       })
     ]

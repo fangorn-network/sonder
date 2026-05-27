@@ -94,11 +94,20 @@ jobs:
 
       - name: Install dependencies
         working-directory: app
-        run: pnpm install --ignore-scripts
-              
-      - name: Run electron-builder install-app-deps
+        run: |
+          echo "node-linker=hoisted" > .npmrc
+          pnpm install --ignore-scripts
+          pnpm exec electron-builder install-app-deps
+
+      - name: Create .env file
         working-directory: app
-        run: pnpm exec electron-builder install-app-deps
+        shell: bash
+        run: |
+          cat > .env << 'EOF'
+          VITE_GRAPH_API_KEY=${{ secrets.VITE_GRAPH_API_KEY }}
+          VITE_USE_AGENT=${{ secrets.VITE_USE_AGENT }}
+          VITE_ARBITRUM_SEPOLIA_RPC_URL=${{ secrets.VITE_ARBITRUM_SEPOLIA_RPC_URL }}
+          EOF
 
       - name: Download server binary
         uses: actions/download-artifact@v4

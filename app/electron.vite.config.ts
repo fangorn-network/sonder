@@ -1,11 +1,11 @@
 import { resolve } from 'path'
-import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
+import { defineConfig } from 'electron-vite'
 import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   main: {
-    plugins: [
-      externalizeDepsPlugin({
+    build: {
+      externalizeDeps: {
         exclude: [
           '@electron-toolkit/utils',
           'mime-types',
@@ -14,11 +14,13 @@ export default defineConfig({
           "@fangorn-network/sdk*",
           "@fangorn-network/fetch*"
         ]
-      })
-    ]
+      }
+    }
   },
   preload: {
-    plugins: [externalizeDepsPlugin()]
+    build: {
+      externalizeDeps: true
+    }
   },
   renderer: {
     resolve: {

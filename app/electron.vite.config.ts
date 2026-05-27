@@ -15,11 +15,6 @@ export default defineConfig({
       }
     },
   },
-  preload: {
-    build: {
-      externalizeDeps: true
-    }
-  },
   renderer: {
     resolve: {
       alias: {

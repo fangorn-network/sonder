@@ -5,16 +5,12 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   main: {
     build: {
-      rollupOptions: {
-        external: ['electron']
-      }
+      externalizeDeps: false
     }
   },
   preload: {
     build: {
-      rollupOptions: {
-        external: ['electron']
-      }
+      externalizeDeps: false
     }
   },
   renderer: {

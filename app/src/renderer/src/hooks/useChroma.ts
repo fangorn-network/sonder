@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import type { Track, JoinedRecord } from '../types'
 import { asTrack } from '../types'
 
-const CHROMA_URL = (import.meta as any).env.VITE_CHROMA_URL ?? 'http://localhost:8080'
+const CHROMA_URL = (import.meta as any).env.VITE_CHROMA_URL ?? 'http://127.0.0.1:8080'
 const PAGE_SIZE = 20
 const HEALTH_RETRY_MS = 2000
 const HEALTH_MAX_ATTEMPTS = 20

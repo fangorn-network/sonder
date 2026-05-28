@@ -84,7 +84,7 @@ jobs:
       - name: Setup Yarn
         run: |
           corepack enable
-          yarn set version from-registry
+          yarn set version stable
       - name: Install dependencies
         working-directory: app
         run: yarn install
@@ -92,8 +92,6 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: '22.14.0'
-          cache: 'yarn'
-          cache-dependency-path: app/yarn.lock
 
       - name: Install app dependencies
         working-directory: app

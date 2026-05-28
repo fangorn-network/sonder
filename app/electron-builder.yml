@@ -37,6 +37,8 @@ win:
       arch: [x64]
 mac:
   executableName: SOND3R
+  x64ArchFiles:
+    - "Contents/Resources/app.asar.unpacked/node_modules/@ipshipyard/node-datachannel/**"
   target:
     - target: dmg
       arch: universal

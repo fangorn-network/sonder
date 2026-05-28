@@ -88,6 +88,9 @@ jobs:
       - name: Install dependencies
         working-directory: app
         run: yarn install
+      - name: Dedupe Dependencies
+        working-directory: app
+        run: yarn dedupe
       - name: Set up Node
         uses: actions/setup-node@v6
         with:

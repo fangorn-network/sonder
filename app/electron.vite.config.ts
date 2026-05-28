@@ -12,7 +12,7 @@ export default defineConfig({
             if (warning.code === 'UNRESOLVED_IMPORT') return
             warn(warning)
           },
-          external: (id) => id.includes('__vite-optional-peer-dep')
+          external: (id) => id.includes('__vite-optional-peer-dep') || id === 'dbus-next'
         }
       },
     resolve: {

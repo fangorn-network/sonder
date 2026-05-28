@@ -56,7 +56,7 @@ jobs:
           & pyinstaller @pyiArgs
 
       - name: Upload server binary
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: server-${{ matrix.platform }}
           path: app/vectordb/dist/server${{ matrix.ext }}
@@ -117,7 +117,7 @@ jobs:
           EOF
 
       - name: Download server binary
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v6
         with:
           name: server-${{ matrix.platform }}
           path: app/vectordb/dist/${{ matrix.platform }}/
@@ -144,7 +144,7 @@ jobs:
         run: yarn run ${{ matrix.build_cmd }} ${{ matrix.arch == 'arm64' && '--arm64' || matrix.arch == 'x64' && '--x64' || '' }}
 
       - name: Upload Electron build
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: sond3r-${{ matrix.platform }}${{ matrix.arch && format('-{0}', matrix.arch) || '' }}
           path: |

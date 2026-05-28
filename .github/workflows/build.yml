@@ -83,6 +83,9 @@ jobs:
       - uses: actions/checkout@v6
       - name: Enable Corepack
         run: corepack enable
+      - name: Install dependencies
+        working-directory: app
+        run: yarn install
       - name: Set up Node
         uses: actions/setup-node@v6
         with:
@@ -90,12 +93,9 @@ jobs:
           cache: 'yarn'
           cache-dependency-path: app/yarn.lock
 
-
-      - name: Install dependencies
+      - name: Install app dependencies
         working-directory: app
-        run: |
-          yarn install
-          yarn exec electron-builder install-app-deps
+        run: yarn exec electron-builder install-app-deps
 
       - name: Create .env file
         working-directory: app

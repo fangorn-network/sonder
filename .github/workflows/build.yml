@@ -74,12 +74,12 @@ jobs:
             platform: win
             build_cmd: build:win
             ytdlp_asset: yt-dlp.exe
-          - os: macos-13
+          - os: macos-latest
             platform: mac
             build_cmd: build:mac
             arch: x64
             ytdlp_asset: yt-dlp_macos
-          - os: macos-14
+          - os: macos-latest
             platform: mac
             build_cmd: build:mac
             arch: arm64

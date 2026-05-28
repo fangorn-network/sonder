@@ -6,6 +6,15 @@ export default defineConfig({
   main: {},
   preload: {},
   renderer: {
+      build: {
+        rollupOptions: {
+          onwarn(warning, warn) {
+            if (warning.code === 'UNRESOLVED_IMPORT') return
+            warn(warning)
+          },
+          external: (id) => id.includes('__vite-optional-peer-dep')
+        }
+      },
     resolve: {
       alias: {
         '@renderer': resolve('src/renderer/src')

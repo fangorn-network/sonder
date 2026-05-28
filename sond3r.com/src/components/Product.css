@@ -312,6 +312,12 @@
 }
 
 @media (max-width: 700px) {
+
+  .features {
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
   .product-intro {
     padding: 4rem 1.25rem 3rem;
   }

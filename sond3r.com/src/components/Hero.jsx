@@ -35,7 +35,7 @@ export default function Hero() {
           <a href={BOOK_DEMO_URL} className="hero-btn-primary" target="_blank" rel="noopener noreferrer">Book a Demo</a>
         </div>
 
-        <p className="hero-fine">Requires Spotify Premium</p>
+        <p className="hero-actions">Instant access to the web's largest public music library, no subscription or API keys needed.</p>
       </div>
 
       <div className="hero-screen">

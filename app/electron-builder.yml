@@ -31,15 +31,10 @@ extraResources:
     to: "bin"
     filter: ["yt-dlp*"]
 win:
-  executableName: SOND3R
+  executableName: sond3r
   target:
     - target: portable
       arch: [x64]
-mac:
-  executableName: SOND3R
-  target:
-    - target: dmg
-      arch: universal
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
   shortcutName: ${productName}

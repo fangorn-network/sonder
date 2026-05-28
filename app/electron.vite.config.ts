@@ -3,7 +3,13 @@ import { defineConfig } from 'electron-vite'
 import react from '@vitejs/plugin-react'
 
 export default defineConfig({
-  main: {},
+  main: {
+    build: {
+      rollupOptions: {
+        external: ['dbus-next']
+      }
+    }
+  },
   preload: {},
   renderer: {
       build: {
@@ -12,7 +18,7 @@ export default defineConfig({
             if (warning.code === 'UNRESOLVED_IMPORT') return
             warn(warning)
           },
-          external: (id) => id.includes('__vite-optional-peer-dep') || id === 'dbus-next'
+          external: (id) => id.includes('__vite-optional-peer-dep')
         }
       },
     resolve: {

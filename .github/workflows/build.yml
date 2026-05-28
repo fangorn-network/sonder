@@ -81,8 +81,10 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
-      - name: Enable Corepack
-        run: corepack enable
+      - name: Setup Yarn
+        run: |
+          corepack enable
+          yarn set version from-registry
       - name: Install dependencies
         working-directory: app
         run: yarn install

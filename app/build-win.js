@@ -41,7 +41,7 @@ try {
     electronVersion: '39.8.9',
     asar: true,
     win: {
-      executableName: 'electron-app'
+      executableName: 'SOND3R'
     },
     extraResources: [
       { from: 'out/main/toolboxes', to: 'toolboxes' },

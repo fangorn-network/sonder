@@ -37,10 +37,11 @@ win:
       arch: [x64]
 mac:
   executableName: SOND3R
-  x64ArchFiles: "Contents/Resources/app.asar.unpacked/node_modules/**"
   target:
     - target: dmg
-      arch: universal
+      arch:
+        - x64
+        - arm64
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
   shortcutName: ${productName}

@@ -74,9 +74,15 @@ jobs:
             platform: win
             build_cmd: build:win
             ytdlp_asset: yt-dlp.exe
-          - os: macos-latest
+          - os: macos-13
             platform: mac
             build_cmd: build:mac
+            arch: x64
+            ytdlp_asset: yt-dlp_macos
+          - os: macos-14
+            platform: mac
+            build_cmd: build:mac
+            arch: arm64
             ytdlp_asset: yt-dlp_macos
     runs-on: ${{ matrix.os }}
     steps:
@@ -135,12 +141,12 @@ jobs:
         working-directory: app
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: yarn run ${{ matrix.build_cmd }}
+        run: yarn run ${{ matrix.build_cmd }} ${{ matrix.arch && format('--arch {0}', matrix.arch) || '' }}
 
       - name: Upload Electron build
         uses: actions/upload-artifact@v4
         with:
-          name: sond3r-${{ matrix.platform }}
+          name: sond3r-${{ matrix.platform }}${{ matrix.arch && format('-{0}', matrix.arch) || '' }}
           path: |
             app/dist/*.exe
             app/dist/*.dmg

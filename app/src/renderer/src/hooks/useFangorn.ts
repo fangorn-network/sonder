@@ -22,6 +22,7 @@ const SIGNING_METHODS = new Set([
   'eth_accounts',
   'wallet_switchEthereumChain',
   'wallet_addEthereumChain',
+  'wallet_sendTransaction',
 ])
 
 function getPinataConfig(): { jwt: string; gateway: string } {

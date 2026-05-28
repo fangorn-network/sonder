@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import { useYouTubeContext } from '../hooks/useYoutubeContext'
+import { useSpotify } from '../hooks/useSpotifyContext'
 import type { PlaybackState } from '../types/playback'
 import './PlayerBar.css'
 import { Track } from '../types'
 import { hashColor } from '../views/BrowseView'
+import { useSpotifyContext } from '../context/SpotifyContext'
 
 function fmtTime(ms: number) {
   if (!ms || !isFinite(ms) || ms <= 0) return '0:00'
@@ -37,7 +38,7 @@ export function PlayerBar({
     pause,
     resume,
     seek,
-  } = useYouTubeContext()
+  } = useSpotifyContext()
 
   const progress = durationMs > 0 ? Math.min(progressMs / durationMs, 1) : 0
 

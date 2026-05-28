@@ -8,6 +8,8 @@ import { NowPlaying } from './components/NowPlaying'
 import { createPortal } from 'react-dom'
 import { usePrivy } from '@privy-io/react-auth'
 import { PlayerProvider } from './providers/PlayerProvider'
+import { SpotifyAuthProvider, useSpotifyAuth } from './providers/SpotifyAuthProvider'
+import { SpotifyProvider } from './context/SpotifyContext'
 import { useFangornAgent } from './hooks/useFangornAgent'
 import { agentResultToTracks } from './utils/agentToTrack'
 import { useChroma } from './hooks/useChroma'
@@ -20,17 +22,11 @@ import { type SessionEvent } from './kernel/Visualizer'
 import { useChromaSync } from './hooks/useChromaSync'
 import KernelDebugHUD from './kernel/HUD'
 import { useAgentContext } from './context/useAgentContext'
-// import { ContextBar } from './views/ContextBar'
-import { useYouTubeSearch } from './hooks/useYoutubeSearch'
-import { useSoundCloudSearch } from './hooks/useSoundcloudSearch'
-import { YouTubeProvider } from './hooks/useYoutubeContext'
+import { useSpotify } from './hooks/useSpotifyContext'
 import { usePlaybackRouter } from './hooks/usePlaybackRouter'
 import { useAutoplay } from './hooks/useAutoplay'
 import { useMediaSearch } from './hooks/useMediaSearch'
 import { ArtistNeighborhoodView } from './views/ArtistNeighborhoodView'
-
-// ─── CHANGE: Add 'Analyze' to ViewName in ./types.ts ─────────────────────────
-// export type ViewName = 'Discover' | 'Agent' | 'Analyze'
 
 const SNAPSHOT_HISTORY_DEPTH = 5
 const SCROLL_THRESHOLD = 10
@@ -40,6 +36,10 @@ window.addEventListener('scroll', () => {
   document.querySelector('.header')!
     .classList.toggle('scrolled', window.scrollY > SCROLL_THRESHOLD)
 }, { passive: true })
+
+// onTrackEndedRef lives outside React so useSpotify and Main can share it
+// without a circular dependency
+const onTrackEndedRef = { current: () => {} }
 
 // ─── Root ──────────────────────────────────────────────────────────────────────
 
@@ -65,34 +65,27 @@ export default function App() {
   if (!ready) return <BootSplash />
 
   return (
-    <YouTubeProvider onEnded={() => onYtEndedRef.current()}>
       <Main />
-    </YouTubeProvider>
   )
 }
-
-// ─── onYtEndedRef lives outside React so YouTubeProvider and Main can share it
-const onYtEndedRef = { current: () => { } }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 function Main() {
+  // const { isAuthenticated, login: spotifyLogin } = useSpotifyAuth()
+
+  // useSpotify is called here inside SpotifyAuthProvider so useSpotifyAuth works.
+  const spotify = useSpotify(() => onTrackEndedRef.current())
+
   const [sessionHistory, setSessionHistory] = useState<SessionEvent[]>([])
   const [entropy, setEntropy] = useState(0.2)
   const kernel = useSessionKernel({ entropy })
 
   const [genreWeights, setGenreWeights] = useState<Record<string, number>>({})
-
   const [showConnectors, setShowConnectors] = useState(false)
   const [view, setView] = useState<ViewName>('Discover')
   const [nowPlaying, setNowPlaying] = useState<null | 'player' | { track: Track; color: string }>(null)
 
-  // ─── Analyze view: pre-populated query passed from NowPlaying ─────────────
-  // When the user taps "Analyze" on a track in NowPlaying, we:
-  //   1. Close NowPlaying
-  //   2. Switch to the Analyze tab
-  //   3. Pass the track query string as initialQuery — ArtistNeighborhoodView
-  //      auto-fires its search when it receives this.
   const [analyzeQuery, setAnalyzeQuery] = useState<string | null>(null)
 
   const handleAnalyzeTrack = useCallback((track: Track) => {
@@ -103,11 +96,7 @@ function Main() {
     setNowPlaying(null)
   }, [])
 
-  // Clear analyzeQuery once ArtistNeighborhoodView has consumed it,
-  // so navigating away and back doesn't re-trigger the search.
-  const handleAnalyzeQueryConsumed = useCallback(() => {
-    setAnalyzeQuery(null)
-  }, [])
+  const handleAnalyzeQueryConsumed = useCallback(() => setAnalyzeQuery(null), [])
 
   const [genreFilter, setGenreFilter] = useState('all')
   const [moodFilter, setMoodFilter] = useState('all')
@@ -121,8 +110,6 @@ function Main() {
   } = useChroma({ genreFilter, moodFilter, contextFilter })
 
   const { tracks: ytTracks, loading: ytLoading, search: ytSearch, clear: ytClear } = useMediaSearch()
-
-  // ─── Agent context ──────────────────────────────────────────────────────────
 
   const { sendMessage } = useFangornAgent()
 
@@ -184,10 +171,10 @@ function Main() {
   const [recommendedTracks, setRecommendedTracks] = useState<RecommendedTracks | null>(null)
   const [recommendLoading, setRecommendLoading] = useState(false)
 
-  const filteredTracksRef = useRef<Track[]>([])
-  const playingIdRef = useRef<string | null>(null)
-  const recentPlaysRef = useRef<string[]>([])
-  const recentSkipsRef = useRef<string[]>([])
+  const filteredTracksRef  = useRef<Track[]>([])
+  const playingIdRef       = useRef<string | null>(null)
+  const recentPlaysRef     = useRef<string[]>([])
+  const recentSkipsRef     = useRef<string[]>([])
 
   const pushPlay = useCallback((label: string) => {
     recentPlaysRef.current = [label, ...recentPlaysRef.current].slice(0, SNAPSHOT_HISTORY_DEPTH)
@@ -216,12 +203,12 @@ function Main() {
         ? new Float32Array((track as any).embedding)
         : await kernel.embedText(label)
       const meta = {
-        trackId: track.id,
-        artistId: track.artist,
-        genres: (track as any).genres ?? [],
-        moods: (track as any).moods ?? [],
-        themes: (track as any).themes ?? [],
-        contexts: (track as any).contexts ?? [],
+        trackId:    track.id,
+        artistId:   track.artist,
+        genres:     (track as any).genres   ?? [],
+        moods:      (track as any).moods    ?? [],
+        themes:     (track as any).themes   ?? [],
+        contexts:   (track as any).contexts ?? [],
         durationMs: track.durationMs ?? 0,
       }
       if (type === 'play') {
@@ -250,14 +237,14 @@ function Main() {
   const handleSignalRef = useRef(handleSignal)
   handleSignalRef.current = handleSignal
 
-  const ytTracksRef = useRef(ytTracks)
+  const ytTracksRef       = useRef(ytTracks)
   const fallbackTracksRef = useRef(fallbackTracks)
-  useEffect(() => { ytTracksRef.current = ytTracks }, [ytTracks])
+  useEffect(() => { ytTracksRef.current       = ytTracks       }, [ytTracks])
   useEffect(() => { fallbackTracksRef.current = fallbackTracks }, [fallbackTracks])
 
   // ─── Playback router ─────────────────────────────────────────────────────────
 
-  const { play, state: playbackState } = usePlaybackRouter({
+  const { play, state: playbackState } = usePlaybackRouter(spotify, {
     onSkip: useCallback((trackId: string) => {
       const skipped =
         filteredTracksRef.current.find(t => t.id === trackId) ??
@@ -276,7 +263,7 @@ function Main() {
   }, [playbackState.trackId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    onYtEndedRef.current = playNext
+    onTrackEndedRef.current = playNext
   }, [playNext])
 
   // ─── Agent context entropy ───────────────────────────────────────────────────
@@ -295,38 +282,31 @@ function Main() {
     .map(([genre]) => genre)
 
   useEffect(() => {
-    if (!chromaReady) return
-    if (loading) return
-    if (startupFiredRef.current) return
-
+    if (!chromaReady || loading || startupFiredRef.current) return
     startupFiredRef.current = true
     const query = buildStartupQuery(kernelTopGenres)
     console.log('[app] startup prefetch →', query)
-
     kernel.embedText(query)
       .then(vec => applyKernelQuery(Array.from(vec), true))
       .catch(e => console.warn('[app] startup embed failed:', e))
   }, [chromaReady, loading, kernelTopGenres])
 
-  function buildStartupQuery(kernelTopGenres?: string[]): string {
-    const slot = getTimeSlot()
-    const mood = pick(slot.moods)
-    const genrePool = kernelTopGenres && kernelTopGenres.length > 0
-      ? kernelTopGenres.slice(0, 4)
-      : slot.genres
-    const genre = pick(genrePool)
-    return `${mood} ${genre}`
+  function buildStartupQuery(topGenres?: string[]): string {
+    const slot      = getTimeSlot()
+    const mood      = pick(slot.moods)
+    const genrePool = topGenres && topGenres.length > 0 ? topGenres.slice(0, 4) : slot.genres
+    return `${mood} ${pick(genrePool)}`
   }
 
   interface TimeSlot { moods: string[]; genres: string[] }
 
   function getTimeSlot(): TimeSlot {
     const h = new Date().getHours()
-    if (h >= 5 && h < 11) return { moods: ['energetic', 'uplifting', 'focused', 'bright'], genres: ['indie pop', 'math rock', 'post-rock', 'funk', 'electronic'] }
-    if (h >= 11 && h < 14) return { moods: ['driving', 'confident', 'punchy'], genres: ['alternative', 'rock', 'electronic', 'hip hop'] }
-    if (h >= 14 && h < 18) return { moods: ['focused', 'deep', 'hypnotic', 'complex'], genres: ['post-rock', 'math rock', 'prog', 'industrial', 'ambient'] }
-    if (h >= 18 && h < 22) return { moods: ['chill', 'warm', 'melodic', 'emotional'], genres: ['shoegaze', 'dream pop', 'indie', 'post-hardcore', 'chillwave'] }
-    return { moods: ['dark', 'introspective', 'atmospheric', 'melancholic'], genres: ['darkwave', 'ambient', 'post-punk', 'industrial', 'doom'] }
+    if (h >= 5  && h < 11) return { moods: ['energetic', 'uplifting', 'focused', 'bright'],       genres: ['indie pop', 'math rock', 'post-rock', 'funk', 'electronic'] }
+    if (h >= 11 && h < 14) return { moods: ['driving', 'confident', 'punchy'],                     genres: ['alternative', 'rock', 'electronic', 'hip hop'] }
+    if (h >= 14 && h < 18) return { moods: ['focused', 'deep', 'hypnotic', 'complex'],             genres: ['post-rock', 'math rock', 'prog', 'industrial', 'ambient'] }
+    if (h >= 18 && h < 22) return { moods: ['chill', 'warm', 'melodic', 'emotional'],              genres: ['shoegaze', 'dream pop', 'indie', 'post-hardcore', 'chillwave'] }
+    return                         { moods: ['dark', 'introspective', 'atmospheric', 'melancholic'], genres: ['darkwave', 'ambient', 'post-punk', 'industrial', 'doom'] }
   }
 
   function pick<T>(arr: T[]): T { return arr[Math.floor(Math.random() * arr.length)] }
@@ -341,9 +321,9 @@ function Main() {
     setView('Discover')
     try {
       const result = await sendMessage(query?.trim() || 'I have dream pop fever')
-      const tracks = agentResultToTracks(result?.mcpResults)
+      const found  = agentResultToTracks(result?.mcpResults)
       setRecommendedTracks(
-        tracks.length > 0 ? { tracks, sourceId: '', sourceTitle: result?.agentMessage! } : null
+        found.length > 0 ? { tracks: found, sourceId: '', sourceTitle: result?.agentMessage! } : null
       )
     } catch (e) {
       console.error('Recommendation failed:', e)
@@ -363,149 +343,135 @@ function Main() {
   }, [])
 
   const handleFilter = useCallback((type: 'genre' | 'mood' | 'context', value: string) => {
-    if (type === 'genre') setGenreFilter(value)
-    if (type === 'mood') setMoodFilter(value)
+    if (type === 'genre')   setGenreFilter(value)
+    if (type === 'mood')    setMoodFilter(value)
     if (type === 'context') setContextFilter(value)
   }, [])
 
   const nowPlayingOpen = nowPlaying !== null
-
-  // ─── Nav tabs ─────────────────────────────────────────────────────────────────
-  // 'Analyze' sits after 'Agent'. It's a tool tab — distinct in purpose from
-  // Discover (listener) and Agent (conversational). The listener entry point
-  // is the "Analyze" button on the NowPlaying overlay (see onAnalyze below).
   const NAV_TABS: ViewName[] = ['Discover', 'Agent', 'Analyze']
 
+  // ─── SpotifyProvider wraps the entire render so any child can read
+  //     shared playback state via useSpotifyContext()
   return (
-    <PlayerProvider tracks={tracks}>
-      <div className="app">
+    <SpotifyProvider value={{ ...spotify }}>
+      <PlayerProvider tracks={tracks}>
+        <div className="app">
 
-        <header className="header">
-          <div className="header-brand">
-            <span className="brand-name">SOND3R</span>
-            <nav style={{ display: 'flex', gap: '16px', marginLeft: '24px' }}>
-              {NAV_TABS.map(v => (
+          <header className="header">
+            <div className="header-brand">
+              <span className="brand-name">SOND3R</span>
+              <nav style={{ display: 'flex', gap: '16px', marginLeft: '24px' }}>
+                {NAV_TABS.map(v => (
+                  <button
+                    key={v}
+                    onClick={() => { setView(v); setShowConnectors(false) }}
+                    className={`app-nav-tab ${view === v && !showConnectors ? 'active' : ''}`}
+                  >{v}</button>
+                ))}
                 <button
-                  key={v}
-                  onClick={() => { setView(v); setShowConnectors(false) }}
-                  className={`app-nav-tab ${view === v && !showConnectors ? 'active' : ''}`}
-                >{v}</button>
-              ))}
-              <button
-                onClick={() => setShowConnectors(true)}
-                className={`app-nav-tab ${showConnectors ? 'active' : ''}`}
-              >Connectors</button>
-            </nav>
-            <ConnectWallet />
-          </div>
-        </header>
+                  onClick={() => setShowConnectors(true)}
+                  className={`app-nav-tab ${showConnectors ? 'active' : ''}`}
+                >Connectors</button>
+              </nav>
+              <ConnectWallet />
+            </div>
+          </header>
 
-        <KernelDebugHUD state={kernel.state} history={sessionHistory} />
+          <KernelDebugHUD state={kernel.state} />
 
-        <main className="main">
-          {showConnectors && <ConnectorsView />}
+          <main className="main">
+            {showConnectors && <ConnectorsView />}
 
-          {!showConnectors && view === 'Discover' && (
-            <BrowseView
-              tracks={tracks}
-              kernelTopGenres={kernelTopGenres}
-              loading={loading}
-              loadingMore={loadingMore}
-              error={error}
-              hasMore={hasMore}
-              loadMore={loadMore}
-              search={search}
-              setSearch={handleSetSearch}
-              chromaReady={chromaReady}
-              seeding={seeding}
-              retryConnect={retryConnect}
-              recommendedTracks={recommendedTracks}
-              recommendLoading={recommendLoading}
-              onClearRecommendations={clearRecommendations}
-              onCallAgent={handleFindSimilar}
-              onFilteredChange={f => { filteredTracksRef.current = f }}
-              onPlayingIdChange={id => { playingIdRef.current = id }}
-              onSignal={handleSignal}
-              onTrackClick={handleTrackClick}
-              genreFilter={genreFilter}
-              moodFilter={moodFilter}
-              contextFilter={contextFilter}
-              onGenreFilter={setGenreFilter}
-              onMoodFilter={setMoodFilter}
-              onContextFilter={setContextFilter}
-              allGenres={allGenres}
-              allMoods={allMoods}
-              allContexts={allContexts}
-              fallbackTracks={fallbackTracks}
-              fallbackLoading={fallbackLoading}
-              onFallbackSearch={handleMusicBrainzSearch}
-              onFallbackClear={handleFallbackClear}
-              // contextBar={
-              //   <ContextBar
-              //     context={agentContext.context}
-              //     loading={agentContext.loading}
-              //     error={agentContext.error}
-              //     onActivate={agentContext.activate}
-              //     onClear={agentContext.clear}
-              //   />
-              // }
-              ytTracks={ytTracks}
-            ytLoading={ytLoading}
-              onYtSearch={ytSearch}
-              onYtClear={ytClear}
+            {!showConnectors && view === 'Discover' && (
+              <BrowseView
+                tracks={tracks}
+                kernelTopGenres={kernelTopGenres}
+                loading={loading}
+                loadingMore={loadingMore}
+                error={error}
+                hasMore={hasMore}
+                loadMore={loadMore}
+                search={search}
+                setSearch={handleSetSearch}
+                chromaReady={chromaReady}
+                seeding={seeding}
+                retryConnect={retryConnect}
+                recommendedTracks={recommendedTracks}
+                recommendLoading={recommendLoading}
+                onClearRecommendations={clearRecommendations}
+                onCallAgent={handleFindSimilar}
+                onFilteredChange={f => { filteredTracksRef.current = f }}
+                onPlayingIdChange={id => { playingIdRef.current = id }}
+                onSignal={handleSignal}
+                onTrackClick={handleTrackClick}
+                genreFilter={genreFilter}
+                moodFilter={moodFilter}
+                contextFilter={contextFilter}
+                onGenreFilter={setGenreFilter}
+                onMoodFilter={setMoodFilter}
+                onContextFilter={setContextFilter}
+                allGenres={allGenres}
+                allMoods={allMoods}
+                allContexts={allContexts}
+                fallbackTracks={fallbackTracks}
+                fallbackLoading={fallbackLoading}
+                onFallbackSearch={handleMusicBrainzSearch}
+                onFallbackClear={handleFallbackClear}
+                ytTracks={ytTracks}
+                ytLoading={ytLoading}
+                onYtSearch={ytSearch}
+                onYtClear={ytClear}
+                playbackState={playbackState}
+                onPlay={play}
+              />
+            )}
+
+            {!showConnectors && view === 'Agent' && <AgentView />}
+
+            {!showConnectors && view === 'Analyze' && (
+              <ArtistNeighborhoodView
+                initialQuery={analyzeQuery ?? undefined}
+                onQueryConsumed={handleAnalyzeQueryConsumed}
+              />
+            )}
+          </main>
+
+          <PlayerBar
+            onTrackClick={handleTrackClick}
+            hidden={nowPlayingOpen}
+            playbackState={playbackState}
+            nextTrack={nextTrack}
+            onPlayNext={playNext}
+          />
+
+          {nowPlayingOpen && createPortal(
+            <NowPlaying
               playbackState={playbackState}
               onPlay={play}
-            />
+              onCollapse={() => setNowPlaying(null)}
+              track={nowPlaying !== 'player' ? nowPlaying.track : undefined}
+              trackColor={nowPlaying !== 'player' ? nowPlaying.color : undefined}
+              onFilter={(type, value) => { handleFilter(type, value); setNowPlaying(null) }}
+              onCallAgent={handleFindSimilar}
+              onTrackSelect={(track, color) => setNowPlaying({ track, color: color ?? '' })}
+              onAnalyze={handleAnalyzeTrack}
+            />,
+            document.body
           )}
 
-          {!showConnectors && view === 'Agent' && <AgentView />}
-
-          {/* ── Analyze view ────────────────────────────────────────────────── */}
-          {/* Mounted/unmounted with the tab — state resets on each visit unless
-              initialQuery is passed, in which case it auto-fires a fresh search. */}
-          {!showConnectors && view === 'Analyze' && (
-            <ArtistNeighborhoodView
-              initialQuery={analyzeQuery ?? undefined}
-              onQueryConsumed={handleAnalyzeQueryConsumed}
-            />
+          {showScrollTop && createPortal(
+            <button
+              className="scroll-top-btn"
+              onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+              title="Back to top"
+            >↑</button>,
+            document.body
           )}
-        </main>
 
-        <PlayerBar
-          onTrackClick={handleTrackClick}
-          hidden={nowPlayingOpen}
-          playbackState={playbackState}
-          nextTrack={nextTrack}
-          onPlayNext={playNext}
-        />
-
-        {nowPlayingOpen && createPortal(
-          <NowPlaying
-            playbackState={playbackState}
-            onPlay={play}
-            onCollapse={() => setNowPlaying(null)}
-            track={nowPlaying !== 'player' ? nowPlaying.track : undefined}
-            trackColor={nowPlaying !== 'player' ? nowPlaying.color : undefined}
-            onFilter={(type, value) => { handleFilter(type, value); setNowPlaying(null) }}
-            onCallAgent={handleFindSimilar}
-            onTrackSelect={(track, color) => setNowPlaying({ track, color: color ?? '' })}
-            // ── New: opens Analyze tab pre-loaded with this track ──────────
-            onAnalyze={handleAnalyzeTrack}
-          />,
-          document.body
-        )}
-
-        {showScrollTop && createPortal(
-          <button
-            className="scroll-top-btn"
-            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-            title="Back to top"
-          >↑</button>,
-          document.body
-        )}
-
-      </div>
-    </PlayerProvider>
+        </div>
+      </PlayerProvider>
+    </SpotifyProvider>
   )
 }
 

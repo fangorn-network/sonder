@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useYouTubeContext } from '../hooks/useYoutubeContext'
+import { useSpotify } from '../hooks/useSpotifyContext'
 import type { Track } from '../types'
 import type { PlaybackState } from '../types/playback'
 import './NowPlaying.css'
@@ -7,6 +7,7 @@ import { PublishModal } from './PublishModal'
 import { useFangorn } from '../hooks/useFangorn'
 import { TrackTagModal } from './TrackTag'
 import { computeTrackId } from '../lib/trackId'
+import { useSpotifyContext } from '../context/SpotifyContext'
 
 const CHROMA_URL = (import.meta as any).env.VITE_CHROMA_URL ?? 'http://localhost:8080'
 
@@ -38,17 +39,17 @@ async function fetchTrackFromChroma(
             if (f.trackId === tagTrackId) return true
             const hId = (f.externalId as string) ??
                 (h.id?.startsWith('track:') ? h.id.slice(6) : null)
-            const hTitle  = (f.title ?? f.name ?? '').toLowerCase()
+            const hTitle = (f.title ?? f.name ?? '').toLowerCase()
             const hArtist = (f.byArtist ?? f.artist ?? '').toLowerCase()
             return hTitle === title.toLowerCase() && hArtist === artist.toLowerCase()
         })
         if (!hit) return { exists: false, tags: null }
         const f = hit.fields ?? {}
         const tags: NetworkTags = {
-            genres:   Array.isArray(f.genres)   ? f.genres   : [],
-            moods:    Array.isArray(f.moods)     ? f.moods    : [],
-            themes:   Array.isArray(f.themes)    ? f.themes   : [],
-            contexts: Array.isArray(f.contexts)  ? f.contexts : [],
+            genres: Array.isArray(f.genres) ? f.genres : [],
+            moods: Array.isArray(f.moods) ? f.moods : [],
+            themes: Array.isArray(f.themes) ? f.themes : [],
+            contexts: Array.isArray(f.contexts) ? f.contexts : [],
         }
         const hasTags = Object.values(tags).some(arr => arr.length > 0)
         return { exists: true, tags: hasTags ? tags : null }
@@ -124,48 +125,48 @@ async function fetchArtistTracks(
 function parseHit(h: any): SimilarTrack {
     const f: Record<string, any> = h.fields ?? {}
     return {
-        id:             h.id,
+        id: h.id,
         youtubeVideoId: (f.platformId as string) ?? undefined,
-        title:          (f.title as string) ?? (f.name as string) ?? 'Unknown',
-        artist:         (f.byArtist as string) ?? (f.artist as string) ?? '',
-        year:           typeof f.datePublished === 'string'
+        title: (f.title as string) ?? (f.name as string) ?? 'Unknown',
+        artist: (f.byArtist as string) ?? (f.artist as string) ?? '',
+        year: typeof f.datePublished === 'string'
             ? parseInt(f.datePublished.slice(0, 4)) || null
             : (f.year as number) ?? null,
-        genre:          Array.isArray(f.genres) ? (f.genres[0] ?? null) : null,
-        embedding:      h.embedding ?? null,
-        score:          h.score ?? null,
+        genre: Array.isArray(f.genres) ? (f.genres[0] ?? null) : null,
+        embedding: h.embedding ?? null,
+        score: h.score ?? null,
     }
 }
 
 interface SimilarTrack {
-    id:              string
+    id: string
     youtubeVideoId?: string
-    title:           string
-    artist:          string
-    year:            number | null
-    genre:           string | null
-    embedding:       number[] | null
-    score:           number | null
+    title: string
+    artist: string
+    year: number | null
+    genre: string | null
+    embedding: number[] | null
+    score: number | null
 }
 
 type RightTab = 'similar' | 'artist'
 
 interface NowPlayingProps {
-    onCollapse:     () => void
-    lastPollTime?:  number
-    track?:         Track
-    trackColor?:    string
-    onFilter?:      (type: 'genre' | 'mood' | 'context', value: string) => void
-    onCallAgent?:   (query?: string) => void
+    onCollapse: () => void
+    lastPollTime?: number
+    track?: Track
+    trackColor?: string
+    onFilter?: (type: 'genre' | 'mood' | 'context', value: string) => void
+    onCallAgent?: (query?: string) => void
     onTrackSelect?: (track: Track, color?: string) => void
-    onPlay?:        (track: Track) => Promise<void>
+    onPlay?: (track: Track) => Promise<void>
     playbackState?: PlaybackState
     /**
      * Called when the user taps the Analyze button.
      * App closes NowPlaying, switches to the Analyze tab, and pre-populates
      * the neighborhood search with this track.
      */
-    onAnalyze?:     (track: Track) => void
+    onAnalyze?: (track: Track) => void
 }
 
 export function NowPlaying({
@@ -178,16 +179,16 @@ export function NowPlaying({
     onAnalyze,
 }: NowPlayingProps) {
     const {
-        currentTitle:  ytTitle,
+        currentTitle: ytTitle,
         currentArtist: ytArtist,
-        currentThumb:  ytThumb,
-        isPlaying:     ytIsPlaying,
-        progressMs:    ytProgressMs,
-        durationMs:    ytDurationMs,
-        pause:         ytPause,
-        resume:        ytResume,
-        seek:          ytSeek,
-    } = useYouTubeContext()
+        currentThumb: ytThumb,
+        isPlaying: ytIsPlaying,
+        progressMs: ytProgressMs,
+        durationMs: ytDurationMs,
+        pause: ytPause,
+        resume: ytResume,
+        seek: ytSeek,
+    } = useSpotifyContext()
 
     const { fangorn, address } = useFangorn()
 
@@ -203,20 +204,20 @@ export function NowPlaying({
         ytTitle.toLowerCase() === focusTrack?.title.toLowerCase()
 
     const [liveProgressMs, setLiveProgressMs] = useState(0)
-    const [albumArt, setAlbumArt]             = useState<string | null>(null)
-    const [activeTab, setActiveTab]           = useState<RightTab>('similar')
-    const [similarTracks, setSimilarTracks]   = useState<SimilarTrack[]>([])
-    const [artistTracks, setArtistTracks]     = useState<SimilarTrack[]>([])
+    const [albumArt, setAlbumArt] = useState<string | null>(null)
+    const [activeTab, setActiveTab] = useState<RightTab>('similar')
+    const [similarTracks, setSimilarTracks] = useState<SimilarTrack[]>([])
+    const [artistTracks, setArtistTracks] = useState<SimilarTrack[]>([])
     const [similarLoading, setSimilarLoading] = useState(false)
-    const [artistLoading, setArtistLoading]   = useState(false)
-    const [playLoading, setPlayLoading]       = useState(false)
-    const [playingId, setPlayingId]           = useState<string | null>(null)
-    const [existsInIndex, setExistsInIndex]   = useState<boolean | null>(null)
-    const [showPublish, setShowPublish]       = useState(false)
-    const [tagTrackId, setTagTrackId]         = useState<string | null>(null)
-    const [networkTags, setNetworkTags]       = useState<NetworkTags | null>(null)
-    const [showTagModal, setShowTagModal]     = useState(false)
-    const [modalTrackId, setModalTrackId]     = useState<string | null>(null)
+    const [artistLoading, setArtistLoading] = useState(false)
+    const [playLoading, setPlayLoading] = useState(false)
+    const [playingId, setPlayingId] = useState<string | null>(null)
+    const [existsInIndex, setExistsInIndex] = useState<boolean | null>(null)
+    const [showPublish, setShowPublish] = useState(false)
+    const [tagTrackId, setTagTrackId] = useState<string | null>(null)
+    const [networkTags, setNetworkTags] = useState<NetworkTags | null>(null)
+    const [showTagModal, setShowTagModal] = useState(false)
+    const [modalTrackId, setModalTrackId] = useState<string | null>(null)
 
     const openTagModal = () => {
         if (!tagTrackId) return
@@ -297,13 +298,13 @@ export function NowPlaying({
 
     if (!focusTrack) return null
 
-    const durationMs  = ytDurationMs
-    const progress    = durationMs > 0 ? liveProgressMs / durationMs : 0
+    const durationMs = ytDurationMs
+    const progress = durationMs > 0 ? liveProgressMs / durationMs : 0
     const accentColor = trackColor ?? 'var(--accent)'
-    const showPause   = isThisTrackActive && ytIsPlaying
+    const showPause = isThisTrackActive && ytIsPlaying
 
     function scrubTo(e: React.MouseEvent<HTMLDivElement>) {
-        const rect  = e.currentTarget.getBoundingClientRect()
+        const rect = e.currentTarget.getBoundingClientRect()
         const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
         ytSeek(ratio * durationMs)
     }
@@ -323,14 +324,14 @@ export function NowPlaying({
     const handlePlayRow = async (t: SimilarTrack) => {
         setPlayingId(t.id)
         const asTrack: Track = {
-            id:             t.id,
-            trackId:        t.id,
-            owner:          '',
-            manifestCid:    '',
-            title:          t.title,
-            artist:         t.artist,
-            year:           t.year,
-            durationMs:     null,
+            id: t.id,
+            trackId: t.id,
+            owner: '',
+            manifestCid: '',
+            title: t.title,
+            artist: t.artist,
+            year: t.year,
+            durationMs: null,
             youtubeVideoId: t.youtubeVideoId,
         }
         onTrackSelect?.(asTrack)
@@ -340,7 +341,7 @@ export function NowPlaying({
         } catch { setPlayingId(null) }
     }
 
-    const activeList    = activeTab === 'similar' ? similarTracks : artistTracks
+    const activeList = activeTab === 'similar' ? similarTracks : artistTracks
     const activeLoading = activeTab === 'similar' ? similarLoading : artistLoading
 
     return (
@@ -440,41 +441,41 @@ export function NowPlaying({
                             onClick={() => onAnalyze(focusTrack)}
                             title="View where this track sits in the embedding space"
                             style={{
-                                display:        'flex',
-                                alignItems:     'center',
-                                gap:            6,
-                                marginTop:      16,
-                                padding:        '6px 14px',
-                                background:     'rgba(0,255,231,0.07)',
-                                border:         '1px solid rgba(0,255,231,0.2)',
-                                borderRadius:   0,
-                                color:          '#00ffe7',
-                                fontSize:       11,
-                                fontFamily:     'var(--font-mono, "DM Mono", monospace)',
-                                letterSpacing:  '0.07em',
-                                textTransform:  'uppercase',
-                                cursor:         'pointer',
-                                alignSelf:      'center',
-                                transition:     'background 0.15s, border-color 0.15s',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 6,
+                                marginTop: 16,
+                                padding: '6px 14px',
+                                background: 'rgba(0,255,231,0.07)',
+                                border: '1px solid rgba(0,255,231,0.2)',
+                                borderRadius: 0,
+                                color: '#00ffe7',
+                                fontSize: 11,
+                                fontFamily: 'var(--font-mono, "DM Mono", monospace)',
+                                letterSpacing: '0.07em',
+                                textTransform: 'uppercase',
+                                cursor: 'pointer',
+                                alignSelf: 'center',
+                                transition: 'background 0.15s, border-color 0.15s',
                             }}
                             onMouseEnter={e => {
-                                (e.currentTarget as HTMLButtonElement).style.background    = 'rgba(0,255,231,0.13)'
-                                ;(e.currentTarget as HTMLButtonElement).style.borderColor  = 'rgba(0,255,231,0.4)'
+                                (e.currentTarget as HTMLButtonElement).style.background = 'rgba(0,255,231,0.13)'
+                                    ; (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(0,255,231,0.4)'
                             }}
                             onMouseLeave={e => {
-                                (e.currentTarget as HTMLButtonElement).style.background    = 'rgba(0,255,231,0.07)'
-                                ;(e.currentTarget as HTMLButtonElement).style.borderColor  = 'rgba(0,255,231,0.2)'
+                                (e.currentTarget as HTMLButtonElement).style.background = 'rgba(0,255,231,0.07)'
+                                    ; (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(0,255,231,0.2)'
                             }}
                         >
                             {/* Scatter-plot icon */}
                             <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor">
-                                <circle cx="3"  cy="3"  r="1.4"/>
-                                <circle cx="9"  cy="2"  r="1.4"/>
-                                <circle cx="14" cy="5"  r="1.4"/>
-                                <circle cx="5"  cy="9"  r="1.4"/>
-                                <circle cx="12" cy="10" r="1.4"/>
-                                <circle cx="7"  cy="13" r="1.4"/>
-                                <circle cx="2"  cy="13" r="1.4"/>
+                                <circle cx="3" cy="3" r="1.4" />
+                                <circle cx="9" cy="2" r="1.4" />
+                                <circle cx="14" cy="5" r="1.4" />
+                                <circle cx="5" cy="9" r="1.4" />
+                                <circle cx="12" cy="10" r="1.4" />
+                                <circle cx="7" cy="13" r="1.4" />
+                                <circle cx="2" cy="13" r="1.4" />
                             </svg>
                             Analyze in embedding space
                         </button>
@@ -489,7 +490,7 @@ export function NowPlaying({
                             trackTitle={focusTrack.title}
                             fangorn={fangorn}
                             onClose={() => setShowTagModal(false)}
-                            onSave={() => {}}
+                            onSave={() => { }}
                             accentColor={accentColor}
                         />
                     )}

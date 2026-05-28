@@ -15,7 +15,7 @@
     "dev": "electron-vite dev",
     "build": "npm run typecheck && electron-vite build",
     "predev": "bash scripts/setup_ytdlp.sh",
-    "postinstall": "electron-builder install-app-deps && bash scripts/setup_ytdlp.sh",
+    "postinstall": "electron-builder install-app-deps",
     "link": "pnpm link ../../agent/agent && pnpm link ../../agent/tools",
     "build:unpack": "pnpm run build && electron-builder --dir",
     "build:win": "electron-vite build && electron-builder --win",

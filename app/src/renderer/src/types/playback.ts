@@ -1,5 +1,5 @@
 // TODO: should this be yt-dlp instead?
-export type SourceId = 'youtube' 
+export type SourceId = 'spotify' | 'youtube' 
 // can extenbd in the future: 'soundcloud' | 'podcast' | 'url' | ...
 
 export interface PlaybackSource {

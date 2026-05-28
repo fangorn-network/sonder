@@ -6,8 +6,8 @@ import { PublishModal } from '../components/PublishModal'
 import type { Fangorn } from '@fangorn-network/sdk'
 import type { Hex } from 'viem'
 import { PlaybackState } from '../types/playback'
-import { useYouTubeContext } from '../hooks/useYoutubeContext'
-
+import { useSpotify } from '../hooks/useSpotifyContext'
+import { useSpotifyContext } from '../context/SpotifyContext'
 const GENRE_PALETTE = [
   '#a78bfa', '#60a5fa', '#f472b6', '#22c55e',
   '#f97316', '#7c5de8', '#f87171', '#34d399',
@@ -129,11 +129,7 @@ export function BrowseView({
   const [reasonExpanded, setReasonExpanded] = useState(false)
   const [publishingTrack, setPublishingTrack] = useState<{ track: Track; color: string } | null>(null)
 
-  const {
-    stop: stopYt,
-    currentVideoId: ytCurrentId,
-    isPlaying: ytIsPlaying,
-  } = useYouTubeContext()
+  const { currentVideoId, isPlaying } = useSpotifyContext()
 
   const [activeTab, setActiveTab] = useState<SearchTab>('library')
   const mbFetchedRef = useRef<string>('')
@@ -264,7 +260,7 @@ export function BrowseView({
     const accentColor = hashColor(track.id)
     const isThisPlaying =
       (playbackState?.trackId === track.id && playbackState?.playing) ||
-      (track.youtubeVideoId != null && track.youtubeVideoId === ytCurrentId && ytIsPlaying)
+      (currentVideoId != null && currentVideoId === track.id && isPlaying)
     const isMbTrack = !track.manifestCid
     const durationStr = track.durationMs
       ? `${Math.floor(track.durationMs / 60000)}:${String(Math.floor((track.durationMs % 60000) / 1000)).padStart(2, '0')}`
@@ -324,7 +320,7 @@ export function BrowseView({
     const accentColor = hashColor(track.id)
     const isThisPlaying =
       (playbackState?.trackId === track.id && playbackState?.playing) ||
-      (track.youtubeVideoId != null && track.youtubeVideoId === ytCurrentId && ytIsPlaying)
+      (currentVideoId != null && currentVideoId === track.id && isPlaying)
     const isMbTrack = !track.manifestCid
     const durationStr = track.durationMs
       ? `${Math.floor(track.durationMs / 60000)}:${String(Math.floor((track.durationMs % 60000) / 1000)).padStart(2, '0')}`

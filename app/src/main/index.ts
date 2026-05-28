@@ -13,6 +13,8 @@ import { registerAgentIpcHandlers } from './agent/ipc-handlers'
 import { DataContext } from '@fangorn-network/agent-types'
 import { existsSync } from 'fs'
 import { ToolboxConfigManager } from './agent/toolbox-config-manager'
+import { registerSpotifyAuth, handleSpotifyCallback } from './spotify/SpotifyAuth'
+import { registerSpotifyIpc } from './spotify/SpotifyController'
 
 // ─── yt-dlp helpers ───────────────────────────────────────────────────────────
 
@@ -154,12 +156,8 @@ function resolveYt(query: string): Promise<YtResolveResult> {
           durationMs: Math.round((info.duration ?? 0) * 1000),
         }
 
-        // Already fully downloaded — resolve immediately
-        if (streamCache.has(info.id)) {
-          return resolve(result)
-        }
+        if (streamCache.has(info.id)) return resolve(result)
 
-        // Format selection
         const formats: any[] = (info.formats ?? [])
           .filter((f: any) => {
             if (!f.format_id) return false
@@ -189,18 +187,15 @@ function resolveYt(query: string): Promise<YtResolveResult> {
           : `https://www.youtube.com/watch?v=${info.id}`
         const tmpPath = path.join(app.getPath('userData'), `sond3r-${info.id}.${ext}`)
 
-        // Disk hit from previous session
         if (fs.existsSync(tmpPath)) {
           const size = fs.statSync(tmpPath).size
           if (size > 32 * 1024) {
             streamCache.set(info.id, { tmpPath, contentType, sourceQuery: query })
             return resolve(result)
           }
-          // Partial/corrupt — delete and re-download
           try { fs.unlinkSync(tmpPath) } catch { }
         }
 
-        // Download fully before resolving — eliminates partial-file EOF bug
         const dlArgs = [
           sourceUrl,
           '-f', fmt.format_id,
@@ -213,7 +208,6 @@ function resolveYt(query: string): Promise<YtResolveResult> {
         console.log(`[yt:dl] starting: ${info.id} (${fmt.format_id} ${ext})`)
         const dlProc = spawn(getYtDlpBin(), dlArgs)
         dlProc.stderr.on('data', (d: Buffer) => console.error('[yt:dl]', d.toString().trimEnd()))
-
         dlProc.on('error', reject)
         dlProc.on('close', (code) => {
           if (code !== 0) {
@@ -326,7 +320,7 @@ function startRendererServer(): Promise<void> {
 
 // ─── Browser window ───────────────────────────────────────────────────────────
 
-function createWindow(): void {
+function createWindow(): BrowserWindow {
   const mainWindow = new BrowserWindow({
     width: 1200, height: 800,
     fullscreen: false, fullscreenable: true,
@@ -354,13 +348,15 @@ function createWindow(): void {
   } else {
     mainWindow.loadURL('http://127.0.0.1:5173')
   }
+
+  return mainWindow
 }
 
 // ─── IPC handlers ─────────────────────────────────────────────────────────────
 
 function registerIpcHandlers() {
   ipcMain.handle('fetch:proxy', async (_event, { url, options }) => {
-    const res = await fetch(url, options ?? {})
+      const res = await net.fetch(url, options ?? {})
     return { status: res.status, body: await res.text() }
   })
 
@@ -407,12 +403,8 @@ function registerIpcHandlers() {
     return new Promise((resolve) => {
       const proc = spawn(getYtDlpBin(), [
         `ytsearch15:${query}`,
-        '--dump-json',
-        '--no-playlist',
-        '--no-warnings',
-        '--flat-playlist',
+        '--dump-json', '--no-playlist', '--no-warnings', '--flat-playlist',
       ])
-
       let out = ''
       proc.stdout.on('data', (d: Buffer) => { out += d.toString() })
       proc.stderr.on('data', (d: Buffer) => { console.error('[yt:search:music]', d.toString().trim()) })
@@ -432,12 +424,8 @@ function registerIpcHandlers() {
     return new Promise((resolve) => {
       const proc = spawn(getYtDlpBin(), [
         `scsearch30:${query}`,
-        '--dump-json',
-        '--no-playlist',
-        '--no-warnings',
-        '--flat-playlist',
+        '--dump-json', '--no-playlist', '--no-warnings', '--flat-playlist',
       ])
-
       let out = ''
       proc.stdout.on('data', (d: Buffer) => { out += d.toString() })
       proc.on('error', () => resolve([]))
@@ -510,12 +498,21 @@ async function bootstrap() {
   }
 }
 
-// ─── App lifecycle ────────────────────────────────────────────────────────────
+// ─── Protocol + single-instance lock (must be before whenReady) ──────────────
 
-// app.commandLine.appendSwitch('enable-unsafe-swiftshader')
-// app.commandLine.appendSwitch('use-gl', 'swiftshader')
-// app.commandLine.appendSwitch('audio-output-rate', '48000')
-// app.commandLine.appendSwitch('disable-audio-output-resampler')
+// sond3r:// is the OAuth redirect URI registered in the Spotify dashboard.
+// On macOS it arrives via open-url; on Windows/Linux via second-instance argv.
+if (!app.isDefaultProtocolClient('sond3r')) {
+  app.setAsDefaultProtocolClient('sond3r')
+}
+
+// Ensures only one app instance handles the protocol callback on Win/Linux.
+const gotLock = app.requestSingleInstanceLock()
+if (!gotLock) {
+  app.quit()
+}
+
+// ─── App lifecycle ────────────────────────────────────────────────────────────
 
 app.whenReady().then(async () => {
   electronApp.setAppUserModelId('com.electron')
@@ -529,34 +526,16 @@ app.whenReady().then(async () => {
   // ── Session setup — must happen before createWindow ──────────────────────
   const targetSession = session.fromPartition('persist:main')
 
-  // Allow Privy's embedded wallet iframe to request media/clipboard permissions
   targetSession.setPermissionRequestHandler((_webContents, permission, callback) => {
     const allowed = ['media', 'notifications', 'clipboard-read', 'clipboard-sanitized-write']
     callback(allowed.includes(permission))
   })
 
-  // // Allow renderer to reach local Python/ChromaDB backend
-  // const chromaFilter = { urls: ['http://127.0.0.1:8080/*'] }
-  // targetSession.webRequest.onHeadersReceived(chromaFilter, (details, callback) => {
-  //   callback({
-  //     responseHeaders: {
-  //       ...details.responseHeaders,
-  //       'Access-Control-Allow-Origin': ['*'],
-  //       'Access-Control-Allow-Methods': ['GET, POST, OPTIONS'],
-  //       'Access-Control-Allow-Headers': ['Content-Type'],
-  //     },
-  //   })
-  // })
-
-  // Also intercept preflight OPTIONS so they don't 500 before the real request
   targetSession.webRequest.onBeforeRequest(
     { urls: ['http://127.0.0.1:8080/*', 'http://0.0.0.0:8080/*'] },
-    (details, callback) => {
-      callback({}) // pass through; headers above handle CORS on the response side
-    }
+    (details, callback) => { callback({}) }
   )
 
-  // YouTube header injection
   const ytFilter = { urls: ['https://*.youtube.com/*', 'https://*.youtube-nocookie.com/*'] }
   targetSession.webRequest.onBeforeSendHeaders(ytFilter, (details, callback) => {
     details.requestHeaders['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
@@ -568,12 +547,30 @@ app.whenReady().then(async () => {
 
   registerIpcHandlers()
   await bootstrap()
-  createWindow()
+
+  // createWindow() now returns the BrowserWindow so we can hand it to
+  // registerSpotifyAuth, which needs it to send IPC events back to the renderer.
+  const mainWindow = createWindow()
+
+  // registerSpotifyAuth(mainWindow)   // spotify-auth:* IPC handlers
+  registerSpotifyIpc()              // spotify:* IPC handlers (MPRIS / AppleScript / URI)
+
+  // Windows / Linux: protocol URI arrives as argv of the second instance
+  app.on('second-instance', (_e, argv) => {
+    const url = argv.find((a: string) => a.startsWith('sond3r://'))
+    if (url) handleSpotifyCallback(url)
+    // Also focus the existing window
+    if (mainWindow.isMinimized()) mainWindow.restore()
+    mainWindow.focus()
+  })
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
 })
+
+// macOS: protocol URI arrives via open-url on the existing instance
+app.on('open-url', (_e, url) => handleSpotifyCallback(url))
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()

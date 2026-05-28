@@ -94,7 +94,7 @@ jobs:
       - name: Install dependencies
         working-directory: app
         run: |
-          yarn install --ignore-scripts
+          yarn install
           yarn exec electron-builder install-app-deps
 
       - name: Create .env file

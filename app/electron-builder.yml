@@ -48,7 +48,7 @@ nsis:
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always
 npmRebuild: true
-nodeGypRebuild: true
+nodeGypRebuild: false
 detectUpdateChannel: false
 publish:
   provider: generic

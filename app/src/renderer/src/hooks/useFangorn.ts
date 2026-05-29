@@ -112,6 +112,10 @@ export function useFangorn(): UseFangornResult {
             public:  { http: [rpcUrl] },
           },
         },
+        datasourceRegistryContractAddress: '0x9472e5c96bcc954817d2dfa32787d32f4ef37496' as Hex,
+        settlementRegistryContractAddress: '0x43b660632c31e85a34bbce4feb8aa999029a19b2' as Hex,
+        schemaRegistryContractAddress: '0x5373759adecfbce57518fa4c198412012e1bf380' as Hex
+
       }
 
       const fangornInstance = await Fangorn.create({
@@ -126,6 +130,7 @@ export function useFangorn(): UseFangornResult {
       if (cancelled) return
       setWalletClient(wc)
       setFangorn(fangornInstance)
+      
     }
 
     init()

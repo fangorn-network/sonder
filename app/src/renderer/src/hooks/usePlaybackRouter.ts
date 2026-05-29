@@ -17,16 +17,29 @@ export function usePlaybackRouter(
     trackId:      null,
   })
 
-  const stateRef    = useRef(state)
-  stateRef.current  = state
-  const onSkipRef   = useRef(onSkip)
-  onSkipRef.current = onSkip
+  const stateRef       = useRef(state)
+  stateRef.current     = state
+  const onSkipRef      = useRef(onSkip)
+  onSkipRef.current    = onSkip
+  // Set to true before calling play() when a track ended naturally.
+  // Prevents the completed track from being logged as a skip.
+  const naturalEndRef  = useRef(false)
+
+  // Call this before playNext() in the natural-end path so the completed
+  // track isn't counted as a skip.
+  const markNaturalEnd = useCallback(() => {
+    naturalEndRef.current = true
+  }, [])
 
   const play = useCallback(async (track: Track) => {
     const prev = stateRef.current
     if (prev.trackId && prev.trackId !== track.id) {
-      onSkipRef.current?.(prev.trackId)
+      if (!naturalEndRef.current) {
+        // Only fire onSkip when the user manually skipped — not on natural end
+        onSkipRef.current?.(prev.trackId)
+      }
     }
+    naturalEndRef.current = false  // reset after consuming
 
     const source = track.youtubeVideoId
       ?? `${track.title} ${track.artist}`.replace(/\(.*?\)/g, '').trim()
@@ -45,5 +58,5 @@ export function usePlaybackRouter(
   const resume = useCallback(() => { spotify.resume(); setState(s => ({ ...s, playing: true  })) }, [spotify])
   const stop   = useCallback(() => { spotify.stop();   setState({ activeSource: null, playing: false, trackId: null }) }, [spotify])
 
-  return { play, pause, stop, resume, state }
+  return { play, pause, stop, resume, state, markNaturalEnd }
 }

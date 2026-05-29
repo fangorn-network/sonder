@@ -251,10 +251,10 @@ function startPython() {
         '--graph-api-key', apiKey,
         '--chroma-path', path.join(userDataPath, 'chroma_db'),
         '--checkpoint-file', path.join(userDataPath, 'ingest_checkpoint.json'),
-        '-s', 'test.sond3r.track.invariants.1=0x4717598a3d3995ec7a8e9897d29cda00cb750f6e0e9f52f82aeb16365edc1ab6',
+        '-s', 'test.sond3r.track.invariants.0=0xd3e0128222087190a574329cbb049a834e276923e269f7eaf974572ef1e5ff53',
         '-s', 'test.sond3r.track.taxonomy.0=0xa29392f3d443285ffd2e3b03f4d966fb47dac4f8a1691c3c5eb91859ec1f7f7a',
-        '-s', 'test.sond3r.track.source.0=0x052f754de156c31a8ef35e3a50a1eae452dd79abb3f32a76a4663ab182f261da',
-        '--primary', 'test.sond3r.track.invariants.1',
+        // '-s', 'test.sond3r.track.source.0=0x052f754de156c31a8ef35e3a50a1eae452dd79abb3f32a76a4663ab182f261da',
+        '--primary', 'test.sond3r.track.invariants.0',
       ],
       root,
     ]
@@ -263,10 +263,10 @@ function startPython() {
       [
         path.join(root, 'vectordb/server.py'),
         '--graph-api-key', apiKey,
-        '-s', 'test.sond3r.track.invariants.1=0x4717598a3d3995ec7a8e9897d29cda00cb750f6e0e9f52f82aeb16365edc1ab6',
+        '-s', 'test.sond3r.track.invariants.0=0xd3e0128222087190a574329cbb049a834e276923e269f7eaf974572ef1e5ff53',
         '-s', 'test.sond3r.track.taxonomy.0=0xa29392f3d443285ffd2e3b03f4d966fb47dac4f8a1691c3c5eb91859ec1f7f7a',
-        '-s', 'test.sond3r.track.source.0=0x052f754de156c31a8ef35e3a50a1eae452dd79abb3f32a76a4663ab182f261da',
-        '--primary', 'test.sond3r.track.invariants.1',
+        // '-s', 'test.sond3r.track.source.0=0x052f754de156c31a8ef35e3a50a1eae452dd79abb3f32a76a4663ab182f261da',
+        '--primary', 'test.sond3r.track.invariants.0',
       ],
       path.join(root, 'vectordb'),
     ]

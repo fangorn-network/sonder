@@ -42,7 +42,7 @@ def fetch_raw_data_stream() -> Iterator[Dict[str, Any]]:
 # ===========================================================================
 OUTPUT_DIR = "./stage_volumes"
 MAX_FILE_SIZE_GB = 1  # Hard disk cap: Script pauses immediately when hit
-TARGET_VOLUME = 2       # Current volume naming suffix
+TARGET_VOLUME = 3       # Current volume naming suffix
 
 CORE_FILE_PATH = os.path.join(OUTPUT_DIR, f"volume_{TARGET_VOLUME}_core.json")
 TAXO_FILE_PATH = os.path.join(OUTPUT_DIR, f"volume_{TARGET_VOLUME}_taxonomy.json")

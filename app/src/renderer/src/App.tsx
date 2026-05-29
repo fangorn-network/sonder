@@ -29,6 +29,9 @@ import { useMediaSearch } from './hooks/useMediaSearch'
 import { ArtistNeighborhoodView } from './views/ArtistNeighborhoodView'
 import { TrackWikiView } from './views/TrackWikiView'
 import { CatalogGalaxyView } from './views/CatalogGalaxyView'
+import { KernelView } from './views/kernel/KernelView'
+import type { KernelSnapshot } from './types/kernel'
+
 
 const SNAPSHOT_HISTORY_DEPTH = 5
 const SCROLL_THRESHOLD = 10
@@ -84,7 +87,7 @@ function Main() {
   const [nowPlaying, setNowPlaying] = useState<null | 'player' | { track: Track; color: string }>(null)
 
   const [analyzeQuery, setAnalyzeQuery] = useState<string | null>(null)
-  const [analyzeTab,   setAnalyzeTab]   = useState<AnalyzeTab>('wiki')
+  const [analyzeTab, setAnalyzeTab] = useState<AnalyzeTab>('wiki')
 
   const handleAnalyzeTrack = useCallback((track: Track) => {
     const q = [track.artist, track.title].filter(Boolean).join(' – ')
@@ -170,10 +173,10 @@ function Main() {
   const [recommendedTracks, setRecommendedTracks] = useState<RecommendedTracks | null>(null)
   const [recommendLoading, setRecommendLoading] = useState(false)
 
-  const filteredTracksRef  = useRef<Track[]>([])
-  const playingIdRef       = useRef<string | null>(null)
-  const recentPlaysRef     = useRef<string[]>([])
-  const recentSkipsRef     = useRef<string[]>([])
+  const filteredTracksRef = useRef<Track[]>([])
+  const playingIdRef = useRef<string | null>(null)
+  const recentPlaysRef = useRef<string[]>([])
+  const recentSkipsRef = useRef<string[]>([])
 
   const pushPlay = useCallback((label: string) => {
     recentPlaysRef.current = [label, ...recentPlaysRef.current].slice(0, SNAPSHOT_HISTORY_DEPTH)
@@ -191,6 +194,33 @@ function Main() {
 
   useChromaSync({ enabled: visible })
 
+
+  // taste profiles
+  // Track active profile across sessions
+  const [activeProfileName, setActiveProfileName] = useState<string>(() => {
+    const id = localStorage.getItem('sond3r:activeProfile')
+    if (!id) return 'default'
+    try {
+      const profiles = JSON.parse(localStorage.getItem('sond3r:profiles') ?? '[]')
+      return profiles.find((p: any) => p.id === id)?.name ?? 'default'
+    } catch { return 'default' }
+  })
+
+  // On mount, restore the last active profile
+  useEffect(() => {
+    const id = localStorage.getItem('sond3r:activeProfile')
+    if (!id) return
+    try {
+      const profiles = JSON.parse(localStorage.getItem('sond3r:profiles') ?? '[]')
+      const snap = profiles.find((p: any) => p.id === id)
+      if (snap?.queryVector?.length > 0) {
+        applyKernelQuery(snap.queryVector, true)
+        setEntropy(snap.entropy ?? 0.2)
+        setGenreWeights(snap.genreWeights ?? {})
+      }
+    } catch { /* ignore */ }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   // ─── Signals ────────────────────────────────────────────────────────────────
 
   const handleSignal = useCallback(async (signal: TasteSignal) => {
@@ -202,12 +232,12 @@ function Main() {
         ? new Float32Array((track as any).embedding)
         : await kernel.embedText(label)
       const meta = {
-        trackId:    track.id,
-        artistId:   track.artist,
-        genres:     (track as any).genres   ?? [],
-        moods:      (track as any).moods    ?? [],
-        themes:     (track as any).themes   ?? [],
-        contexts:   (track as any).contexts ?? [],
+        trackId: track.id,
+        artistId: track.artist,
+        genres: (track as any).genres ?? [],
+        moods: (track as any).moods ?? [],
+        themes: (track as any).themes ?? [],
+        contexts: (track as any).contexts ?? [],
         durationMs: track.durationMs ?? 0,
       }
       if (type === 'play') {
@@ -236,14 +266,14 @@ function Main() {
   const handleSignalRef = useRef(handleSignal)
   handleSignalRef.current = handleSignal
 
-  const ytTracksRef       = useRef(ytTracks)
+  const ytTracksRef = useRef(ytTracks)
   const fallbackTracksRef = useRef(fallbackTracks)
-  useEffect(() => { ytTracksRef.current       = ytTracks       }, [ytTracks])
+  useEffect(() => { ytTracksRef.current = ytTracks }, [ytTracks])
   useEffect(() => { fallbackTracksRef.current = fallbackTracks }, [fallbackTracks])
 
   // ─── Playback router ─────────────────────────────────────────────────────────
 
-  const { play, state: playbackState } = usePlaybackRouter(spotify, {
+  const { play, markNaturalEnd, state: playbackState } = usePlaybackRouter(spotify, {
     onSkip: useCallback((trackId: string) => {
       const skipped =
         filteredTracksRef.current.find(t => t.id === trackId) ??
@@ -262,9 +292,11 @@ function Main() {
   }, [playbackState.trackId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    onTrackEndedRef.current = playNext
-  }, [playNext])
-
+    onTrackEndedRef.current = () => {
+      markNaturalEnd()
+      playNext()
+    }
+  }, [playNext, markNaturalEnd])
   // ─── Agent context entropy ───────────────────────────────────────────────────
 
   useEffect(() => {
@@ -291,8 +323,8 @@ function Main() {
   }, [chromaReady, loading, kernelTopGenres])
 
   function buildStartupQuery(topGenres?: string[]): string {
-    const slot      = getTimeSlot()
-    const mood      = pick(slot.moods)
+    const slot = getTimeSlot()
+    const mood = pick(slot.moods)
     const genrePool = topGenres && topGenres.length > 0 ? topGenres.slice(0, 4) : slot.genres
     return `${mood} ${pick(genrePool)}`
   }
@@ -301,11 +333,11 @@ function Main() {
 
   function getTimeSlot(): TimeSlot {
     const h = new Date().getHours()
-    if (h >= 5  && h < 11) return { moods: ['energetic', 'uplifting', 'focused', 'bright'],        genres: ['indie pop', 'math rock', 'post-rock', 'funk', 'electronic'] }
-    if (h >= 11 && h < 14) return { moods: ['driving', 'confident', 'punchy'],                      genres: ['alternative', 'rock', 'electronic', 'hip hop'] }
-    if (h >= 14 && h < 18) return { moods: ['focused', 'deep', 'hypnotic', 'complex'],              genres: ['post-rock', 'math rock', 'prog', 'industrial', 'ambient'] }
-    if (h >= 18 && h < 22) return { moods: ['chill', 'warm', 'melodic', 'emotional'],               genres: ['shoegaze', 'dream pop', 'indie', 'post-hardcore', 'chillwave'] }
-    return                          { moods: ['dark', 'introspective', 'atmospheric', 'melancholic'], genres: ['darkwave', 'ambient', 'post-punk', 'industrial', 'doom'] }
+    if (h >= 5 && h < 11) return { moods: ['energetic', 'uplifting', 'focused', 'bright'], genres: ['indie pop', 'math rock', 'post-rock', 'funk', 'electronic'] }
+    if (h >= 11 && h < 14) return { moods: ['driving', 'confident', 'punchy'], genres: ['alternative', 'rock', 'electronic', 'hip hop'] }
+    if (h >= 14 && h < 18) return { moods: ['focused', 'deep', 'hypnotic', 'complex'], genres: ['post-rock', 'math rock', 'prog', 'industrial', 'ambient'] }
+    if (h >= 18 && h < 22) return { moods: ['chill', 'warm', 'melodic', 'emotional'], genres: ['shoegaze', 'dream pop', 'indie', 'post-hardcore', 'chillwave'] }
+    return { moods: ['dark', 'introspective', 'atmospheric', 'melancholic'], genres: ['darkwave', 'ambient', 'post-punk', 'industrial', 'doom'] }
   }
 
   function pick<T>(arr: T[]): T { return arr[Math.floor(Math.random() * arr.length)] }
@@ -320,7 +352,7 @@ function Main() {
     setView('Discover')
     try {
       const result = await sendMessage(query?.trim() || 'I have dream pop fever')
-      const found  = agentResultToTracks(result?.mcpResults)
+      const found = agentResultToTracks(result?.mcpResults)
       setRecommendedTracks(
         found.length > 0 ? { tracks: found, sourceId: '', sourceTitle: result?.agentMessage! } : null
       )
@@ -342,18 +374,26 @@ function Main() {
   }, [])
 
   const handleFilter = useCallback((type: 'genre' | 'mood' | 'context', value: string) => {
-    if (type === 'genre')   setGenreFilter(value)
-    if (type === 'mood')    setMoodFilter(value)
+    if (type === 'genre') setGenreFilter(value)
+    if (type === 'mood') setMoodFilter(value)
     if (type === 'context') setContextFilter(value)
   }, [])
 
+  const handleLoadKernel = useCallback((snap: KernelSnapshot) => {
+    if (snap.queryVector.length > 0) applyKernelQuery(snap.queryVector, true)
+    setEntropy(snap.entropy)
+    setGenreWeights(snap.genreWeights)
+    setActiveProfileName(snap.name)
+    localStorage.setItem('sond3r:activeProfile', snap.id)
+  }, [applyKernelQuery])
+
   const nowPlayingOpen = nowPlaying !== null
-  const NAV_TABS: ViewName[] = ['Discover', 'Agent', 'Analyze']
+  const NAV_TABS: ViewName[] = ['Discover', 'Analyze', 'Profile', 'Agent',]
 
   const ANALYZE_TABS: { id: AnalyzeTab; label: string }[] = [
-    { id: 'wiki',         label: 'Track Wiki'   },
+    { id: 'wiki', label: 'Track Wiki' },
     { id: 'neighborhood', label: 'Neighborhood' },
-    { id: 'galaxy',       label: 'Galaxy'       },
+    { id: 'galaxy', label: 'Galaxy' },
   ]
 
   return (
@@ -364,6 +404,10 @@ function Main() {
           <header className="header">
             <div className="header-brand">
               <span className="brand-name">SOND3R</span>
+              <span className="active-profile-pill">
+                <span className="active-profile-dot" />
+                {activeProfileName}
+              </span>
               <nav style={{ display: 'flex', gap: '16px', marginLeft: '24px' }}>
                 {NAV_TABS.map(v => (
                   <button
@@ -432,6 +476,18 @@ function Main() {
 
             {!showConnectors && view === 'Agent' && <AgentView />}
 
+            {!showConnectors && view === 'Profile' && (
+              <KernelView
+                currentQueryVector={kernel.getQueryVector()}
+                currentEntropy={entropy}
+                currentGenreWeights={genreWeights}
+                sessionHistory={sessionHistory}
+                onLoadKernel={handleLoadKernel}
+              />
+            )}
+
+
+
             {!showConnectors && view === 'Analyze' && (
               <div style={{
                 display: 'flex', flexDirection: 'column',
@@ -455,7 +511,7 @@ function Main() {
 
                 {/* ── Sub-views — all mounted, CSS-switched so state survives tab changes ── */}
                 <div style={{ flex: 1, overflow: 'hidden', minHeight: 0, position: 'relative' }}>
-                  <div style={{ display: analyzeTab === 'wiki'         ? 'flex' : 'none', flexDirection: 'column', height: '100%' }}>
+                  <div style={{ display: analyzeTab === 'wiki' ? 'flex' : 'none', flexDirection: 'column', height: '100%' }}>
                     <TrackWikiView
                       initialQuery={analyzeQuery ?? undefined}
                     />
@@ -465,7 +521,7 @@ function Main() {
                       initialQuery={analyzeQuery ?? undefined}
                     />
                   </div>
-                  <div style={{ display: analyzeTab === 'galaxy'       ? 'flex' : 'none', flexDirection: 'column', height: '100%' }}>
+                  <div style={{ display: analyzeTab === 'galaxy' ? 'flex' : 'none', flexDirection: 'column', height: '100%' }}>
                     <CatalogGalaxyView
                       onTrackSelect={track => {
                         setAnalyzeQuery(`${track.artist} – ${track.title}`)
@@ -512,8 +568,8 @@ function Main() {
           )}
 
         </div>
-      </PlayerProvider>
-    </SpotifyProvider>
+      </PlayerProvider >
+    </SpotifyProvider >
   )
 }
 

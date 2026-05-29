@@ -4,28 +4,16 @@ This directory holds a colletion of schemas using in Sond3r and their deployment
 
 ## Track Invariants
 
-[test.sond3r.track.invariants.1](./TrackInvariantSchema.json)
+[test.sond3r.track.invariants.0](./TrackInvariantSchema.json)
 
 ``` sh
-fangorn schema register test.sond3r.track.invariants.1
+fangorn schema register test.sond3r.track.invariants.0
 ```
 | Field     | Value                                                              |
 | --------- | ------------------------------------------------------------------ |
-| Schema Id | 0x4717598a3d3995ec7a8e9897d29cda00cb750f6e0e9f52f82aeb16365edc1ab6 |
-| CID       | bafkreibbmkbhr5uplqddaqxcvqmxszi4mqffbdw6r6yh37tfnqquyqr7uy        |
+| Schema Id | 0xd3e0128222087190a574329cbb049a834e276923e269f7eaf974572ef1e5ff53 |
+| CID       | bafkreifullikqh7xbdexh3i7lsyb7fdfiza4kr6mfvw2kavzdjtn725wxu        |
 
-
-OFFICIAL
-
-[sond3r.track.invariants.0](./TrackInvariantSchema.json)
-
-``` sh
-fangorn schema register sond3r.track.invariants.0
-```
-| Field     | Value                                                              |
-| --------- | ------------------------------------------------------------------ |
-| Schema Id | 0x4717598a3d3995ec7a8e9897d29cda00cb750f6e0e9f52f82aeb16365edc1ab6 |
-| CID       | bafkreibbmkbhr5uplqddaqxcvqmxszi4mqffbdw6r6yh37tfnqquyqr7uy        |
 
 
 ## Track Taxonomy 
@@ -39,7 +27,7 @@ fangorn schema register test.sond3r.track.taxonomy.0
 | Field     | Value                                                              |
 | --------- | ------------------------------------------------------------------ |
 | Schema Id | 0xa29392f3d443285ffd2e3b03f4d966fb47dac4f8a1691c3c5eb91859ec1f7f7a |
-| CID       | bafkreifdl45cicaub6iiozhme35lmcppbvvdkjmndcp7kv4qwhbgvziwzm        |
+| CID       | bafkreifpwq6y5t3omfxvfnkk5qeitdvqmr66wdyhyfq73f3zkggslvmqju        |
 
 
 ## Track Audio Source 

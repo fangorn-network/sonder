@@ -47,7 +47,7 @@ nsis:
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always
-npmRebuild: false
+npmRebuild: true
 nodeGypRebuild: false
 detectUpdateChannel: false
 publish:
@@ -55,3 +55,8 @@ publish:
   url: https://example.com/auto-updates
 electronDownload:
   mirror: https://npmmirror.com/mirrors/electron/
+rebuildOptions:
+  onlyModules:
+    - electron
+    - esbuild
+nativeRebuilder: sequential

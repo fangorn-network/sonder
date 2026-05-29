@@ -47,7 +47,7 @@ nsis:
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always
-npmRebuild: true
+npmRebuild: false
 nodeGypRebuild: false
 detectUpdateChannel: false
 publish:

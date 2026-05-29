@@ -20053,12 +20053,15 @@ __metadata:
     three: "npm:^0.184.0"
     typescript: "npm:~5.9.3"
     typescript-eslint: "npm:^8.48.0"
+    usocket: "npm:^0.3.0"
     viem: "npm:^2.47.1"
     vite: "npm:^7.3.1"
     vite-plugin-node-polyfills: "npm:^0.25.0"
     wagmi: "npm:^3.6.16"
   dependenciesMeta:
     dbus-next:
+      optional: true
+    usocket:
       optional: true
   languageName: unknown
   linkType: soft

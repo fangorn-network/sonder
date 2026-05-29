@@ -3,7 +3,7 @@ name: Build
 on:
   push:
     tags: ['v*']
-    branches: ['executables']
+    branches: ['*']
   workflow_dispatch:
 
 jobs:
@@ -148,3 +148,27 @@ jobs:
             app/dist/*.AppImage
             app/dist/*.deb
             app/dist/*.snap
+  release:
+    needs: build-electron
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v6
+        with:
+          path: artifacts/
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create ${{ github.ref_name }} \
+            --title "Release ${{ github.ref_name }}" \
+            --generate-notes \
+            artifacts/**/*.exe \
+            artifacts/**/*.dmg \
+            artifacts/**/*.AppImage \
+            artifacts/**/*.deb \
+            artifacts/**/*.snap

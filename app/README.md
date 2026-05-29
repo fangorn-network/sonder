@@ -69,7 +69,7 @@ We recommend using a linux environment for an optimal developer exeperience.
 
 ##### Linux
 ```bash
-$ pnpm install
+$ yarn install
 ```
 
 #### Windows
@@ -83,7 +83,7 @@ See [troubleshooting](#troubleshooting) for common issues encountered when build
 ### Development
 
 ```bash
-$ pnpm dev
+$ yarn dev
 ``` 
 
 ### Chroma DB
@@ -140,10 +140,10 @@ You can build an executable on a per-OS basis.
 ```bash
 
 # For macOS
-$ pnpm build:mac
+$ yarn build:mac
 
 # For Linux
-$ pnpm build:linux
+$ yarn build:linux
 ```
 
 #### Windows
@@ -157,32 +157,5 @@ sudo apt install wine64 wine32
 Then build
 ```bash
 # For windows
-$ pnpm build:win
+$ yarn build:win
 ```
-
-> Note: If work is being performed that requires changes to the agent, tools, or agent-types, add the following to pnpm section of package.json replaced with the location to the relevant projects
-```json
-"overrides": {
-  "@fangorn-network/agent": "link:../../agent/agent",
-  "@fangorn-network/agent-tools": "link:../../agent/tools",
-  "@fangorn-network/agent-types": "link:../../agent/agent-types"
-}
-```
-
-#### Troubleshooting
-1. (Linux) Electron sandbox issue
-To fix, run
-```sh
-sudo chown root:root ./node_modules/.pnpm/electron@39.8.9/node_modules/electron/dist/chrome-sandbox
-sudo chmod 4755 ./node_modules/.pnpm/electron@39.8.9/node_modules/electron/dist/chrome-sandbox
-```
-
-2. (Windows)  
-- Windows handles pnpm's default hard-linking terribly under heavy I/O. Forcing pnpm to use standard copies will usually bypass the freeeze instantly. 
-``` sh
-pnpm config set package-import-method copy
-pnpm config set node-linker hoisted
-```
-Then, run `pnpm i --network-currency 4`
-- Windows defender struggles with node_modules. When pnpm attempts to create 2000+ files and link, defender can panic and scan every single one, creating a massive I/O bottleneck and freezing the installation completely. If it is still slow, try disabling realtime protection in windows defender temporarily and it should be resolved. Don't forget to re-enable realtime protection when you're done. 
-  - It will automatically turn back on after some time, so you have to keep an eye on this if you're doing multiple builds. 

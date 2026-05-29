@@ -91,7 +91,7 @@ jobs:
         run: |
           corepack enable
           yarn set version stable
-      - name: Install dependencies
+      - name: Run yarn install
         working-directory: app
         run: yarn install
       - name: Dedupe Dependencies
@@ -104,7 +104,7 @@ jobs:
 
       - name: Install app dependencies
         working-directory: app
-        run: yarn exec electron-builder install-app-deps
+        run: yarn electron-dep-install
 
       - name: Create .env file
         working-directory: app

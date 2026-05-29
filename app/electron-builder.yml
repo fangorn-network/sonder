@@ -31,7 +31,7 @@ extraResources:
     to: "bin"
     filter: ["yt-dlp*"]
 win:
-  executableName: sond3r
+  executableName: SOND3R
   target:
     - target: portable
       arch: [x64]

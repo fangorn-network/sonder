@@ -6,7 +6,7 @@ import { PublishModal } from '../components/PublishModal'
 import type { Fangorn } from '@fangorn-network/sdk'
 import type { Hex } from 'viem'
 import { PlaybackState } from '../types/playback'
-import { useSpotify } from '../hooks/useSpotifyContext'
+// import { useSpotify } from '../hooks/useSpotifyContext'
 import { useSpotifyContext } from '../context/SpotifyContext'
 const GENRE_PALETTE = [
   '#a78bfa', '#60a5fa', '#f472b6', '#22c55e',

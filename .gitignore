@@ -38,3 +38,6 @@ deploy.sh
 !**/.yarn/plugins
 !**/.yarn/sdks
 !**/.yarn/versions
+**/stage_volumes/
+**/volume*.json
+**/volume*.jsonl

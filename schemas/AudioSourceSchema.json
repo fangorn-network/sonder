@@ -2,8 +2,9 @@
     "trackId": {
         "@type": "string"
     },
-    "platform": {
-        "@type": "string"
+    "audio": {
+        "@type": " handle",
+        "": ""
     },
     "platformId": {
         "@type": "string"

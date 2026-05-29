@@ -2,4 +2,5 @@ aiohttp
 chromadb
 fastapi
 requests
+umap-learn
 uvicorn[standard]

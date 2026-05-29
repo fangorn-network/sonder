@@ -98,9 +98,6 @@ jobs:
       - name: Run yarn install
         working-directory: app
         run: yarn install
-      - name: Dedupe Dependencies
-        working-directory: app
-        run: yarn dedupe
 
       - name: Create .env file
         working-directory: app

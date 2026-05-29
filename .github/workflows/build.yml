@@ -102,10 +102,6 @@ jobs:
         with:
           node-version: '22.14.0'
 
-      - name: Install app dependencies
-        working-directory: app
-        run: yarn electron-dep-install
-
       - name: Create .env file
         working-directory: app
         shell: bash

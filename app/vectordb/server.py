@@ -12,7 +12,7 @@ import json
 import requests
 import uvicorn
 from chromadb.utils import embedding_functions
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, Query, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from chromadb.config import Settings
@@ -88,6 +88,137 @@ def get_searchable_fields() -> set[str]:
 ef_global:       object | None = None
 collection:      object | None = None
 debug_secondary: dict         = {}
+
+# ---------------------------------------------------------------------------
+# CATALOG MAP CACHE
+# ---------------------------------------------------------------------------
+# GET  /catalog/map          — returns full 2D UMAP projection (cached)
+# POST /catalog/map/refresh  — invalidates cache and recomputes in background
+#
+# umap-learn is an optional dependency.  Install with:
+#   pip install umap-learn
+# If missing the endpoint returns a 503 with a clear message.
+
+_map_cache:    dict | None = None
+_map_computing: bool       = False
+
+
+def _build_map_sync() -> dict:
+    """
+    Blocking.  Called via run_in_executor so it won't block the event loop.
+    Fetches every document from ChromaDB (with embeddings), projects to 2D
+    using UMAP (cosine metric), normalises to [-1, 1], and computes per-genre
+    centroids for the galaxy label layer.
+    """
+    try:
+        import umap as umap_lib
+        import numpy as np
+    except ImportError as exc:
+        raise RuntimeError("umap-learn is not installed.  Run: pip install umap-learn") from exc
+
+    col   = collection
+    total = col.count()
+    print(f"[catalog/map] building projection for {total} tracks …")
+    if total == 0:
+        return {"tracks": [], "total": 0, "genres": []}
+
+    BATCH      = 5_000
+    embeddings: list = []
+    metas:      list = []
+    ids:        list = []
+
+    for offset in range(0, total, BATCH):
+        result = col.get(
+            include=["embeddings", "metadatas"],
+            limit=BATCH,
+            offset=offset,
+        )
+        batch_emb  = result.get("embeddings")
+        batch_meta = result.get("metadatas")
+        batch_ids  = result.get("ids")
+        if batch_emb  is None: batch_emb  = []
+        if batch_meta is None: batch_meta = []
+        if batch_ids  is None: batch_ids  = []
+        # collection.get() returns flat lists (not nested like query())
+        embeddings.extend(batch_emb)
+        metas.extend(batch_meta)
+        ids.extend(batch_ids)
+
+    if len(embeddings) == 0:
+        return {"tracks": [], "total": 0, "genres": []}
+
+    emb_np = np.array(embeddings, dtype=np.float32)
+    n      = len(emb_np)
+    print(f"[catalog/map] running UMAP on {n} × {emb_np.shape[1]} matrix …")
+
+    reducer = umap_lib.UMAP(
+        n_components = 2,
+        n_neighbors  = min(15, n - 1),
+        min_dist     = 0.05,
+        metric       = "cosine",
+        random_state = 42,
+        low_memory   = True,
+        verbose      = False,
+    )
+    proj = reducer.fit_transform(emb_np)   # (N, 2) float64
+
+    # Normalise each axis to [-1, 1]
+    for axis in range(2):
+        mn, mx = float(proj[:, axis].min()), float(proj[:, axis].max())
+        rng = mx - mn if mx != mn else 1.0
+        proj[:, axis] = (proj[:, axis] - mn) / rng * 2 - 1
+
+    tracks:          list        = []
+    genre_positions: dict        = {}
+
+    for meta, doc_id, pos in zip(metas, ids, proj):
+        m      = meta or {}
+        # payload is stored as a JSON string inside metadata
+        payload_str = m.get("payload", "{}")
+        try:
+            payload = json.loads(payload_str) if isinstance(payload_str, str) else {}
+        except json.JSONDecodeError:
+            payload = {}
+
+        genres = payload.get("genres", [])
+        if not isinstance(genres, list):
+            genres = []
+        moods = payload.get("moods", [])
+        if not isinstance(moods, list):
+            moods = []
+
+        px, py = float(pos[0]), float(pos[1])
+
+        tracks.append({
+            "id":     doc_id,
+            "title":  payload.get("title")    or payload.get("name")     or doc_id,
+            "artist": payload.get("byArtist") or payload.get("artist")   or "",
+            "genres": genres[:3],
+            "moods":  moods[:3],
+            "px":     px,
+            "py":     py,
+        })
+
+        if genres:
+            g = genres[0]
+            genre_positions.setdefault(g, []).append((px, py))
+
+    # Genre centroids — only genres with ≥ 5 tracks get a label
+    genre_centroids = []
+    for genre, pts in genre_positions.items():
+        if len(pts) < 5:
+            continue
+        arr = np.array(pts)
+        genre_centroids.append({
+            "genre": genre,
+            "px":    float(arr[:, 0].mean()),
+            "py":    float(arr[:, 1].mean()),
+            "count": len(pts),
+        })
+    genre_centroids.sort(key=lambda x: -x["count"])
+
+    print(f"[catalog/map] done — {len(tracks)} tracks, {len(genre_centroids)} genre labels")
+    return {"tracks": tracks, "total": len(tracks), "genres": genre_centroids[:40]}
 
 # ---------------------------------------------------------------------------
 # CHECKPOINT
@@ -518,7 +649,7 @@ def _parse_hits(results: dict, include_embeddings: bool = False) -> list[dict]:
     raw_ids   = results["ids"]
     raw_docs  = results["documents"]
     raw_metas = results["metadatas"]
-    
+
     if not raw_ids or not raw_docs or not raw_metas:
         return []
 
@@ -573,6 +704,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ---------------------------------------------------------------------------
+# EXISTING ROUTES
+# ---------------------------------------------------------------------------
+
 @app.get("/browse")
 async def browse(limit: int = Query(20), offset: int = Query(0)):
     loop    = asyncio.get_event_loop()
@@ -626,6 +761,83 @@ async def embed(body: EmbedRequest):
         return {"embedding": vectors[0].tolist()}
     return {"error": "provide 'text' or 'texts'"}
 
+# ---------------------------------------------------------------------------
+# CATALOG MAP ROUTES
+# ---------------------------------------------------------------------------
+
+@app.get("/catalog/map")
+async def catalog_map():
+    """
+    Return the full 2D UMAP projection of the catalog.
+
+    First call triggers the projection (blocking in a thread executor).
+    Subsequent calls return the cached result instantly.
+
+    Response shape:
+      {
+        "total":  int,
+        "tracks": [{ "id", "title", "artist", "genres", "moods", "px", "py" }, ...],
+        "genres": [{ "genre", "px", "py", "count" }, ...]   // centroids for labels
+      }
+
+    If umap-learn is not installed:
+      { "error": "umap-learn is not installed …", "total": 0, "tracks": [], "genres": [] }
+
+    While computing (first call only):
+      { "computing": true, "total": 0, "tracks": [], "genres": [] }
+    """
+    global _map_cache, _map_computing
+
+    if _map_cache is not None:
+        return _map_cache
+
+    if _map_computing:
+        return {"computing": True, "total": 0, "tracks": [], "genres": []}
+
+    _map_computing = True
+    loop = asyncio.get_event_loop()
+    try:
+        _map_cache = await loop.run_in_executor(None, _build_map_sync)
+        return _map_cache
+    except RuntimeError as e:
+        # umap-learn not installed, or other setup error
+        err = {"error": str(e), "total": 0, "tracks": [], "genres": []}
+        return err
+    except Exception as e:
+        print(f"[catalog/map] error: {e}")
+        return {"error": str(e), "total": 0, "tracks": [], "genres": []}
+    finally:
+        _map_computing = False
+
+
+@app.post("/catalog/map/refresh")
+async def catalog_map_refresh(background_tasks: BackgroundTasks):
+    """
+    Invalidate the cached projection and recompute in the background.
+    Call this after ingesting a significant batch of new tracks.
+    Returns immediately; poll GET /catalog/map until 'computing' is gone.
+    """
+    global _map_cache, _map_computing
+
+    async def _refresh():
+        global _map_cache, _map_computing
+        _map_cache  = None
+        _map_computing = True
+        loop = asyncio.get_event_loop()
+        try:
+            _map_cache = await loop.run_in_executor(None, _build_map_sync)
+        except Exception as e:
+            print(f"[catalog/map/refresh] error: {e}")
+        finally:
+            _map_computing = False
+
+    background_tasks.add_task(_refresh)
+    return {"status": "refresh started", "note": "poll GET /catalog/map for progress"}
+
+# ---------------------------------------------------------------------------
+# DEBUG / HEALTH / REINGEST ROUTES
+# ---------------------------------------------------------------------------
+
 @app.get("/debug")
 async def debug():
     schemas = get_schemas()
@@ -662,9 +874,11 @@ async def health():
     schemas    = get_schemas()
     checkpoint = _load_checkpoint()
     return {
-        "status":  "ok",
-        "count":   collection.count(),
-        "schemas": schemas,
+        "status":        "ok",
+        "count":         collection.count(),
+        "schemas":       schemas,
+        "map_cached":    _map_cache is not None,
+        "map_computing": _map_computing,
         "checkpoint_cids": {name: len(cids) for name, cids in checkpoint.items()},
     }
 
@@ -675,9 +889,11 @@ async def reingest():
 
 @app.post("/reingest/full")
 async def reingest_full():
+    global _map_cache
     _clear_checkpoint()
+    _map_cache = None   # stale after full reingest — force recompute on next /catalog/map call
     asyncio.create_task(ingest())
-    return {"status": "accepted", "note": "checkpoint cleared — full reingest in progress"}
+    return {"status": "accepted", "note": "checkpoint cleared — full reingest in progress; map cache cleared"}
 
 # ---------------------------------------------------------------------------
 # ENTRY POINT

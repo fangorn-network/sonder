@@ -32,3 +32,7 @@ deploy.sh
 **/.venv
 **/venv
 **/db/*
+**/stage_volumes/
+**/volume*.json
+**/volume*.jsonl
+.yarn

@@ -14,8 +14,7 @@
     "start": "electron-vite preview",
     "dev": "electron-vite dev",
     "build": "npm run typecheck && electron-vite build",
-    "predev": "bash scripts/setup_ytdlp.sh",
-    "postinstall": "electron-builder install-app-deps && bash scripts/setup_ytdlp.sh",
+    "postinstall": "electron-builder install-app-deps",
     "link": "pnpm link ../../agent/agent && pnpm link ../../agent/tools",
     "build:unpack": "pnpm run build && electron-builder --dir",
     "build:win": "electron-vite build && electron-builder --win",
@@ -36,6 +35,7 @@
     "@whatwg-node/fetch": "^0.10.13",
     "boring-avatars": "^2.0.4",
     "d3": "^7.9.0",
+    "dbus-next": "^0.10.2",
     "electron-updater": "^6.3.9",
     "express": "^5.2.1",
     "firebase": "^12.12.1",
@@ -76,11 +76,15 @@
     "vite": "^7.3.1",
     "vite-plugin-node-polyfills": "^0.25.0"
   },
-  "pnpm": {
+ "pnpm": {
     "onlyBuiltDependencies": [
       "electron",
-      "esbuild"
-    ]
+      "esbuild",
+      "usocket"
+    ],
+    "overrides": {
+      "nan": "^2.22.0"
+    }
   },
   "packageManager": "pnpm@10.27.0+sha512.72d699da16b1179c14ba9e64dc71c9a40988cbdc65c264cb0e489db7de917f20dcf4d64d8723625f2969ba52d4b7e2a1170682d9ac2a5dcaeaab732b7e16f04a"
 }

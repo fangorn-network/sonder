@@ -10,9 +10,9 @@
  */
 
 import { ipcMain, shell, net } from 'electron'
-import { exec }           from 'child_process'
-import { promisify }      from 'util'
-import * as fs            from 'fs'
+import { exec }                from 'child_process'
+import { promisify }           from 'util'
+import * as fs                 from 'fs'
 
 const execAsync = promisify(exec)
 
@@ -26,6 +26,7 @@ function isWSL(): boolean {
 const IS_WSL = isWSL()
 const p      = process.platform
 const PS     = '/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe'
+const CMD    = '/mnt/c/Windows/System32/cmd.exe'
 
 // ─── Status ───────────────────────────────────────────────────────────────────
 
@@ -52,7 +53,6 @@ let _ccExpiry: number        = 0
 async function getClientToken(): Promise<string> {
   if (_ccToken && Date.now() < _ccExpiry) return _ccToken
 
-  // electron-vite exposes env vars via import.meta.env with VITE_ prefix
   const clientId     = (import.meta as any).env.VITE_SPOTIFY_CLIENT_ID     ?? ''
   const clientSecret = (import.meta as any).env.VITE_SPOTIFY_CLIENT_SECRET ?? ''
 
@@ -94,12 +94,31 @@ async function resolveTrackUri(artist: string, title: string): Promise<string | 
     const data  = await res.json()
     const track = data.tracks?.items?.[0]
     if (!track) throw new Error(`No result for: ${artist} - ${title}`)
-    console.log(`[spotify] resolved → ${track.uri}  (${track.name} · ${track.artists[0]?.name})`)
-    return track.uri as string  // "spotify:track:ID"
+    console.log(`[spotify] resolved -> ${track.uri}  (${track.name} by ${track.artists[0]?.name})`)
+    return track.uri as string
   } catch (e) {
-    console.error(`[spotify] resolution failed:`, e)
+    console.error('[spotify] resolution failed:', e)
     return null
   }
+}
+
+// ─── WSL2 helper ─────────────────────────────────────────────────────────────
+// Build a powershell command string safely — avoids template literal $ issues
+// by using a plain function that concatenates rather than interpolates.
+
+function runPS(script: string): Promise<{ stdout: string; stderr: string }> {
+  const args = ['-NoProfile', '-NonInteractive', '-Command', script]
+  return new Promise((resolve, reject) => {
+    const proc = require('child_process').execFile(PS, args)
+    let stdout = '', stderr = ''
+    proc.stdout.on('data', (d: Buffer) => { stdout += d.toString() })
+    proc.stderr.on('data', (d: Buffer) => { stderr += d.toString() })
+    proc.on('close', (code: number) => {
+      if (code !== 0) reject(new Error(stderr || `PS exited ${code}`))
+      else resolve({ stdout, stderr })
+    })
+    proc.on('error', reject)
+  })
 }
 
 // ─── WSL2 ─────────────────────────────────────────────────────────────────────
@@ -108,21 +127,29 @@ const wsl = {
   async play(artist: string, title: string) {
     const uri = await resolveTrackUri(artist, title)
     if (!uri) { console.error('[spotify] no URI — cannot play'); return }
-    // PowerShell Start-Process is the most reliable way to invoke a URI handler from WSL2
-    await execAsync(`"${PS}" -NoProfile -NonInteractive -Command "Start-Process '${uri}'"`)
+    await execAsync('"' + CMD + '" /c start "" ' + uri)
+    // Poll until Spotify has focus (up to 3s), then send Enter to start playback
+    for (let i = 0; i < 10; i++) {
+      await new Promise(r => setTimeout(r, 300))
+      try {
+        const { stdout } = await runPS('(Get-Process -Name Spotify -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle -ne "" } | Select-Object -First 1).MainWindowTitle')
+        if (stdout.trim()) break  // Spotify has a window title — it's focused and ready
+      } catch { /* keep polling */ }
+    }
+    await runPS('$w = New-Object -ComObject WScript.Shell; $w.AppActivate("Spotify"); Start-Sleep -Milliseconds 500; $w.SendKeys("{ENTER}")')
   },
   async pause() {
-    await execAsync(`"${PS}" -NoProfile -NonInteractive -Command "$w = New-Object -ComObject WScript.Shell; $w.SendKeys([char]179)"`)
+    await runPS('$w = New-Object -ComObject WScript.Shell; $w.SendKeys([char]179)')
   },
   async resume() {
-    await execAsync(`"${PS}" -NoProfile -NonInteractive -Command "$w = New-Object -ComObject WScript.Shell; $w.SendKeys([char]179)"`)
+    await runPS('$w = New-Object -ComObject WScript.Shell; $w.SendKeys([char]179)')
   },
   async seek(_ms: number)    { },
   async volume(_pct: number) { },
   async status(): Promise<SpotifyStatus> {
     try {
-      const { stdout } = await execAsync(
-        `"${PS}" -NoProfile -NonInteractive -Command "$proc = Get-Process -Name Spotify -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle -ne '' } | Select-Object -First 1; if ($proc) { $proc.MainWindowTitle } else { '' }"`,
+      const { stdout } = await runPS(
+        '$p = Get-Process -Name Spotify -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle -ne "" } | Select-Object -First 1; if ($p) { $p.MainWindowTitle } else { "" }'
       )
       const win = stdout.trim()
       if (!win || win === 'Spotify') return EMPTY
@@ -254,7 +281,7 @@ function ctrl() {
 }
 
 export function registerSpotifyIpc() {
-  console.log(`[spotify] platform: ${p}, WSL: ${IS_WSL}`)
+  console.log('[spotify] platform: ' + p + ', WSL: ' + IS_WSL)
   ipcMain.handle('spotify:play',   (_e, artist: string, title: string) => ctrl().play(artist, title))
   ipcMain.handle('spotify:pause',  ()                                  => ctrl().pause())
   ipcMain.handle('spotify:resume', ()                                  => ctrl().resume())
@@ -262,9 +289,3 @@ export function registerSpotifyIpc() {
   ipcMain.handle('spotify:volume', (_e, pct: number)                  => ctrl().volume(pct))
   ipcMain.handle('spotify:status', ()                                  => ctrl().status())
 }
-
-// Temp diagnostic — remove after confirming env vars load
-const _diagId  = (import.meta as any).env.VITE_SPOTIFY_CLIENT_ID
-const _diagSec = (import.meta as any).env.VITE_SPOTIFY_CLIENT_SECRET
-console.log(`[spotify:diag] CLIENT_ID present: ${!!_diagId}, value starts: ${String(_diagId ?? '').slice(0,6)}`)
-console.log(`[spotify:diag] CLIENT_SECRET present: ${!!_diagSec}`)

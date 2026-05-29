@@ -27,6 +27,8 @@ import { usePlaybackRouter } from './hooks/usePlaybackRouter'
 import { useAutoplay } from './hooks/useAutoplay'
 import { useMediaSearch } from './hooks/useMediaSearch'
 import { ArtistNeighborhoodView } from './views/ArtistNeighborhoodView'
+import { TrackWikiView } from './views/TrackWikiView'
+import { CatalogGalaxyView } from './views/CatalogGalaxyView'
 
 const SNAPSHOT_HISTORY_DEPTH = 5
 const SCROLL_THRESHOLD = 10
@@ -37,9 +39,9 @@ window.addEventListener('scroll', () => {
     .classList.toggle('scrolled', window.scrollY > SCROLL_THRESHOLD)
 }, { passive: true })
 
-// onTrackEndedRef lives outside React so useSpotify and Main can share it
-// without a circular dependency
-const onTrackEndedRef = { current: () => {} }
+const onTrackEndedRef = { current: () => { } }
+
+type AnalyzeTab = 'wiki' | 'neighborhood' | 'galaxy'
 
 // ─── Root ──────────────────────────────────────────────────────────────────────
 
@@ -64,17 +66,12 @@ export default function App() {
 
   if (!ready) return <BootSplash />
 
-  return (
-      <Main />
-  )
+  return <Main />
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 function Main() {
-  // const { isAuthenticated, login: spotifyLogin } = useSpotifyAuth()
-
-  // useSpotify is called here inside SpotifyAuthProvider so useSpotifyAuth works.
   const spotify = useSpotify(() => onTrackEndedRef.current())
 
   const [sessionHistory, setSessionHistory] = useState<SessionEvent[]>([])
@@ -87,10 +84,12 @@ function Main() {
   const [nowPlaying, setNowPlaying] = useState<null | 'player' | { track: Track; color: string }>(null)
 
   const [analyzeQuery, setAnalyzeQuery] = useState<string | null>(null)
+  const [analyzeTab,   setAnalyzeTab]   = useState<AnalyzeTab>('wiki')
 
   const handleAnalyzeTrack = useCallback((track: Track) => {
     const q = [track.artist, track.title].filter(Boolean).join(' – ')
     setAnalyzeQuery(q)
+    setAnalyzeTab('wiki')
     setView('Analyze')
     setShowConnectors(false)
     setNowPlaying(null)
@@ -302,11 +301,11 @@ function Main() {
 
   function getTimeSlot(): TimeSlot {
     const h = new Date().getHours()
-    if (h >= 5  && h < 11) return { moods: ['energetic', 'uplifting', 'focused', 'bright'],       genres: ['indie pop', 'math rock', 'post-rock', 'funk', 'electronic'] }
-    if (h >= 11 && h < 14) return { moods: ['driving', 'confident', 'punchy'],                     genres: ['alternative', 'rock', 'electronic', 'hip hop'] }
-    if (h >= 14 && h < 18) return { moods: ['focused', 'deep', 'hypnotic', 'complex'],             genres: ['post-rock', 'math rock', 'prog', 'industrial', 'ambient'] }
-    if (h >= 18 && h < 22) return { moods: ['chill', 'warm', 'melodic', 'emotional'],              genres: ['shoegaze', 'dream pop', 'indie', 'post-hardcore', 'chillwave'] }
-    return                         { moods: ['dark', 'introspective', 'atmospheric', 'melancholic'], genres: ['darkwave', 'ambient', 'post-punk', 'industrial', 'doom'] }
+    if (h >= 5  && h < 11) return { moods: ['energetic', 'uplifting', 'focused', 'bright'],        genres: ['indie pop', 'math rock', 'post-rock', 'funk', 'electronic'] }
+    if (h >= 11 && h < 14) return { moods: ['driving', 'confident', 'punchy'],                      genres: ['alternative', 'rock', 'electronic', 'hip hop'] }
+    if (h >= 14 && h < 18) return { moods: ['focused', 'deep', 'hypnotic', 'complex'],              genres: ['post-rock', 'math rock', 'prog', 'industrial', 'ambient'] }
+    if (h >= 18 && h < 22) return { moods: ['chill', 'warm', 'melodic', 'emotional'],               genres: ['shoegaze', 'dream pop', 'indie', 'post-hardcore', 'chillwave'] }
+    return                          { moods: ['dark', 'introspective', 'atmospheric', 'melancholic'], genres: ['darkwave', 'ambient', 'post-punk', 'industrial', 'doom'] }
   }
 
   function pick<T>(arr: T[]): T { return arr[Math.floor(Math.random() * arr.length)] }
@@ -351,8 +350,12 @@ function Main() {
   const nowPlayingOpen = nowPlaying !== null
   const NAV_TABS: ViewName[] = ['Discover', 'Agent', 'Analyze']
 
-  // ─── SpotifyProvider wraps the entire render so any child can read
-  //     shared playback state via useSpotifyContext()
+  const ANALYZE_TABS: { id: AnalyzeTab; label: string }[] = [
+    { id: 'wiki',         label: 'Track Wiki'   },
+    { id: 'neighborhood', label: 'Neighborhood' },
+    { id: 'galaxy',       label: 'Galaxy'       },
+  ]
+
   return (
     <SpotifyProvider value={{ ...spotify }}>
       <PlayerProvider tracks={tracks}>
@@ -430,10 +433,49 @@ function Main() {
             {!showConnectors && view === 'Agent' && <AgentView />}
 
             {!showConnectors && view === 'Analyze' && (
-              <ArtistNeighborhoodView
-                initialQuery={analyzeQuery ?? undefined}
-                onQueryConsumed={handleAnalyzeQueryConsumed}
-              />
+              <div style={{
+                display: 'flex', flexDirection: 'column',
+                height: 'calc(100vh - var(--header-h))',
+                margin: 'calc(-1 * var(--sp-5)) calc(-1 * var(--sp-5)) -120px',
+              }}>
+
+                {/* ── Analyze sub-tabs ───────────────────────────────────── */}
+                <div style={{ display: 'flex', borderBottom: '3px solid var(--accent)', flexShrink: 0, background: 'var(--bg1)' }}>
+                  {ANALYZE_TABS.map(({ id, label }) => (
+                    <button
+                      key={id}
+                      onClick={() => setAnalyzeTab(id)}
+                      className={`app-nav-tab${analyzeTab === id ? ' active' : ''}`}
+                      style={{ padding: '12px 22px', borderRadius: 0 }}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* ── Sub-views — all mounted, CSS-switched so state survives tab changes ── */}
+                <div style={{ flex: 1, overflow: 'hidden', minHeight: 0, position: 'relative' }}>
+                  <div style={{ display: analyzeTab === 'wiki'         ? 'flex' : 'none', flexDirection: 'column', height: '100%' }}>
+                    <TrackWikiView
+                      initialQuery={analyzeQuery ?? undefined}
+                    />
+                  </div>
+                  <div style={{ display: analyzeTab === 'neighborhood' ? 'flex' : 'none', flexDirection: 'column', height: '100%' }}>
+                    <ArtistNeighborhoodView
+                      initialQuery={analyzeQuery ?? undefined}
+                    />
+                  </div>
+                  <div style={{ display: analyzeTab === 'galaxy'       ? 'flex' : 'none', flexDirection: 'column', height: '100%' }}>
+                    <CatalogGalaxyView
+                      onTrackSelect={track => {
+                        setAnalyzeQuery(`${track.artist} – ${track.title}`)
+                        setAnalyzeTab('wiki')
+                      }}
+                    />
+                  </div>
+                </div>
+
+              </div>
             )}
           </main>
 

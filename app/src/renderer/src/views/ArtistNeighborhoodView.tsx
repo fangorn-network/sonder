@@ -8,6 +8,11 @@
  *   1. Direct — user navigates to the Analyze tab, types a query.
  *   2. Contextual — user taps "Explore sound map" on a NowPlaying track.
  *      App passes `initialQuery`; this component auto-fires its search.
+ *
+ * v2: Replaced the contradictory "Where You Stand" + "The Competition"
+ *     dual-metric layout with a single unified 2×2 positioning matrix.
+ *     soundPosition (novelty) and density10 (crowding) are now explained
+ *     together as orthogonal axes, with quadrant-specific actionable copy.
  */
 
 import {
@@ -19,7 +24,6 @@ import {
     buildNeighborhood,
     genreColor,
     soundSimilarity,
-    competitionLabel,
     soundPositionMeta,
     type TrackNeighborData,
     type ProjectedPoint,
@@ -45,17 +49,17 @@ interface RawChromaHit {
     embedding: number[]
     distance: number
     fields?: {
-        byArtist?:    string
-        trackId?:     string
-        title?:       string
-        isrcCode?:    string
-        durationMs?:  number
+        byArtist?:     string
+        trackId?:      string
+        title?:        string
+        isrcCode?:     string
+        durationMs?:   number
         contributors?: string[]
-        genres?:      string[]
-        moods?:       string[]
-        themes?:      string[]
-        contexts?:    string[]
-        artistId?:    string
+        genres?:       string[]
+        moods?:        string[]
+        themes?:       string[]
+        contexts?:     string[]
+        artistId?:     string
     }
 }
 
@@ -110,11 +114,179 @@ function buildScales(pts: ProjectedPoint[], w: number, h: number, margin: number
     return { xScale, yScale }
 }
 
+// ── Quadrant logic ────────────────────────────────────────────────────────────
+//
+// Two independent axes:
+//   soundPosition → how isolated the focal track is from its neighborhood centroid
+//                   (high = eccentric/novel, low = sitting deep in a cluster)
+//   density10     → count of neighbors within the closest-quartile radius (0-10)
+//                   (high = locally crowded, low = open space around you)
+//
+// They're orthogonal. A track can be novel AND crowded (crossover: at the edge
+// of a busy genre), or familiar AND open (hidden gem: doing a proven sound that
+// most people aren't doing right now). Showing them as separate labels left the
+// artist to reconcile the contradiction themselves. The quadrant does it for them.
+
+type QuadrantKey = 'pioneer' | 'crossover' | 'hidden-gem' | 'in-the-pack'
+
+interface QuadrantMeta {
+    key:       QuadrantKey
+    label:     string
+    color:     string
+    tagline:   string
+    // Explains BOTH signals together so the artist never wonders "but it said X and Y..."
+    narrative: string
+    // What to actually do about this positioning
+    action:    string
+    // Normalised 0-1 position in the 2×2 for the matrix dot
+    // qx: 0 = familiar, 1 = novel  |  qy: 0 = open, 1 = crowded
+    qx: number
+    qy: number
+}
+
+/**
+ * Derive a quadrant from the two kernel metrics.
+ *
+ * soundPosition: raw value from NeighborhoodMetrics — we only need to know
+ *   whether it's above or below the midpoint of its meaningful range.
+ *   The kernel typically normalises this 0→1 or returns an average distance;
+ *   either way, pass it raw and supply the threshold you calibrated for your
+ *   embedding space (default 0.5 works for cosine-normalised distances).
+ *
+ * density10: 0-10 integer from NeighborhoodMetrics.
+ */
+function deriveQuadrant(
+    soundPosition: number,
+    density10: number,
+    noveltyThreshold = 0.5,
+    densityThreshold = 5,
+): QuadrantMeta {
+    const isNovel   = soundPosition >= noveltyThreshold
+    const isCrowded = density10     >= densityThreshold
+
+    // Continuous matrix position for the dot (clamped 0-1)
+    const qx = Math.min(1, Math.max(0, soundPosition / (noveltyThreshold * 2)))
+    const qy = density10 / 10
+
+    if (isNovel && isCrowded) return {
+        key:      'crossover',
+        label:    'Crossover',
+        color:    '#a78bfa',
+        tagline:  'Fresh sound, busy neighbourhood',
+        narrative:
+            `Your sound sits at a real distance from the centroid of tracks around you — ` +
+            `you're doing something the cluster isn't doing. But that cluster is dense. ` +
+            `These aren't your direct competition; they're the audience pipeline. ` +
+            `Recommendation systems will surface you to listeners already primed by that scene, ` +
+            `and you'll be the different thing they didn't know they wanted.`,
+        action:
+            `Use the adjacency as distribution, not identity. Reference the genre in how you ` +
+            `talk about the music, then show clearly how you diverge from it. ` +
+            `The contrast is the pitch.`,
+        qx, qy,
+    }
+
+    if (isNovel && !isCrowded) return {
+        key:      'pioneer',
+        label:    'Pioneer',
+        color:    TEAL,
+        tagline:  'Open territory — your rules',
+        narrative:
+            `Both signals point the same direction: you're operating in genuinely sparse space. ` +
+            `The tracks nearest you are still meaningfully different, and there aren't many of ` +
+            `them. There's no established playbook for what you're doing, no pre-formed audience, ` +
+            `and no algorithm that already knows how to place you. ` +
+            `That's the upside and the problem in the same sentence.`,
+        action:
+            `Discovery will come from you, not the platform. Build the listening context ` +
+            `directly: playlists, editorial pitches, live pairings with adjacent artists. ` +
+            `Define what this sounds like before someone else defines it around you.`,
+        qx, qy,
+    }
+
+    if (!isNovel && !isCrowded) return {
+        key:      'hidden-gem',
+        label:    'Hidden Gem',
+        color:    '#34d399',
+        tagline:  'Proven sound, underserved market',
+        narrative:
+            `Your sound fits recognisably inside an established neighbourhood — listeners ` +
+            `know what to expect — but the local density is low. Not many tracks are doing ` +
+            `exactly what you're doing right now. This is one of the more quietly powerful ` +
+            `positions: the taste exists, the audience is trained, and the supply is thin.`,
+        action:
+            `Algorithmic placement should work for you. Focus on metadata hygiene, ` +
+            `playlist pitching, and sync opportunities — there's demand with room to grow into. ` +
+            `Don't over-innovate; consistency here is leverage.`,
+        qx, qy,
+    }
+
+    // !isNovel && isCrowded
+    return {
+        key:      'in-the-pack',
+        label:    'In The Pack',
+        color:    '#fb923c',
+        tagline:  'Familiar sound, crowded field',
+        narrative:
+            `Your sound sits close to a lot of other tracks, and those tracks sit close to ` +
+            `each other too. A clear audience exists and knows exactly what they want from ` +
+            `this space. That audience is also being offered a lot of options. ` +
+            `The sound won't differentiate you here — everything else will.`,
+        action:
+            `Story, visual identity, live presence, community, and release cadence matter ` +
+            `more than a production tweak. Look at the map: is there a direction you could ` +
+            `push the sound that opens up space without losing the core audience?`,
+        qx, qy,
+    }
+}
+
+// ── 2×2 Position Matrix ───────────────────────────────────────────────────────
+
+interface MatrixProps { qx: number; qy: number; color: string }
+
+function PositionMatrix({ qx, qy, color }: MatrixProps) {
+    const W = 108, H = 96, pad = 16
+    // qx: 0 = familiar (left), 1 = novel (right)
+    // qy: 0 = open (bottom), 1 = crowded (top)
+    const dotX = pad + qx * (W - 2 * pad)
+    const dotY = (H - pad) - qy * (H - 2 * pad)
+
+    return (
+        <svg
+            width={W} height={H}
+            style={{ display: 'block', flexShrink: 0, overflow: 'visible' }}
+            aria-hidden="true"
+        >
+            {/* Quadrant background fills */}
+            <rect x={0}   y={0}   width={W/2} height={H/2} fill="rgba(255,255,255,0.015)" />
+            <rect x={W/2} y={0}   width={W/2} height={H/2} fill="rgba(255,255,255,0.02)"  />
+            <rect x={0}   y={H/2} width={W/2} height={H/2} fill="rgba(255,255,255,0.02)"  />
+            <rect x={W/2} y={H/2} width={W/2} height={H/2} fill="rgba(255,255,255,0.015)" />
+
+            {/* Axis lines */}
+            <line x1={W/2} y1={2}   x2={W/2} y2={H-2} stroke="rgba(255,255,255,0.1)" strokeWidth={0.8} />
+            <line x1={2}   y1={H/2} x2={W-2} y2={H/2} stroke="rgba(255,255,255,0.1)" strokeWidth={0.8} />
+
+            {/* Axis labels */}
+            <text x={4}   y={H/2-3} fontSize={7} fill="rgba(255,255,255,0.22)" dominantBaseline="auto">Familiar</text>
+            <text x={W-4} y={H/2-3} fontSize={7} fill="rgba(255,255,255,0.22)" dominantBaseline="auto" textAnchor="end">Novel</text>
+            <text x={W/2} y={8}     fontSize={7} fill="rgba(255,255,255,0.22)" textAnchor="middle">Crowded</text>
+            <text x={W/2} y={H-3}   fontSize={7} fill="rgba(255,255,255,0.22)" textAnchor="middle" dominantBaseline="auto">Open</text>
+
+            {/* Glow halo */}
+            <circle cx={dotX} cy={dotY} r={11} fill={color} opacity={0.12} />
+            <circle cx={dotX} cy={dotY} r={7}  fill={color} opacity={0.20} />
+            {/* Dot */}
+            <circle cx={dotX} cy={dotY} r={4}  fill={color} opacity={0.95} />
+        </svg>
+    )
+}
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-interface Tooltip { visible: boolean; x: number; y: number; point: ProjectedPoint | null }
+interface Tooltip   { visible: boolean; x: number; y: number; point: ProjectedPoint | null }
 interface ViewState { ox: number; oy: number; scale: number }
-interface Props { initialQuery?: string; onQueryConsumed?: () => void }
+interface Props     { initialQuery?: string; onQueryConsumed?: () => void }
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -221,8 +393,15 @@ export function ArtistNeighborhoodView({ initialQuery, onQueryConsumed }: Props)
     }, [])
 
     // ── Derived ───────────────────────────────────────────────────────────────
+
+    // Unified 2×2 quadrant — replaces the two separate metric labels
+    const quadrant = useMemo(
+        () => metrics ? deriveQuadrant(parseFloat(metrics.soundPosition), metrics.density10) : null,
+        [metrics],
+    )
+
+    // soundPositionMeta still used for the "Your Sound" section color + genre purity copy
     const posMeta    = metrics ? soundPositionMeta(metrics.soundPosition) : null
-    const compMeta   = metrics ? competitionLabel(metrics.density10)       : null
     const focalPt    = pts.find(p => p.isFocal)
     const soundsLike = pts.filter(p => !p.isFocal).sort((a, b) => a.distance - b.distance)
 
@@ -317,6 +496,16 @@ export function ArtistNeighborhoodView({ initialQuery, onQueryConsumed }: Props)
 
                     {pts.length > 0 && (
                         <>
+                            {/* Quadrant badge — echoes the panel label on the map itself */}
+                            {quadrant && (
+                                <div style={{ position: 'absolute', top: 12, left: 14, zIndex: 10, display: 'flex', alignItems: 'center', gap: 6, background: `${quadrant.color}18`, border: `1px solid ${quadrant.color}44`, padding: '4px 10px' }}>
+                                    <div style={{ width: 6, height: 6, borderRadius: '50%', background: quadrant.color, flexShrink: 0 }}/>
+                                    <span style={{ fontSize: 10, fontWeight: 700, color: quadrant.color, letterSpacing: '0.07em', textTransform: 'uppercase' }}>
+                                        {quadrant.label}
+                                    </span>
+                                </div>
+                            )}
+
                             {/* Reset view */}
                             <button
                                 onClick={() => setView({ ox: 0, oy: 0, scale: 1 })}
@@ -462,59 +651,46 @@ export function ArtistNeighborhoodView({ initialQuery, onQueryConsumed }: Props)
                         </div>
                     )}
 
-                    {metrics && posMeta && compMeta && (
+                    {metrics && quadrant && (
                         <>
-                            {/* ── Where You Stand ──────────────────────────────── */}
+                            {/* ── Your Position (unified 2×2) ──────────────────── */}
                             <div>
-                                <SectionLabel>Where You Stand</SectionLabel>
-                                <div style={{ border: `1px solid ${posMeta.color}33`, background: `${posMeta.color}0d`, padding: '14px 16px' }}>
-                                    <div style={{ fontSize: 18, fontWeight: 700, color: posMeta.color, letterSpacing: '-0.02em', marginBottom: 4 }}>
-                                        {posMeta.label}
-                                    </div>
-                                    <div style={{ fontSize: 12, color: posMeta.color, opacity: 0.65, marginBottom: 8, fontStyle: 'italic' }}>
-                                        {posMeta.tagline}
-                                    </div>
-                                    <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', lineHeight: 1.7 }}>
-                                        {posMeta.description}
-                                    </div>
-                                </div>
-                            </div>
+                                <SectionLabel>Your Position</SectionLabel>
 
-                            {/* ── The Competition ──────────────────────────────── */}
-                            <div>
-                                <SectionLabel>The Competition</SectionLabel>
+                                {/* Header row: matrix + label + tagline */}
+                                <div style={{ border: `1px solid ${quadrant.color}33`, background: `${quadrant.color}09` }}>
+                                    <div style={{ padding: '14px 16px 12px', display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+                                        <PositionMatrix qx={quadrant.qx} qy={quadrant.qy} color={quadrant.color} />
+                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                            <div style={{ fontSize: 22, fontWeight: 700, color: quadrant.color, letterSpacing: '-0.03em', lineHeight: 1 }}>
+                                                {quadrant.label}
+                                            </div>
+                                            <div style={{ fontSize: 11, color: quadrant.color, opacity: 0.6, fontStyle: 'italic', marginTop: 4, marginBottom: 10 }}>
+                                                {quadrant.tagline}
+                                            </div>
+                                            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.42)', lineHeight: 1.75 }}>
+                                                {quadrant.narrative}
+                                            </div>
+                                        </div>
+                                    </div>
 
-                                <div style={{ marginBottom: 12 }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
-                                        <span style={{ fontSize: 16, fontWeight: 700, color: compMeta.color }}>
-                                            {compMeta.label}
-                                        </span>
-                                        <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.22)', letterSpacing: '0.04em' }}>
-                                            how crowded is your sound?
-                                        </span>
-                                    </div>
-                                    {/* Density bar — filled segments = direct sound-alikes */}
-                                    <div style={{ display: 'flex', gap: 3, marginBottom: 8 }}>
-                                        {Array.from({ length: 10 }, (_, i) => (
-                                            <div key={i} style={{
-                                                flex: 1, height: 5,
-                                                background: i < metrics.density10
-                                                    ? compMeta.color
-                                                    : 'rgba(255,255,255,0.07)',
-                                                transition: 'background 0.3s',
-                                            }}/>
-                                        ))}
-                                    </div>
-                                    <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', lineHeight: 1.65 }}>
-                                        {compMeta.description}
+                                    {/* Action footer */}
+                                    <div style={{ borderTop: `1px solid ${quadrant.color}1e`, padding: '10px 16px', background: `${quadrant.color}07`, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                                        {/* Arrow icon */}
+                                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ marginTop: 1, flexShrink: 0 }}>
+                                            <path d="M2 7h10M8 3l4 4-4 4" stroke={quadrant.color} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" opacity={0.7}/>
+                                        </svg>
+                                        <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.46)', lineHeight: 1.65 }}>
+                                            {quadrant.action}
+                                        </div>
                                     </div>
                                 </div>
 
-                                {/* Nearest sound-alike */}
+                                {/* Nearest sound-alike — framed as "who the algorithm puts you next to" */}
                                 {metrics.nearestNeighbor && (
-                                    <div style={{ background: 'rgba(255,255,255,0.03)', border: `1px solid ${BORDER}`, padding: '10px 12px' }}>
-                                        <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.28)', letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 6 }}>
-                                            Closest sound-alike
+                                    <div style={{ marginTop: 8, background: 'rgba(255,255,255,0.02)', border: `1px solid ${BORDER}`, padding: '10px 12px' }}>
+                                        <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)', letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 6 }}>
+                                            Nearest track — who the algorithm puts you next to
                                         </div>
                                         <div style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.85)' }}>
                                             {metrics.nearestNeighbor.artist}
@@ -530,7 +706,7 @@ export function ArtistNeighborhoodView({ initialQuery, onQueryConsumed }: Props)
                             </div>
 
                             {/* ── Your Sound ───────────────────────────────────── */}
-                            {metrics.primaryGenre && (
+                            {metrics.primaryGenre && posMeta && (
                                 <div>
                                     <SectionLabel>Your Sound</SectionLabel>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
@@ -544,10 +720,10 @@ export function ArtistNeighborhoodView({ initialQuery, onQueryConsumed }: Props)
                                     </div>
                                     <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', lineHeight: 1.65 }}>
                                         {metrics.genrePurity >= 0.7
-                                            ? `Most of the tracks around you are firmly in ${metrics.primaryGenre}. You're speaking directly to that audience.`
+                                            ? `Most tracks around you are firmly in ${metrics.primaryGenre}. You're speaking directly to that audience.`
                                             : metrics.genrePurity >= 0.4
-                                                ? `Your sound sits at the edge of ${metrics.primaryGenre}, mixing in other influences. That crossover appeal can work in your favour.`
-                                                : `You live at a genre crossroads — ${metrics.primaryGenre} is nearby but you're not locked in. Listeners from multiple scenes might find you.`
+                                                ? `You sit at the edge of ${metrics.primaryGenre}, mixing in other influences. That crossover appeal can be leveraged.`
+                                                : `You're at a genre crossroads — ${metrics.primaryGenre} is nearby but you're not locked in. Listeners from multiple scenes may find you.`
                                         }
                                     </div>
                                 </div>

@@ -76,7 +76,7 @@
     "vite-plugin-node-polyfills": "^0.25.0"
   },
   "optionalDependencies": {
-    "dbus-next": "^0.10.2"
+    "dbus-next": "patch:dbus-next@npm%3A0.10.2#~/.yarn/patches/dbus-next-npm-0.10.2-d9d47e0ccf.patch"
   },
   "resolutions": {
     "viem": "2.50.4",

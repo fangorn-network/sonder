@@ -1,0 +1,12 @@
+diff --git a/package.json b/package.json
+index a396df1298b9c3d2f2faad33563c3cdded50281e..236f86ac693ba20c5f58725016399edab5c3e955 100644
+--- a/package.json
++++ b/package.json
+@@ -83,5 +83,6 @@
+   },
+   "engine": {
+     "node": ">=6.3.0"
+-  }
++  },
++  "os": ["linux"]
+ }

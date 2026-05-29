@@ -77,6 +77,9 @@
     "vite": "^7.3.1",
     "vite-plugin-node-polyfills": "^0.25.0"
   },
+  "optionalDependencies": {
+    "dbus-next": "^0.10.2"
+  },
   "resolutions": {
     "viem": "2.50.4",
     "react": "^19.2.1",

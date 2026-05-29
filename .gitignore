@@ -32,7 +32,7 @@ deploy.sh
 **/.venv
 **/venv
 **/db/*
-.yarn/*
+**/.yarn/*
 !.yarn/releases
 !.yarn/patches
 !.yarn/plugins

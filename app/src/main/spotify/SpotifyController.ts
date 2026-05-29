@@ -137,7 +137,7 @@ const wsl = {
 
 let _dbus: any = null
 async function dbus() {
-  if (!_dbus) _dbus = await import('dbus-next')
+  if (!_dbus) _dbus = await import('dbus-final')
   return _dbus
 }
 

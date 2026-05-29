@@ -77,8 +77,7 @@
     "vite-plugin-node-polyfills": "^0.25.0"
   },
   "optionalDependencies": {
-    "dbus-next": "^0.10.2",
-    "usocket": "^0.3.0"
+    "dbus-final": "https://github.com/kando-menu/dbus-final.git"
   },
   "resolutions": {
     "viem": "2.50.4",

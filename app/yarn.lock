@@ -11026,7 +11026,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"dbus-next@npm:^0.10.2":
+"dbus-next@npm:0.10.2":
   version: 0.10.2
   resolution: "dbus-next@npm:0.10.2"
   dependencies:
@@ -11042,6 +11042,25 @@ __metadata:
     usocket:
       optional: true
   checksum: 10c0/657ad9030560f94d4f5222e09dd59a3de3031af5351e03ec57d3f38fb317cc6dfef480c26367b932b95f340d6297ce4b3ad5a1c224e4818dda91910df38b409f
+  languageName: node
+  linkType: hard
+
+"dbus-next@patch:dbus-next@npm%3A0.10.2#~/.yarn/patches/dbus-next-npm-0.10.2-d9d47e0ccf.patch":
+  version: 0.10.2
+  resolution: "dbus-next@patch:dbus-next@npm%3A0.10.2#~/.yarn/patches/dbus-next-npm-0.10.2-d9d47e0ccf.patch::version=0.10.2&hash=5d3a93"
+  dependencies:
+    "@nornagon/put": "npm:0.0.8"
+    event-stream: "npm:3.3.4"
+    hexy: "npm:^0.2.10"
+    jsbi: "npm:^2.0.5"
+    long: "npm:^4.0.0"
+    safe-buffer: "npm:^5.1.1"
+    usocket: "npm:^0.3.0"
+    xml2js: "npm:^0.4.17"
+  dependenciesMeta:
+    usocket:
+      optional: true
+  checksum: 10c0/72f5f3a68927b5d11876e078edfa4bc332d3eb9eaedf2afd6cd723f4038c972f077242f1285b7eed3994c4427954532201345a80b13e1c53a8072e5146ca33ce
   languageName: node
   linkType: hard
 
@@ -19670,7 +19689,7 @@ __metadata:
     "@whatwg-node/fetch": "npm:^0.10.13"
     boring-avatars: "npm:^2.0.4"
     d3: "npm:^7.9.0"
-    dbus-next: "npm:^0.10.2"
+    dbus-next: "patch:dbus-next@npm%3A0.10.2#~/.yarn/patches/dbus-next-npm-0.10.2-d9d47e0ccf.patch"
     electron: "npm:^39.2.6"
     electron-builder: "npm:^26.0.12"
     electron-updater: "npm:^6.3.9"

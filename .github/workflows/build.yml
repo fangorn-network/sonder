@@ -107,6 +107,8 @@ jobs:
           VITE_GRAPH_API_KEY=${{ secrets.VITE_GRAPH_API_KEY }}
           VITE_USE_AGENT=${{ secrets.VITE_USE_AGENT }}
           VITE_ARBITRUM_SEPOLIA_RPC_URL=${{ secrets.VITE_ARBITRUM_SEPOLIA_RPC_URL }}
+          VITE_SPOTIFY_CLIENT_ID=${{secrets.VITE_SPOTIFY_CLIENT_ID}}
+          VITE_SPOTIFY_CLIENT_SECRET=${{secrets.VITE_SPOTIFY_CLIENT_SECRET}}
           EOF
 
       - name: Download server binary

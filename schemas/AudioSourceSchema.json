@@ -1,0 +1,12 @@
+{
+    "trackId": {
+        "@type": "string"
+    },
+    "audio": {
+        "@type": " handle",
+        "": ""
+    },
+    "platformId": {
+        "@type": "string"
+    }
+}

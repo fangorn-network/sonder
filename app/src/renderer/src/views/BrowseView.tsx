@@ -2,25 +2,28 @@ import { useEffect, useRef, useState } from 'react'
 import type { RecommendedTracks, TasteSignal, Track } from '../types'
 import './mobile.css'
 import './Browse-Filters.css'
-import { useSpotifyContext } from '../providers/SpotifyProvider'
 import { PublishModal } from '../components/PublishModal'
 import type { Fangorn } from '@fangorn-network/sdk'
 import type { Hex } from 'viem'
 import { PlaybackState } from '../types/playback'
-import { useYouTubeContext } from '../providers/YoutubeProvider'
-
+// import { useSpotify } from '../hooks/useSpotifyContext'
+import { useSpotifyContext } from '../context/SpotifyContext'
 const GENRE_PALETTE = [
   '#a78bfa', '#60a5fa', '#f472b6', '#22c55e',
   '#f97316', '#7c5de8', '#f87171', '#34d399',
 ]
 
-function hashColor(str: string): string {
+export function hashColor(str: string): string {
   let h = 0
   for (let i = 0; i < str.length; i++) h = (Math.imul(31, h) + str.charCodeAt(i)) | 0
   return GENRE_PALETTE[Math.abs(h) % GENRE_PALETTE.length]
 }
 
-type SearchTab = 'library' | 'mb' | 'yt'
+// ─── NEW: startup query helpers ───────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+type SearchTab = 'library' | 'mb' | 'yt' | 'sc'
 
 interface BrowseViewProps {
   tracks: Track[]
@@ -58,9 +61,6 @@ interface BrowseViewProps {
   ambientStatus?: 'idle' | 'fetching' | 'error'
   ambientQueueSize?: number
   ambientLastReason?: string
-  showSpotifyNudge?: boolean
-  onSpotifyNudgeConnect?: () => void
-  onSpotifyNudgeDismiss?: () => void
   fallbackTracks?: Track[]
   fallbackLoading?: boolean
   onFallbackSearch?: (query: string) => void
@@ -69,11 +69,20 @@ interface BrowseViewProps {
   publisherAddress?: Hex | null
   contextBar?: React.ReactNode
 
-  // yt search
+  // YouTube search
   ytTracks?: Track[]
   ytLoading?: boolean
   onYtSearch?: (query: string) => void
   onYtClear?: () => void
+
+  // SoundCloud search
+  scTracks?: Track[]
+  scLoading?: boolean
+  onScSearch?: (query: string) => void
+  onScClear?: () => void
+
+  // NEW: top genres from the Markov kernel (optional — gracefully absent on first boot)
+  kernelTopGenres?: string[]
 }
 
 async function fetchAlbumArt(title: string, artist: string): Promise<string | null> {
@@ -100,17 +109,18 @@ async function fetchAlbumArt(title: string, artist: string): Promise<string | nu
 
 export function BrowseView({
   tracks, loading, loadingMore, error, hasMore, loadMore, search, setSearch,
-  chromaReady = false,   // safe default — show connecting state until explicitly ready
+  chromaReady = false,
   seeding = false,
   retryConnect,
   playbackState, onPlay,
   recommendedTracks, recommendLoading, onClearRecommendations, onCallAgent,
   onFilteredChange, onPlayingIdChange, onSignal, onTrackClick,
   ambientStatus, ambientQueueSize, ambientLastReason,
-  showSpotifyNudge, onSpotifyNudgeConnect, onSpotifyNudgeDismiss,
   fallbackTracks, fallbackLoading, onFallbackSearch, onFallbackClear,
   fangorn, publisherAddress, contextBar,
-  onYtClear, onYtSearch, ytLoading, ytTracks
+  onYtClear, onYtSearch, ytLoading, ytTracks,
+  onScClear, onScSearch, scLoading, scTracks,
+  kernelTopGenres,   // NEW
 }: BrowseViewProps) {
   const sentinelRef = useRef<HTMLDivElement>(null)
   const [playingId, setPlayingId] = useState<string | null>(null)
@@ -119,27 +129,47 @@ export function BrowseView({
   const [reasonExpanded, setReasonExpanded] = useState(false)
   const [publishingTrack, setPublishingTrack] = useState<{ track: Track; color: string } | null>(null)
 
-  const { stop: stopYt } = useYouTubeContext()
+  const { currentVideoId, isPlaying } = useSpotifyContext()
 
   const [activeTab, setActiveTab] = useState<SearchTab>('library')
   const mbFetchedRef = useRef<string>('')
+  const ytFetchedRef = useRef<string>('')
+  const scFetchedRef = useRef<string>('')
   const prevSearchRef = useRef(search)
 
-  const ytFetchedRef = useRef<string>('')
+  // // ─── NEW: stochastic startup prefetch ──────────────────────────────────────
+  // // Fires once when: chroma is ready, tracks have loaded, no recommendations yet.
+  // // Uses time-of-day + Markov kernel top genres to seed the ambient agent.
+  // const startupFiredRef = useRef(false)
 
-  // In the search change effect:
+  // useEffect(() => {
+  //   if (!chromaReady)               return  // backend not ready
+  //   if (loading)                    return  // initial track load still in flight
+  //   if (startupFiredRef.current)    return  // already fired this session
+  //   if (recommendedTracks?.tracks?.length) return  // already have recs — don't overwrite
+
+  //   startupFiredRef.current = true
+  //   const query = buildStartupQuery(kernelTopGenres)
+  //   console.log('[browse] startup prefetch →', query)
+  //   onCallAgent(query)
+  // }, [chromaReady, loading, recommendedTracks, kernelTopGenres])
+  // // ──────────────────────────────────────────────────────────────────────────
+
   useEffect(() => {
     if (prevSearchRef.current !== search) {
       prevSearchRef.current = search
       setActiveTab('library')
       mbFetchedRef.current = ''
       ytFetchedRef.current = ''
+      scFetchedRef.current = ''
       onFallbackClear?.()
       onYtClear?.()
+      onScClear?.()
     }
   }, [search])
 
   const handleTabSwitch = (tab: SearchTab) => {
+    // if (activeTab === 'yt' && tab !== 'yt') stopYt()
     setActiveTab(tab)
     if (tab === 'mb' && onFallbackSearch && mbFetchedRef.current !== search.trim()) {
       mbFetchedRef.current = search.trim()
@@ -149,41 +179,21 @@ export function BrowseView({
       ytFetchedRef.current = search.trim()
       onYtSearch(search.trim())
     }
+    if (tab === 'sc' && onScSearch && scFetchedRef.current !== search.trim()) {
+      scFetchedRef.current = search.trim()
+      onScSearch(search.trim())
+    }
   }
 
   const showTabs = !!search.trim() && !!onFallbackSearch
-
-  const { play, searchAndPlay, connect, connected } = useSpotifyContext()
-
 
   const handlePlay = async (e: React.MouseEvent, track: Track) => {
     e.stopPropagation()
     setPlayingId(track.id)
     onPlayingIdChange?.(track.id)
     onSignal?.({ type: 'play', track, weight: 1.0 })
-
-    if (onPlay) {
-      // Router handles source selection — Spotify, YouTube, fallback, etc.
-      await onPlay(track)
-      return
-    }
-
-    // ── Legacy fallback (no router wired) ──────────────────────────────────────
-    if (!connected) { await connect(); return }
-    try {
-      if (track.spotifyTrackId) {
-        await play(`spotify:track:${track.spotifyTrackId}`)
-      } else {
-        const query = `${track.title} ${track.artist}`.replace(/\(.*?\)/g, '').trim()
-        await searchAndPlay(query)
-      }
-    } catch (err) {
-      console.error('play failed:', err)
-      setPlayingId(null)
-    }
+    if (onPlay) { await onPlay(track); return }
   }
-
-
 
   const filtered = tracks
 
@@ -232,15 +242,15 @@ export function BrowseView({
     if (ambientStatus === 'idle' && ambientLastReason) setReasonExpanded(false)
   }, [ambientLastReason])
 
-  // thumbnails cache
   useEffect(() => {
-    if (!ytTracks || ytTracks.length === 0) return
-    ytTracks.forEach(track => {
+    const allExternal = [...(ytTracks ?? []), ...(scTracks ?? [])]
+    if (allExternal.length === 0) return
+    allExternal.forEach(track => {
       if (track.thumbnailUrl && !albumArtCache[track.id]) {
         setAlbumArtCache(prev => ({ ...prev, [track.id]: track.thumbnailUrl! }))
       }
     })
-  }, [ytTracks])
+  }, [ytTracks, scTracks])
 
   const showAmbientBar = ambientStatus !== undefined
   const isFetching = ambientStatus === 'fetching'
@@ -248,19 +258,16 @@ export function BrowseView({
 
   const renderCard = (track: Track) => {
     const accentColor = hashColor(track.id)
-    const isThisPlaying = playbackState?.trackId === track.id && playbackState?.playing
+    const isThisPlaying =
+      (playbackState?.trackId === track.id && playbackState?.playing) ||
+      (currentVideoId != null && currentVideoId === track.id && isPlaying)
     const isMbTrack = !track.manifestCid
     const durationStr = track.durationMs
       ? `${Math.floor(track.durationMs / 60000)}:${String(Math.floor((track.durationMs % 60000) / 1000)).padStart(2, '0')}`
       : null
-    const isYtTrack = track.id.startsWith('yt:')
 
     return (
-      <div
-        key={track.id}
-        className="tg-card"
-        onClick={() => onTrackClick(track, accentColor)}
-      >
+      <div key={track.id} className="tg-card" onClick={() => onTrackClick(track, accentColor)}>
         <div className="tg-art">
           {albumArtCache[track.id]
             ? <img src={albumArtCache[track.id]} alt={track.title} style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', inset: 0, borderRadius: 4 }} />
@@ -268,8 +275,7 @@ export function BrowseView({
           }
           <button
             className={`tg-play-btn${isThisPlaying ? ' tg-play-btn--active' : ''}`}
-            aria-label="Play on Spotify"
-            title={connected ? 'Play on Spotify' : 'Connect Spotify to play'}
+            aria-label="Play"
             onClick={e => handlePlay(e, track)}
             style={{ background: accentColor, border: 'none', cursor: 'pointer' }}
           >
@@ -305,41 +311,59 @@ export function BrowseView({
               publish
             </button>
           )}
+        </div>
+      </div>
+    )
+  }
 
-          {isYtTrack && connected && (
+  const renderRow = (track: Track) => {
+    const accentColor = hashColor(track.id)
+    const isThisPlaying =
+      (playbackState?.trackId === track.id && playbackState?.playing) ||
+      (currentVideoId != null && currentVideoId === track.id && isPlaying)
+    const isMbTrack = !track.manifestCid
+    const durationStr = track.durationMs
+      ? `${Math.floor(track.durationMs / 60000)}:${String(Math.floor((track.durationMs % 60000) / 1000)).padStart(2, '0')}`
+      : null
+
+    return (
+      <div
+        key={track.id}
+        onClick={() => onTrackClick(track, accentColor)}
+        className={`tg-track-row ${isThisPlaying ? 'is-playing' : ''}`}
+        style={{ '--accent-color': accentColor } as React.CSSProperties}
+      >
+        <button
+          aria-label="Play"
+          onClick={e => handlePlay(e, track)}
+          className="tg-row-play-btn"
+        >
+          {isThisPlaying
+            ? <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><rect x="5" y="4" width="4" height="16" rx="1" /><rect x="15" y="4" width="4" height="16" rx="1" /></svg>
+            : <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
+          }
+        </button>
+        <div className="tg-row-info">
+          <span className="tg-row-title">{track.title}</span>
+          <span className="tg-row-meta">
+            <span className="tg-row-artist">{track.artist}</span>
+            {track.year !== null && <span className="tg-row-dot">·</span>}
+            {track.year !== null && <span className="tg-row-year">{track.year}</span>}
+          </span>
+        </div>
+        <div className="tg-row-actions">
+          {isMbTrack && fangorn && (
             <button
-              onClick={e => {
-                e.stopPropagation()
-                onPlay?.({
-                  ...track,
-                  youtubeVideoId: undefined,  // no YT address → router uses Spotify searchAndPlay
-                  spotifyTrackId: null,       // no explicit ID → triggers fuzzy search
-                })
-              }}
-              style={{
-                marginTop: 4, marginLeft: 4,
-                display: 'inline-flex', alignItems: 'center', gap: 4,
-                background: 'none', border: '1px solid rgba(30,215,96,0.25)',
-                borderRadius: 4, color: 'rgba(30,215,96,0.7)', opacity: 0.7,
-                fontSize: 9, letterSpacing: '0.07em', textTransform: 'uppercase',
-                padding: '2px 7px', cursor: 'pointer', transition: 'all 0.15s ease',
-                fontFamily: 'inherit',
-              }}
-              onMouseEnter={e => {
-                e.currentTarget.style.opacity = '1'
-                e.currentTarget.style.borderColor = 'rgba(30,215,96,0.55)'
-              }}
-              onMouseLeave={e => {
-                e.currentTarget.style.opacity = '0.7'
-                e.currentTarget.style.borderColor = 'rgba(30,215,96,0.25)'
-              }}
-              title="Search for this track on Spotify"
+              onClick={e => { e.stopPropagation(); setPublishingTrack({ track, color: accentColor }) }}
+              className="tg-row-publish-btn"
             >
-              <SpotifyDot />
-              try spotify
+              <svg viewBox="0 0 12 12" width="9" height="9" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                <path d="M6 8V2M3 5l3-3 3 3M2 10h8" />
+              </svg>
+              publish
             </button>
           )}
-
+          {durationStr && <span className="tg-row-duration">{durationStr}</span>}
         </div>
       </div>
     )
@@ -356,52 +380,27 @@ export function BrowseView({
       </div>
     ))
 
-  // ── Connecting / error splash ───────────────────────────────────────────────
-  // Shown until chromaReady flips true. If the backend is just slow to start,
-  // the spinner shows and the view transitions automatically once it's up.
-  // If it times out, the error state offers a retry button.
-
   if (!chromaReady) {
-    const timedOut = !!error  // health check exhausted max attempts
+    const timedOut = !!error
     return (
-      <div className="browse-view" style={{
-        display: 'flex', flexDirection: 'column', alignItems: 'center',
-        justifyContent: 'center', minHeight: 360, gap: 16,
-      }}>
+      <div className="browse-view" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 360, gap: 16 }}>
         {!timedOut ? (
           <>
-            <div style={{
-              width: 28, height: 28, borderRadius: '50%',
-              border: '2px solid rgba(167,139,250,0.12)',
-              borderTop: '2px solid rgba(167,139,250,0.65)',
-              animation: 'chromaSpin 0.9s linear infinite',
-            }} />
-            <div style={{
-              fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase',
-              color: 'rgba(167,139,250,0.45)',
-            }}>
+            <div style={{ width: 28, height: 28, borderRadius: '50%', border: '2px solid rgba(167,139,250,0.12)', borderTop: '2px solid rgba(167,139,250,0.65)', animation: 'chromaSpin 0.9s linear infinite' }} />
+            <div style={{ fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(167,139,250,0.45)' }}>
               connecting to catalog
             </div>
           </>
         ) : (
           <>
-            <div style={{ fontSize: 13, color: 'rgba(248,113,113,0.8)', textAlign: 'center', maxWidth: 280, lineHeight: 1.5 }}>
-              {error}
-            </div>
+            <div style={{ fontSize: 13, color: 'rgba(248,113,113,0.8)', textAlign: 'center', maxWidth: 280, lineHeight: 1.5 }}>{error}</div>
             {retryConnect && (
               <button
                 onClick={retryConnect}
-                style={{
-                  marginTop: 4, padding: '7px 20px', borderRadius: 5, cursor: 'pointer',
-                  background: 'rgba(167,139,250,0.1)', border: '1px solid rgba(167,139,250,0.25)',
-                  color: 'rgba(167,139,250,0.8)', fontSize: 11, letterSpacing: '0.08em',
-                  textTransform: 'uppercase', transition: 'all 0.15s ease', fontFamily: 'inherit',
-                }}
+                style={{ marginTop: 4, padding: '7px 20px', borderRadius: 5, cursor: 'pointer', background: 'rgba(167,139,250,0.1)', border: '1px solid rgba(167,139,250,0.25)', color: 'rgba(167,139,250,0.8)', fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', transition: 'all 0.15s ease', fontFamily: 'inherit' }}
                 onMouseEnter={e => { e.currentTarget.style.background = 'rgba(167,139,250,0.18)'; e.currentTarget.style.borderColor = 'rgba(167,139,250,0.45)' }}
                 onMouseLeave={e => { e.currentTarget.style.background = 'rgba(167,139,250,0.1)'; e.currentTarget.style.borderColor = 'rgba(167,139,250,0.25)' }}
-              >
-                retry
-              </button>
+              >retry</button>
             )}
           </>
         )}
@@ -410,11 +409,8 @@ export function BrowseView({
     )
   }
 
-  // ── Main view ──────────────────────────────────────────────────────────────
-
   return (
     <div className="browse-view">
-
       <div className="browse-toolbar">
         <div className="search-box">
           <span className="search-icon">⌕</span>
@@ -432,16 +428,8 @@ export function BrowseView({
       </div>
 
       {seeding && (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 8,
-          padding: '6px 12px', marginBottom: 8, borderRadius: 6,
-          background: 'rgba(167,139,250,0.06)', border: '1px solid rgba(167,139,250,0.15)',
-          fontSize: 11, letterSpacing: '0.05em', color: 'rgba(167,139,250,0.7)',
-        }}>
-          <span style={{
-            width: 6, height: 6, borderRadius: '50%', flexShrink: 0, background: '#a78bfa',
-            boxShadow: '0 0 6px #a78bfa88', animation: 'ambientPulse 1.2s ease-in-out infinite',
-          }} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', marginBottom: 8, borderRadius: 6, background: 'rgba(167,139,250,0.06)', border: '1px solid rgba(167,139,250,0.15)', fontSize: 11, letterSpacing: '0.05em', color: 'rgba(167,139,250,0.7)' }}>
+          <span style={{ width: 6, height: 6, borderRadius: '50%', flexShrink: 0, background: '#a78bfa', boxShadow: '0 0 6px #a78bfa88', animation: 'ambientPulse 1.2s ease-in-out infinite' }} />
           personalizing your view…
         </div>
       )}
@@ -450,8 +438,7 @@ export function BrowseView({
         <div style={{ display: 'flex', gap: 4, marginBottom: 14, borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
           {([
             { id: 'library' as SearchTab, label: 'Library' },
-            { id: 'mb' as SearchTab, label: 'MusicBrainz', icon: <MbIcon size={10} /> },
-            { id: 'yt' as SearchTab, label: 'YouTube', icon: <YtIcon size={10} /> },
+            { id: 'yt' as SearchTab, label: 'Deep Exploration', icon: <ScIcon size={10} /> },
           ]).map(({ id, label, icon }) => {
             const active = activeTab === id
             return (
@@ -468,82 +455,32 @@ export function BrowseView({
                 }}
               >
                 {icon}{label}
-                {id === 'mb' && fallbackLoading && (
-                  <span className="upload-spinner" style={{ width: 8, height: 8, borderWidth: 1.5, marginLeft: 2 }} />
-                )}
-                {id === 'yt' && ytLoading && (
-                  <span className="upload-spinner" style={{ width: 8, height: 8, borderWidth: 1.5, marginLeft: 2 }} />
-                )}
+                {id === 'yt' && ytLoading && <span className="upload-spinner" style={{ width: 8, height: 8, borderWidth: 1.5, marginLeft: 2 }} />}
               </button>
             )
           })}
         </div>
       )}
 
-      {showSpotifyNudge && (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 10,
-          padding: '8px 12px', marginBottom: 10, borderRadius: 6,
-          background: 'rgba(30,215,96,0.06)', border: '1px solid rgba(30,215,96,0.18)',
-          fontSize: 11, letterSpacing: '0.03em', color: 'var(--fg3, #a3a3a3)',
-        }}>
-          <SpotifyIcon width={14} height={14} style={{ flexShrink: 0, opacity: 0.7 }} />
-          <span style={{ flex: 1 }}>Connect Spotify to enable playback</span>
-          <button
-            onClick={onSpotifyNudgeConnect}
-            style={{
-              background: 'rgba(30,215,96,0.12)', border: '1px solid rgba(30,215,96,0.3)',
-              borderRadius: 4, color: '#1DB954', fontFamily: 'var(--font-mono, monospace)',
-              fontSize: 10, letterSpacing: '0.08em', padding: '3px 10px',
-              cursor: 'pointer', flexShrink: 0,
-            }}
-            onMouseEnter={e => (e.currentTarget.style.background = 'rgba(30,215,96,0.22)')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'rgba(30,215,96,0.12)')}
-          >SET UP</button>
-          <button
-            onClick={onSpotifyNudgeDismiss}
-            aria-label="Dismiss"
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--fg3, #a3a3a3)', fontSize: 12, padding: '0 2px', lineHeight: 1, opacity: 0.5, flexShrink: 0 }}
-            onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
-            onMouseLeave={e => (e.currentTarget.style.opacity = '0.5')}
-          >✕</button>
-        </div>
-      )}
-
       {showAmbientBar && (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', margin: '0 0 8px',
-          borderRadius: reasonExpanded ? '6px 6px 0 0' : 6, fontSize: 11, letterSpacing: '0.04em',
-          background: isAmbientError ? 'rgba(248,113,113,0.07)' : 'rgba(167,139,250,0.07)',
-          border: `1px solid ${isAmbientError ? 'rgba(248,113,113,0.18)' : 'rgba(167,139,250,0.18)'}`,
-          color: isAmbientError ? '#f87171' : '#a78bfa', transition: 'all 0.25s ease',
-        }}>
-          <span style={{
-            width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
-            background: isAmbientError ? '#f87171' : isFetching ? '#a78bfa' : '#34d399',
-            boxShadow: isFetching ? '0 0 6px #a78bfa88' : undefined,
-            animation: isFetching ? 'ambientPulse 1.2s ease-in-out infinite' : undefined,
-          }} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', margin: '0 0 8px', borderRadius: reasonExpanded ? '6px 6px 0 0' : 6, fontSize: 11, letterSpacing: '0.04em', background: isAmbientError ? 'rgba(248,113,113,0.07)' : 'rgba(167,139,250,0.07)', border: `1px solid ${isAmbientError ? 'rgba(248,113,113,0.18)' : 'rgba(167,139,250,0.18)'}`, color: isAmbientError ? '#f87171' : '#a78bfa', transition: 'all 0.25s ease' }}>
+          <span style={{ width: 6, height: 6, borderRadius: '50%', flexShrink: 0, background: isAmbientError ? '#f87171' : isFetching ? '#a78bfa' : '#34d399', boxShadow: isFetching ? '0 0 6px #a78bfa88' : undefined, animation: isFetching ? 'ambientPulse 1.2s ease-in-out infinite' : undefined }} />
           <span style={{ flex: 1, opacity: 0.85 }}>
             {isAmbientError ? 'agent · fetch failed' : isFetching ? 'agent · listening…' : `agent · ${ambientQueueSize ?? 0} queued`}
           </span>
           {ambientLastReason && !isAmbientError && (
-            <button
-              onClick={() => setReasonExpanded(v => !v)}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', fontSize: 10, opacity: 0.65, padding: '0 2px', letterSpacing: '0.06em', textTransform: 'uppercase' }}
-            >{reasonExpanded ? 'hide' : 'why?'}</button>
+            <button onClick={() => setReasonExpanded(v => !v)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', fontSize: 10, opacity: 0.65, padding: '0 2px', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+              {reasonExpanded ? 'hide' : 'why?'}
+            </button>
           )}
         </div>
       )}
       {showAmbientBar && reasonExpanded && ambientLastReason && (
-        <div style={{
-          margin: '-8px 0 8px', padding: '8px 12px', borderRadius: '0 0 6px 6px',
-          background: 'rgba(167,139,250,0.05)', border: '1px solid rgba(167,139,250,0.12)', borderTop: 'none',
-          fontSize: 11, lineHeight: 1.6, color: 'var(--fg3, #c4b5fd)', fontStyle: 'italic',
-        }}>{ambientLastReason}</div>
+        <div style={{ margin: '-8px 0 8px', padding: '8px 12px', borderRadius: '0 0 6px 6px', background: 'rgba(167,139,250,0.05)', border: '1px solid rgba(167,139,250,0.12)', borderTop: 'none', fontSize: 11, lineHeight: 1.6, color: 'var(--fg3, #c4b5fd)', fontStyle: 'italic' }}>
+          {ambientLastReason}
+        </div>
       )}
 
-      {/* Library tab */}
       {activeTab === 'library' && (
         <>
           {recommendedTracks?.tracks && recommendedTracks.tracks.length > 0 && !recommendLoading && (
@@ -565,18 +502,11 @@ export function BrowseView({
               {search && onYtSearch && (
                 <button
                   onClick={() => handleTabSwitch('yt')}
-                  style={{
-                    marginTop: 10, background: 'none', border: '1px solid rgba(248,113,113,0.25)',
-                    borderRadius: 4, color: 'rgba(248,113,113,0.7)', fontSize: 10,
-                    letterSpacing: '0.07em', textTransform: 'uppercase', padding: '4px 12px',
-                    cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5,
-                    transition: 'all 0.15s ease', fontFamily: 'inherit',
-                  }}
+                  style={{ marginTop: 10, background: 'none', border: '1px solid rgba(248,113,113,0.25)', borderRadius: 4, color: 'rgba(248,113,113,0.7)', fontSize: 10, letterSpacing: '0.07em', textTransform: 'uppercase', padding: '4px 12px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5, transition: 'all 0.15s ease', fontFamily: 'inherit' }}
                   onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(248,113,113,0.5)'; e.currentTarget.style.color = 'rgba(248,113,113,1)' }}
                   onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(248,113,113,0.25)'; e.currentTarget.style.color = 'rgba(248,113,113,0.7)' }}
                 >
-                  <YtIcon size={9} />
-                  search youtube
+                  <YtIcon size={9} /> search youtube
                 </button>
               )}
             </div>
@@ -602,7 +532,6 @@ export function BrowseView({
         </>
       )}
 
-      {/* MusicBrainz tab */}
       {activeTab === 'mb' && (
         <>
           {fallbackLoading && <div className="track-grid">{renderSkeleton(6)}</div>}
@@ -610,26 +539,38 @@ export function BrowseView({
             <div className="track-grid">{fallbackTracks.map(renderCard)}</div>
           )}
           {!fallbackLoading && (!fallbackTracks || fallbackTracks.length === 0) && (
-            <div className="empty-state">
-              <div className="empty-icon">♪</div>
-              <p>No results on MusicBrainz.</p>
-            </div>
+            <div className="empty-state"><div className="empty-icon">♪</div><p>No results on MusicBrainz.</p></div>
           )}
           <div style={{ height: 200 }} />
         </>
       )}
 
       {activeTab === 'yt' && (
-        <>
-          {ytLoading && <div className="track-grid">{renderSkeleton(6)}</div>}
+        <div className="tg-tab-container">
+          {ytLoading && <div>{renderSkeleton(6)}</div>}
           {!ytLoading && ytTracks && ytTracks.length > 0 && (
-            <div className="track-grid">{ytTracks.map(renderCard)}</div>
+            <div className="tg-track-list">
+              {ytTracks.map(renderRow)}
+            </div>
           )}
           {!ytLoading && (!ytTracks || ytTracks.length === 0) && (
-            <div className="empty-state">
-              <div className="empty-icon">♪</div>
-              <p>No results on YouTube.</p>
+            <div className="tg-empty-state">
+              <div className="tg-empty-icon">♪</div>
+              <p className="tg-empty-text">No results on YouTube.</p>
             </div>
+          )}
+          <div className="tg-tab-spacer" />
+        </div>
+      )}
+
+      {activeTab === 'sc' && (
+        <>
+          {scLoading && <div className="track-grid">{renderSkeleton(6)}</div>}
+          {!scLoading && scTracks && scTracks.length > 0 && (
+            <div className="track-grid">{scTracks.map(renderCard)}</div>
+          )}
+          {!scLoading && (!scTracks || scTracks.length === 0) && (
+            <div className="empty-state"><div className="empty-icon">♪</div><p>No results on SoundCloud.</p></div>
           )}
           <div style={{ height: 200 }} />
         </>
@@ -662,15 +603,6 @@ function MbIcon({ size = 14 }: { size?: number }) {
   )
 }
 
-function SpotifyIcon({ width = 14, height = 14, style }: { width?: number; height?: number; style?: React.CSSProperties }) {
-  return (
-    <svg width={width} height={height} viewBox="0 0 24 24" fill="none" style={style}>
-      <circle cx="12" cy="12" r="12" fill="#1DB954" />
-      <path d="M17.25 16.5a.75.75 0 01-.41-.12C14.67 15 11.5 14.6 7.81 15.43a.75.75 0 01-.32-1.46c4.07-.9 7.57-.45 10.18 1.14a.75.75 0 01-.42 1.39zm1.26-2.89a.94.94 0 01-.52-.15c-2.66-1.63-6.71-2.1-9.85-1.15a.94.94 0 11-.54-1.8c3.57-1.07 8.01-.56 11.05 1.32a.94.94 0 01-.53 1.73l-.61.05zm.12-3a.94.94 0 01-.47-.12C15.31 8.81 10.22 8.6 7.18 9.52a.94.94 0 01-.56-1.79c3.47-1.08 9.23-.87 12.87 1.28a.94.94 0 01-.47 1.76l-.37-.27z" fill="white" />
-    </svg>
-  )
-}
-
 function YtIcon({ size = 14 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 20 20" fill="none" style={{ flexShrink: 0 }}>
@@ -681,10 +613,12 @@ function YtIcon({ size = 14 }: { size?: number }) {
   )
 }
 
-function SpotifyDot() {
+function ScIcon({ size = 14 }: { size?: number }) {
   return (
-    <svg width="8" height="8" viewBox="0 0 8 8">
-      <circle cx="4" cy="4" r="4" fill="rgba(30,215,96,0.9)" />
+    <svg width={size} height={size} viewBox="0 0 20 20" fill="none" style={{ flexShrink: 0 }}>
+      <rect width="20" height="20" rx="3" fill="rgba(255,85,0,0.2)" />
+      <path d="M3.5 13a1 1 0 002 0v-2a1 1 0 00-2 0v2zm3 0a1 1 0 002 0V9.5a1 1 0 00-2 0V13zm3 0a1 1 0 002 0V8a1 1 0 00-2 0v5zm3 0a1 1 0 002 0V8a1 1 0 00-2 0v5z"
+        fill="rgba(255,85,0,0.9)" />
     </svg>
   )
-} 
+}

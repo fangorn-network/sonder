@@ -29,5 +29,15 @@ music-data/ia-data
 deploy.sh
 
 .env
+**/.venv
 **/venv
 **/db/*
+**/.yarn/*
+!**/.yarn/releases
+!**/.yarn/patches
+!**/.yarn/plugins
+!**/.yarn/sdks
+!**/.yarn/versions
+**/stage_volumes/
+**/volume*.json
+**/volume*.jsonl

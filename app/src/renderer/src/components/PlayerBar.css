@@ -40,12 +40,17 @@
   );
 }
 
-/* ── track info (left) ── */
+/* ── Left: track info ────────────────────────────────────────────────── */
+
 .player-track {
   display: flex;
   align-items: center;
   gap: var(--sp-3);
   min-width: 0;
+}
+
+.player-art-wrap {
+  flex-shrink: 0;
 }
 
 .player-art {
@@ -59,7 +64,13 @@
   justify-content: center;
   overflow: hidden;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.06);
-  cursor: pointer;
+  object-fit: cover;
+}
+
+.player-art--fallback {
+  width: 42px;
+  height: 42px;
+  border-radius: var(--r-sm);
 }
 
 .player-art-initials {
@@ -96,7 +107,8 @@
   text-overflow: ellipsis;
 }
 
-/* ── center: controls + progress ── */
+/* ── Center: controls + progress ─────────────────────────────────────── */
+
 .player-center {
   display: flex;
   flex-direction: column;
@@ -110,7 +122,6 @@
   gap: var(--sp-3);
 }
 
-/* Base button — no font-size, SVGs size themselves */
 .player-btn {
   background: none;
   border: none;
@@ -129,7 +140,6 @@
 .player-btn:hover:not(:disabled) { color: var(--fg); }
 .player-btn:disabled { opacity: 0.2; cursor: not-allowed; }
 
-/* Skip buttons — fixed size, icon fills it */
 .player-btn--skip {
   width: 32px;
   height: 32px;
@@ -139,25 +149,21 @@
   transform: scale(1.1);
 }
 
-/* Play/pause — circle, perfectly centered */
 .player-btn--play {
   width: 34px;
   height: 34px;
   border-radius: 50%;
   background: var(--accent-hi);
   color: var(--bg);
-  /* No font-size — SVG sizes itself via width/height attrs */
   transition: opacity var(--t1), transform var(--t1);
 }
 
 .player-btn--play svg {
   display: block;
-  /* optical center: play triangle leans left */
   transform: translateX(1px);
 }
 
 .player-btn--playing svg {
-  /* pause bars are symmetric — no offset */
   transform: none;
 }
 
@@ -168,7 +174,6 @@
 
 .player-btn--play:disabled { opacity: 0.35; cursor: not-allowed; }
 
-/* progress */
 .player-progress-row {
   display: flex;
   align-items: center;
@@ -235,7 +240,82 @@
   font-family: var(--font-mono);
 }
 
-/* ── meta (right) ── */
+/* ── Right: up next ──────────────────────────────────────────────────── */
+
+.player-upnext {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.player-upnext-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 6px 10px;
+  border-radius: var(--r-sm);
+  min-width: 0;
+  width: 100%;
+  transition: background var(--t1);
+  text-align: left;
+  font-family: inherit;
+  overflow: hidden;
+}
+
+.player-upnext-btn:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.player-upnext-label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--fg3);
+  opacity: 0.5;
+  display: block;
+  margin-bottom: 2px;
+}
+
+.player-upnext-chevron {
+  display: none;
+}
+
+.player-upnext-track {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  width: 100%;
+}
+
+.player-upnext-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+  letter-spacing: -0.01em;
+}
+
+.player-upnext-artist {
+  font-size: 10px;
+  font-weight: 300;
+  color: var(--fg3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+}
+
+/* ── Legacy meta (right) — keep for anything using it ───────────────── */
+
 .player-meta {
   display: flex;
   align-items: center;
@@ -264,6 +344,8 @@
   color: var(--fg3);
 }
 
+/* ── Mobile ──────────────────────────────────────────────────────────── */
+
 @media (max-width: 680px) {
   .player-bar {
     left: 0;
@@ -274,10 +356,11 @@
     gap: var(--sp-2);
   }
   .player-center { grid-column: 1 / -1; order: -1; }
-  .player-meta { display: none; }
+  .player-upnext { display: none; }
 }
 
-/* ── play/pause button in TrackDetails ── */
+/* ── TrackDetails play button ─────────────────────────────────────────── */
+
 .td-title-row {
   display: flex;
   align-items: flex-start;
@@ -319,7 +402,7 @@
 
 .td-play-btn svg {
   display: block;
-  transform: translateX(1px); /* optical center for play triangle */
+  transform: translateX(1px);
 }
 
 .td-play-btn--playing svg {

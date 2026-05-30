@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import type { Track, JoinedRecord } from '../types'
 import { asTrack } from '../types'
 
-const CHROMA_URL = (import.meta as any).env.VITE_CHROMA_URL ?? 'http://localhost:8080'
+const CHROMA_URL = (import.meta as any).env.VITE_CHROMA_URL ?? 'http://127.0.0.1:8080'
 const PAGE_SIZE = 20
 const HEALTH_RETRY_MS = 2000
 const HEALTH_MAX_ATTEMPTS = 20
@@ -36,7 +36,7 @@ function normalizeHit(hit: any): Track | null {
 function dedup(tracks: Track[]): Track[] {
   const seen = new Map<string, Track>()
   for (const t of tracks) {
-    const key = t.spotifyTrackId || t.trackId
+    const key = t.trackId
     if (!seen.has(key)) seen.set(key, t)
   }
   return Array.from(seen.values())

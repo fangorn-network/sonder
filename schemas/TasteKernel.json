@@ -1,0 +1,11 @@
+{
+    "owner": {
+        "@type": "string"
+    },
+    "name": {
+        "@type": "string"
+    },  
+    "data": {
+        "@type": "string"
+    }
+}

@@ -6,10 +6,6 @@
  *
  * ─── Electron wiring ─────────────────────────────────────────────────────────
  *
- * main.ts: ipcMain.handle('spotify:oauth', ...) opens a BrowserWindow,
- * watches will-redirect for http://localhost:8080/callback, destroys the
- * window, resolves with the full callback URL.
- *
  * No custom preload entry needed — uses window.electron.ipcRenderer.invoke
  * (standard electron-toolkit contextBridge shape) throughout.
  *
@@ -25,31 +21,16 @@ import { useState, useEffect, useCallback } from 'react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-interface SpotifyTokens {
-  accessToken: string
-  refreshToken: string
-  expiresAt: number
-  scope: string
-}
-
-interface SpotifyCredentials {
-  clientId: string
-  clientSecret: string
-  redirectUri: string
-}
-
 interface PinataConfig {
   jwt: string
   gateway: string
 }
 
-type ConnectorId = 'spotify' | 'pinata'
+type ConnectorId = 'pinata'
 
 // ─── Storage keys ─────────────────────────────────────────────────────────────
 
 const SK = {
-  SPOTIFY_CREDS: 'sond3r:spotify:credentials',
-  SPOTIFY_TOKENS: 'sond3r:spotify:tokens',
   PINATA_CONFIG: 'sond3r:pinata:config',
 } as const
 
@@ -71,37 +52,12 @@ function makeState(): string {
   const a = new Uint8Array(16); crypto.getRandomValues(a); return b64url(a)
 }
 
-// ─── Spotify constants ────────────────────────────────────────────────────────
-
-const DEFAULT_REDIRECT_URI = 'http://localhost:8080/callback'
-
-const SPOTIFY_SCOPES = [
-  'user-read-playback-state',
-  'user-modify-playback-state',
-  'user-read-currently-playing',
-  'streaming',
-  'playlist-read-private',
-  'playlist-read-collaborative',
-  'user-library-read',
-  'user-top-read',
-  'user-read-recently-played',
-].join(' ')
-
-// ─── Sidebar meta ─────────────────────────────────────────────────────────────
-
 const CONNECTOR_META: Record<ConnectorId, { label: string; hint: string }> = {
-  spotify: { label: 'Spotify', hint: 'playback' },
   pinata: { label: 'Pinata', hint: 'storage' },
 }
 
-// ─── Root ─────────────────────────────────────────────────────────────────────
-
-interface ConnectorsViewProps {
-  onSpotifyConfigSaved?: (config: SpotifyCredentials) => void
-}
-
-export function ConnectorsView({ onSpotifyConfigSaved }: ConnectorsViewProps) {
-  const [active, setActive] = useState<ConnectorId>('spotify')
+export function ConnectorsView() {
+  const [active, setActive] = useState<ConnectorId>('pinata')
 
   return (
     <div style={{ display: 'flex', height: '100%', minHeight: 0, margin: '0 calc(-1 * var(--sp-5))' }}>
@@ -143,320 +99,9 @@ export function ConnectorsView({ onSpotifyConfigSaved }: ConnectorsViewProps) {
 
       {/* ── panel content ───────────────────────────────────────────────────── */}
       <div style={{ flex: 1, overflow: 'auto', padding: 'var(--sp-6)' }}>
-        {active === 'spotify' && <SpotifyPanel onConfigSaved={onSpotifyConfigSaved} />}
         {active === 'pinata' && <PinataPanel />}
       </div>
 
-    </div>
-  )
-}
-
-// ─── Spotify panel ────────────────────────────────────────────────────────────
-
-function SpotifyPanel({ onConfigSaved }: { onConfigSaved?: (cfg: SpotifyCredentials) => void }) {
-  const [creds, setCreds] = useState<SpotifyCredentials | null>(() => safeGet(SK.SPOTIFY_CREDS))
-  const [tokens, setTokens] = useState<SpotifyTokens | null>(() => safeGet(SK.SPOTIFY_TOKENS))
-
-  const [clientId, setClientId] = useState(creds?.clientId ?? '')
-  const [clientSecret, setClientSecret] = useState(creds?.clientSecret ?? '')
-  const [redirectUri, setRedirectUri] = useState(creds?.redirectUri ?? DEFAULT_REDIRECT_URI)
-  const [showSecret, setShowSecret] = useState(false)
-  const [credsOpen, setCredsOpen] = useState(!creds)
-  const [oauthPhase, setOauthPhase] = useState<'idle' | 'pending' | 'error'>('idle')
-  const [error, setError] = useState<string | null>(null)
-
-  // ── Token refresh ──────────────────────────────────────────────────────────
-
-  const doRefresh = useCallback(async (
-    c: SpotifyCredentials, refreshToken: string,
-  ): Promise<SpotifyTokens> => {
-    const res = await fetch('https://accounts.spotify.com/api/token', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        Authorization: `Basic ${btoa(`${c.clientId}:${c.clientSecret}`)}`,
-      },
-      body: new URLSearchParams({
-        grant_type: 'refresh_token', refresh_token: refreshToken, client_id: c.clientId,
-      }),
-    })
-    if (!res.ok) {
-      const b = await res.json().catch(() => ({}))
-      throw new Error(b.error_description ?? `Refresh failed (${res.status})`)
-    }
-    const data = await res.json()
-    const next: SpotifyTokens = {
-      accessToken: data.access_token,
-      refreshToken: data.refresh_token ?? refreshToken,
-      expiresAt: Date.now() + data.expires_in * 1000,
-      scope: data.scope ?? '',
-    }
-    safeSave(SK.SPOTIFY_TOKENS, next)
-    setTokens(next)
-    return next
-  }, [])
-
-  // Auto-refresh 60s before expiry
-  useEffect(() => {
-    if (!tokens || !creds) return
-    const lag = tokens.expiresAt - Date.now() - 60_000
-    if (lag <= 0) { doRefresh(creds, tokens.refreshToken).catch(console.error); return }
-    const t = setTimeout(() => doRefresh(creds, tokens.refreshToken).catch(console.error), lag)
-    return () => clearTimeout(t)
-  }, [tokens, creds, doRefresh])
-
-  // ── Handlers ───────────────────────────────────────────────────────────────
-
-  const saveCreds = () => {
-    const id = clientId.trim()
-    const secret = clientSecret.trim()
-    const redir = redirectUri.trim() || DEFAULT_REDIRECT_URI
-    if (!id || !secret) { setError('Both fields are required.'); return }
-    const next = { clientId: id, clientSecret: secret, redirectUri: redir }
-    safeSave(SK.SPOTIFY_CREDS, next)
-    setCreds(next)
-    setCredsOpen(false)
-    setError(null)
-    onConfigSaved?.(next)
-  }
-
-  const startOAuth = async () => {
-    if (!creds) { setError('Save your app credentials first.'); return }
-    setError(null)
-    setOauthPhase('pending')
-
-    const verifier = await makeVerifier()
-    const challenge = await makeChallenge(verifier)
-    const state = makeState()
-    const redir = creds.redirectUri || DEFAULT_REDIRECT_URI
-
-    const authUrl = 'https://accounts.spotify.com/authorize?' + new URLSearchParams({
-      client_id: creds.clientId, response_type: 'code', redirect_uri: redir,
-      state, scope: SPOTIFY_SCOPES, code_challenge_method: 'S256', code_challenge: challenge,
-    })
-
-    try {
-      const callbackUrl: string = await (window as any).electron.ipcRenderer.invoke(
-        'spotify:oauth', authUrl, redir,
-      )
-      const url = new URL(callbackUrl)
-      const code = url.searchParams.get('code')
-      const err = url.searchParams.get('error')
-
-      if (err) throw new Error(`Spotify denied: ${err}`)
-      if (url.searchParams.get('state') !== state) throw new Error('State mismatch — possible CSRF')
-      if (!code) throw new Error('No authorization code received')
-
-      const res = await fetch('https://accounts.spotify.com/api/token', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
-          grant_type: 'authorization_code', code,
-          redirect_uri: redir, client_id: creds.clientId, code_verifier: verifier,
-        }),
-      })
-      if (!res.ok) {
-        const b = await res.json().catch(() => ({}))
-        throw new Error(b.error_description ?? `Token exchange failed (${res.status})`)
-      }
-      const data = await res.json()
-      const next: SpotifyTokens = {
-        accessToken: data.access_token, refreshToken: data.refresh_token,
-        expiresAt: Date.now() + data.expires_in * 1000, scope: data.scope ?? '',
-      }
-      safeSave(SK.SPOTIFY_TOKENS, next)
-      setTokens(next)
-      setOauthPhase('idle')
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : 'OAuth failed'
-      if (msg !== 'auth_cancelled') setError(msg)
-      setOauthPhase('error')
-    }
-  }
-
-  const disconnect = () => {
-    localStorage.removeItem(SK.SPOTIFY_TOKENS)
-    setTokens(null); setOauthPhase('idle'); setError(null)
-  }
-
-  const isExpired = !!tokens && tokens.expiresAt < Date.now()
-  const isActive = !!tokens && !isExpired
-
-  // ── Render ─────────────────────────────────────────────────────────────────
-
-  return (
-    <div style={{ maxWidth: 540 }}>
-
-      <PanelHeading title="SPOTIFY" sub="music playback + library access" />
-
-      {/* App credentials — accordion */}
-      <div className="studio-section" style={{ marginBottom: 'var(--sp-4)' }}>
-        <button
-          onClick={() => setCredsOpen(v => !v)}
-          style={{
-            width: '100%', background: 'none', border: 'none', cursor: 'pointer',
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          }}
-        >
-          <span className="studio-section-label" style={{ padding: 'var(--sp-3) var(--sp-4)', border: 'none', background: 'none', flex: 1, textAlign: 'left' }}>
-            App Credentials
-          </span>
-          <span style={{ paddingRight: 'var(--sp-4)', display: 'flex', alignItems: 'center', gap: 8 }}>
-            {creds && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--accent)', letterSpacing: '0.1em' }}>✓ SAVED</span>}
-            <span style={{
-              display: 'inline-block', fontSize: 10, color: 'var(--fg4)',
-              transform: credsOpen ? 'rotate(180deg)' : 'none',
-              transition: 'transform var(--t1)',
-            }}>▾</span>
-          </span>
-        </button>
-
-        {credsOpen && (
-          <>
-            <div style={{ padding: 'var(--sp-4)', borderTop: '1px solid var(--glass-edge)' }}>
-              <p style={{ fontFamily: 'var(--font-body)', fontSize: 12, fontWeight: 300, color: 'var(--fg3)', lineHeight: 1.7, marginBottom: 'var(--sp-4)' }}>
-                Create an app at{' '}
-                <a href="https://developer.spotify.com/dashboard/create" rel="noreferrer"
-                  style={{ color: 'var(--accent)', textDecoration: 'underline', textUnderlineOffset: 2 }}>
-                  developer.spotify.com ↗
-                </a>
-                {' '}and register your redirect URI below as an allowed redirect URI in the Spotify dashboard.
-              </p>
-
-              <div className="studio-field">
-                <label className="studio-label">
-                  Redirect URI <span className="studio-required">*</span>
-                </label>
-                <input
-                  className="studio-input"
-                  type="text"
-                  placeholder={DEFAULT_REDIRECT_URI}
-                  value={redirectUri}
-                  onChange={e => setRedirectUri(e.target.value)}
-                  spellCheck={false}
-                  autoComplete="off"
-                  style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}
-                />
-              </div>
-
-              <div className="studio-field">
-                <label className="studio-label">
-                  Client ID <span className="studio-required">*</span>
-                </label>
-                <input
-                  className="studio-input"
-                  type="text"
-                  placeholder="a1b2c3d4e5f6..."
-                  value={clientId}
-                  onChange={e => setClientId(e.target.value)}
-                  spellCheck={false}
-                  autoComplete="off"
-                  style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}
-                />
-              </div>
-
-              <div className="studio-field" style={{ borderBottom: 'none' }}>
-                <label className="studio-label">
-                  Client Secret <span className="studio-required">*</span>
-                </label>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <input
-                    className="studio-input"
-                    type={showSecret ? 'text' : 'password'}
-                    placeholder="••••••••••••••••••••••••••••••••"
-                    value={clientSecret}
-                    onChange={e => setClientSecret(e.target.value)}
-                    spellCheck={false}
-                    autoComplete="off"
-                    style={{ fontFamily: 'var(--font-mono)', fontSize: 13, flex: 1 }}
-                  />
-                  <button
-                    onClick={() => setShowSecret(v => !v)}
-                    tabIndex={-1}
-                    className="btn-ghost"
-                    style={{ flexShrink: 0, padding: '4px 10px', fontSize: 10 }}
-                  >
-                    {showSecret ? 'hide' : 'show'}
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div style={{ padding: 'var(--sp-3) var(--sp-4)', borderTop: '1px solid var(--glass-edge)' }}>
-              <button className="studio-submit" onClick={saveCreds}>
-                save credentials
-              </button>
-            </div>
-          </>
-        )}
-      </div>
-
-      {/* Account / OAuth status */}
-      <div className="studio-section" style={{ marginBottom: 'var(--sp-4)' }}>
-        <div className="studio-section-label" style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: 'var(--sp-3) var(--sp-4)',
-        }}>
-          <span>Account</span>
-          <ConnectionDot active={isActive} pending={oauthPhase === 'pending'} expired={isExpired} />
-        </div>
-
-        <div style={{ padding: 'var(--sp-4)', borderTop: '1px solid var(--glass-edge)' }}>
-          {isActive ? (
-            <>
-              {/* Token stats */}
-              <div style={{
-                display: 'grid', gridTemplateColumns: '1fr 1fr',
-                gap: 1, background: 'var(--glass-edge)',
-                border: '1px solid var(--glass-edge)', borderRadius: 'var(--r-sm)',
-                overflow: 'hidden', marginBottom: 'var(--sp-4)',
-              }}>
-                <StatCell label="Expires" value={new Date(tokens!.expiresAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} />
-                <StatCell label="Scopes" value={`${tokens!.scope.split(' ').length} granted`} />
-              </div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button
-                  className="btn-ghost"
-                  onClick={() => creds && doRefresh(creds, tokens!.refreshToken).catch(e => setError(String(e)))}
-                >
-                  refresh now
-                </button>
-                <button className="btn-ghost" onClick={disconnect} style={{ color: 'var(--err)' }}>
-                  disconnect
-                </button>
-              </div>
-            </>
-          ) : (
-            <>
-              {isExpired && (
-                <p style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--err)', marginBottom: 'var(--sp-3)', letterSpacing: '0.04em' }}>
-                  Session expired — re-authorize to continue.
-                </p>
-              )}
-              {oauthPhase === 'pending' && (
-                <p style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg3)', marginBottom: 'var(--sp-3)', letterSpacing: '0.04em' }}>
-                  Authorization window open…
-                </p>
-              )}
-              <button
-                className="studio-submit"
-                onClick={oauthPhase === 'pending' ? undefined : startOAuth}
-                disabled={!creds || oauthPhase === 'pending'}
-                style={{ opacity: (!creds || oauthPhase === 'pending') ? 0.35 : 1 }}
-              >
-                {oauthPhase === 'pending' ? 'waiting for callback…' : 'connect with spotify'}
-              </button>
-              {!creds && (
-                <p style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--fg3)', marginTop: 8, fontWeight: 300 }}>
-                  Save your app credentials above first.
-                </p>
-              )}
-            </>
-          )}
-        </div>
-      </div>
-
-      {error && <div className="upload-error">{error}</div>}
     </div>
   )
 }

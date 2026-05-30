@@ -1,0 +1,62 @@
+/* ── Publish Modal additions ─────────────────────────────────────────────── */
+
+.pm-body {
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pm-section-label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--fg3);
+  opacity: 0.5;
+  margin-bottom: 2px;
+}
+
+.pm-row {
+  display: flex;
+  gap: 10px;
+}
+
+.pm-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+.pm-label {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fg3);
+  font-family: var(--font-mono);
+}
+
+.pm-input {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--r-sm, 4px);
+  color: var(--fg);
+  font-family: inherit;
+  font-size: 12px;
+  padding: 6px 10px;
+  width: 100%;
+  box-sizing: border-box;
+  transition: border-color 0.15s ease;
+  outline: none;
+}
+
+.pm-input:focus {
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.pm-input::placeholder {
+  color: var(--fg3);
+  opacity: 0.4;
+}

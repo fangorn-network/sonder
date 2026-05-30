@@ -25,14 +25,6 @@ export type FieldValue =
 
 export function asTrack(r: JoinedRecord): Track {
   const f = r.fields
-  const contributors = Array.isArray(f.contributors)
-    ? (f.contributors as any[]).map(c => ({
-      role: c.role ?? null,
-      name: c.name ?? null,
-      id: c.id ?? null,
-    }))
-    : []
-
   return {
     id: r.id,
     trackId: r.trackId,
@@ -44,8 +36,15 @@ export function asTrack(r: JoinedRecord): Track {
       ? parseInt(f.datePublished.slice(0, 4)) || null
       : null,
     durationMs: (f.durationMs as number) ?? null,
-    spotifyTrackId: (f.externalId as string) ?? null,
-    contributors,
+    // platformId comes from the joined source schema record
+    youtubeVideoId: (f.platformId as string) ?? undefined,
+    contributors: Array.isArray(f.contributors)
+      ? (f.contributors as any[]).map(c => ({
+        role: c.role ?? null,
+        name: c.name ?? null,
+        id: c.id ?? null,
+      }))
+      : [],
     embedding: r.embedding,
   }
 }
@@ -59,7 +58,6 @@ export interface Track {
   artist: string
   year: number | null
   durationMs: number | null
-  spotifyTrackId: string | null
   contributors?: { role: string | null; name: string | null; id: string | null }[]
   embedding?: number[]
   genres?: string[]
@@ -72,7 +70,7 @@ export interface Track {
 
 export type PlayState = 'idle' | 'loading' | 'playing' | 'error'
 export type UploadStatus = 'idle' | 'uploading' | 'done' | 'error'
-export type ViewName = 'Discover' | 'Library' | 'Agent'
+export type ViewName = 'Discover' | 'Library' | 'Agent' | 'Analyze' | 'Profile'
 export type UploadPanel = 'upload' | 'manage'
 
 export interface ManifestEntry {

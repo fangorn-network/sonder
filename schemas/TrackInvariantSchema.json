@@ -14,11 +14,14 @@
     "byArtist": {
         "@type": "string"
     },
+    "albumName": {
+        "@type": "string | null"
+    },
     "datePublished": {
         "@type": "string | null"
     },
     "durationMs": {
-        "@type": "number"
+        "@type": "number | null"
     },
     "contributors": {
         "@type": "array",
@@ -34,4 +37,4 @@
             }
         }
     }
-} 
+}

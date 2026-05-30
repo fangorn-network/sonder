@@ -1,18 +1,27 @@
+import certifi
+import os
+import io
+import sys
+os.environ['SSL_CERT_FILE'] = certifi.where()
 import argparse
 import asyncio
 import aiohttp
 import chromadb
 import hashlib
 import json
-import os
 import requests
 import uvicorn
 from chromadb.utils import embedding_functions
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, Query, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from chromadb.config import Settings
 from pydantic import BaseModel
+
+
+if sys.platform == 'win32':
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
 # ---------------------------------------------------------------------------
 # ARGS
@@ -33,9 +42,10 @@ def parse_args():
     parser.add_argument("--primary", "-p", metavar="NAME", default=None)
     parser.add_argument(
         "--subgraph-url",
-        default="https://api.studio.thegraph.com/query/1745244/fangorn-data-discovery/version/latest",
+        default="https://gateway.thegraph.com/api/subgraphs/id/2yVbpC7TT1VPq9vLn8a49zCjESNAEjoPg8wZhriQDDcY",
     )
-    parser.add_argument("--ipfs-gateway",      default="https://ipfs.io/ipfs")
+    parser.add_argument("--graph-api-key",      default="",                     help="The Graph gateway API key")
+    parser.add_argument("--ipfs-gateway",       default="https://ipfs.io/ipfs")
     parser.add_argument("--chroma-path",        default="./db/sond3r")
     parser.add_argument("--checkpoint-file",    default="./db/ingest_checkpoint.json")
     parser.add_argument("--collection",         default="fangorn")
@@ -80,9 +90,138 @@ collection:      object | None = None
 debug_secondary: dict         = {}
 
 # ---------------------------------------------------------------------------
+# CATALOG MAP CACHE
+# ---------------------------------------------------------------------------
+# GET  /catalog/map          — returns full 2D UMAP projection (cached)
+# POST /catalog/map/refresh  — invalidates cache and recomputes in background
+#
+# umap-learn is an optional dependency.  Install with:
+#   pip install umap-learn
+# If missing the endpoint returns a 503 with a clear message.
+
+_map_cache:    dict | None = None
+_map_computing: bool       = False
+
+
+def _build_map_sync() -> dict:
+    """
+    Blocking.  Called via run_in_executor so it won't block the event loop.
+    Fetches every document from ChromaDB (with embeddings), projects to 2D
+    using UMAP (cosine metric), normalises to [-1, 1], and computes per-genre
+    centroids for the galaxy label layer.
+    """
+    try:
+        import umap as umap_lib
+        import numpy as np
+    except ImportError as exc:
+        raise RuntimeError("umap-learn is not installed.  Run: pip install umap-learn") from exc
+
+    col   = collection
+    total = col.count()
+    print(f"[catalog/map] building projection for {total} tracks …")
+    if total == 0:
+        return {"tracks": [], "total": 0, "genres": []}
+
+    BATCH      = 5_000
+    embeddings: list = []
+    metas:      list = []
+    ids:        list = []
+
+    for offset in range(0, total, BATCH):
+        result = col.get(
+            include=["embeddings", "metadatas"],
+            limit=BATCH,
+            offset=offset,
+        )
+        batch_emb  = result.get("embeddings")
+        batch_meta = result.get("metadatas")
+        batch_ids  = result.get("ids")
+        if batch_emb  is None: batch_emb  = []
+        if batch_meta is None: batch_meta = []
+        if batch_ids  is None: batch_ids  = []
+        # collection.get() returns flat lists (not nested like query())
+        embeddings.extend(batch_emb)
+        metas.extend(batch_meta)
+        ids.extend(batch_ids)
+
+    if len(embeddings) == 0:
+        return {"tracks": [], "total": 0, "genres": []}
+
+    emb_np = np.array(embeddings, dtype=np.float32)
+    n      = len(emb_np)
+    print(f"[catalog/map] running UMAP on {n} × {emb_np.shape[1]} matrix …")
+
+    reducer = umap_lib.UMAP(
+        n_components = 2,
+        n_neighbors  = min(15, n - 1),
+        min_dist     = 0.05,
+        metric       = "cosine",
+        random_state = 42,
+        low_memory   = True,
+        verbose      = False,
+    )
+    proj = reducer.fit_transform(emb_np)   # (N, 2) float64
+
+    # Normalise each axis to [-1, 1]
+    for axis in range(2):
+        mn, mx = float(proj[:, axis].min()), float(proj[:, axis].max())
+        rng = mx - mn if mx != mn else 1.0
+        proj[:, axis] = (proj[:, axis] - mn) / rng * 2 - 1
+
+    tracks:          list        = []
+    genre_positions: dict        = {}
+
+    for meta, doc_id, pos in zip(metas, ids, proj):
+        m      = meta or {}
+        # payload is stored as a JSON string inside metadata
+        payload_str = m.get("payload", "{}")
+        try:
+            payload = json.loads(payload_str) if isinstance(payload_str, str) else {}
+        except json.JSONDecodeError:
+            payload = {}
+
+        genres = payload.get("genres", [])
+        if not isinstance(genres, list):
+            genres = []
+        moods = payload.get("moods", [])
+        if not isinstance(moods, list):
+            moods = []
+
+        px, py = float(pos[0]), float(pos[1])
+
+        tracks.append({
+            "id":     doc_id,
+            "title":  payload.get("title")    or payload.get("name")     or doc_id,
+            "artist": payload.get("byArtist") or payload.get("artist")   or "",
+            "genres": genres[:3],
+            "moods":  moods[:3],
+            "px":     px,
+            "py":     py,
+        })
+
+        if genres:
+            g = genres[0]
+            genre_positions.setdefault(g, []).append((px, py))
+
+    # Genre centroids — only genres with ≥ 5 tracks get a label
+    genre_centroids = []
+    for genre, pts in genre_positions.items():
+        if len(pts) < 5:
+            continue
+        arr = np.array(pts)
+        genre_centroids.append({
+            "genre": genre,
+            "px":    float(arr[:, 0].mean()),
+            "py":    float(arr[:, 1].mean()),
+            "count": len(pts),
+        })
+    genre_centroids.sort(key=lambda x: -x["count"])
+
+    print(f"[catalog/map] done — {len(tracks)} tracks, {len(genre_centroids)} genre labels")
+    return {"tracks": tracks, "total": len(tracks), "genres": genre_centroids[:40]}
+
+# ---------------------------------------------------------------------------
 # CHECKPOINT
-# Persists {schema_name: {cid: blockTimestamp}} so reingest only fetches
-# IPFS for CIDs that are new or have an updated blockTimestamp.
 # ---------------------------------------------------------------------------
 
 def _load_checkpoint() -> dict[str, dict[str, int]]:
@@ -169,9 +308,14 @@ query Updates($schemaId: Bytes!, $first: Int!, $skip: Int!) {
 """
 
 def _query_subgraph(query: str, variables: dict) -> dict:
+    headers = {}
+    if cfg.graph_api_key:
+        headers["Authorization"] = f"Bearer {cfg.graph_api_key}"
+
     resp = requests.post(
         cfg.subgraph_url,
         json={"query": query, "variables": variables},
+        headers=headers,
         timeout=30,
     )
     resp.raise_for_status()
@@ -272,19 +416,14 @@ async def fetch_schema_entries(
     schema_name: str,
     schema_id:   str,
     loop,
-    prior_checkpoint: dict[str, int],   # cid -> blockTimestamp from last run
+    prior_checkpoint: dict[str, int],
 ) -> tuple[list[dict], dict[str, int]]:
-    """
-    Returns (entries, new_checkpoint) where new_checkpoint covers all seen CIDs
-    for this schema (both cached and freshly fetched).
-    """
     publishes, updates = await loop.run_in_executor(None, _fetch_all_events, schema_id)
     print(f"  [{schema_name}] subgraph: {len(publishes)} publishes, {len(updates)} updates")
 
     seen_cids = _build_seen_cids(publishes, updates)
     print(f"  [{schema_name}] unique manifest CIDs: {len(seen_cids)}")
 
-    # Diff: only fetch CIDs that are new or have a later blockTimestamp
     new_cids  = [
         cid for cid, meta in seen_cids.items()
         if prior_checkpoint.get(cid, -1) < meta["blockTimestamp"]
@@ -298,15 +437,12 @@ async def fetch_schema_entries(
     if new_cids:
         print(f"  [{schema_name}] IPFS: {ok} fetched, {bad} failed")
 
-    # Build new checkpoint: carry forward cached CIDs, update with fresh ones
     new_checkpoint: dict[str, int] = dict(prior_checkpoint)
     for cid, meta in seen_cids.items():
         if cid in fresh_manifests and fresh_manifests[cid] is not None:
             new_checkpoint[cid] = meta["blockTimestamp"]
         elif cid not in fresh_manifests:
-            # Unchanged — keep prior timestamp
             new_checkpoint[cid] = meta["blockTimestamp"]
-        # Failed fetches: don't update checkpoint so they retry next time
 
     all_entries = []
     for cid, manifest_json in fresh_manifests.items():
@@ -318,7 +454,7 @@ async def fetch_schema_entries(
             all_entries.append({"entry": entry, "entryIndex": i, "meta": meta})
 
     deduped = _dedup_entries(all_entries)
-    print(f"  [{schema_name}] entries from new CIDs: {len(all_entries)} raw → {len(deduped)} after dedup")
+    print(f"  [{schema_name}] entries from new CIDs: {len(all_entries)} raw -> {len(deduped)} after dedup")
 
     return deduped, new_checkpoint
 
@@ -439,7 +575,6 @@ async def ingest():
     print(f"Ingesting {len(schemas)} schema(s): {list(schemas.keys())}")
     print(f"{'='*60}")
 
-    # Fetch all schemas in parallel, each with its own prior checkpoint slice
     results = await asyncio.gather(*[
         fetch_schema_entries(
             name,
@@ -450,8 +585,8 @@ async def ingest():
         for name, schema_id in schemas.items()
     ])
 
-    entries_by_schema:     dict[str, list[dict]]      = {}
-    new_checkpoints_by_schema: dict[str, dict[str, int]] = {}
+    entries_by_schema:         dict[str, list[dict]]      = {}
+    new_checkpoints_by_schema: dict[str, dict[str, int]]  = {}
     for (name, _), (entries, new_ckpt) in zip(schemas.items(), results):
         entries_by_schema[name]         = entries
         new_checkpoints_by_schema[name] = new_ckpt
@@ -460,13 +595,11 @@ async def ingest():
 
     if not joined:
         print("  No new records to upsert.")
-        # Still save checkpoint so we don't refetch unchanged CIDs next time
         for name, ckpt in new_checkpoints_by_schema.items():
             checkpoint[name] = ckpt
         _save_checkpoint(checkpoint)
         return
 
-    # Diff against ChromaDB: skip records whose document hasn't changed
     ids_to_check = [r["id"] for r in joined]
     loop = asyncio.get_event_loop()
 
@@ -502,7 +635,6 @@ async def ingest():
             )
             print(f"  upserted {e}/{len(ids)}")
 
-    # Persist updated checkpoint
     for name, ckpt in new_checkpoints_by_schema.items():
         checkpoint[name] = ckpt
     _save_checkpoint(checkpoint)
@@ -517,6 +649,9 @@ def _parse_hits(results: dict, include_embeddings: bool = False) -> list[dict]:
     raw_ids   = results["ids"]
     raw_docs  = results["documents"]
     raw_metas = results["metadatas"]
+
+    if not raw_ids or not raw_docs or not raw_metas:
+        return []
 
     ids   = raw_ids[0]   if isinstance(raw_ids[0],   list) else raw_ids
     docs  = raw_docs[0]  if isinstance(raw_docs[0],  list) else raw_docs
@@ -568,6 +703,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ---------------------------------------------------------------------------
+# EXISTING ROUTES
+# ---------------------------------------------------------------------------
 
 @app.get("/browse")
 async def browse(limit: int = Query(20), offset: int = Query(0)):
@@ -622,6 +761,83 @@ async def embed(body: EmbedRequest):
         return {"embedding": vectors[0].tolist()}
     return {"error": "provide 'text' or 'texts'"}
 
+# ---------------------------------------------------------------------------
+# CATALOG MAP ROUTES
+# ---------------------------------------------------------------------------
+
+@app.get("/catalog/map")
+async def catalog_map():
+    """
+    Return the full 2D UMAP projection of the catalog.
+
+    First call triggers the projection (blocking in a thread executor).
+    Subsequent calls return the cached result instantly.
+
+    Response shape:
+      {
+        "total":  int,
+        "tracks": [{ "id", "title", "artist", "genres", "moods", "px", "py" }, ...],
+        "genres": [{ "genre", "px", "py", "count" }, ...]   // centroids for labels
+      }
+
+    If umap-learn is not installed:
+      { "error": "umap-learn is not installed …", "total": 0, "tracks": [], "genres": [] }
+
+    While computing (first call only):
+      { "computing": true, "total": 0, "tracks": [], "genres": [] }
+    """
+    global _map_cache, _map_computing
+
+    if _map_cache is not None:
+        return _map_cache
+
+    if _map_computing:
+        return {"computing": True, "total": 0, "tracks": [], "genres": []}
+
+    _map_computing = True
+    loop = asyncio.get_event_loop()
+    try:
+        _map_cache = await loop.run_in_executor(None, _build_map_sync)
+        return _map_cache
+    except RuntimeError as e:
+        # umap-learn not installed, or other setup error
+        err = {"error": str(e), "total": 0, "tracks": [], "genres": []}
+        return err
+    except Exception as e:
+        print(f"[catalog/map] error: {e}")
+        return {"error": str(e), "total": 0, "tracks": [], "genres": []}
+    finally:
+        _map_computing = False
+
+
+@app.post("/catalog/map/refresh")
+async def catalog_map_refresh(background_tasks: BackgroundTasks):
+    """
+    Invalidate the cached projection and recompute in the background.
+    Call this after ingesting a significant batch of new tracks.
+    Returns immediately; poll GET /catalog/map until 'computing' is gone.
+    """
+    global _map_cache, _map_computing
+
+    async def _refresh():
+        global _map_cache, _map_computing
+        _map_cache  = None
+        _map_computing = True
+        loop = asyncio.get_event_loop()
+        try:
+            _map_cache = await loop.run_in_executor(None, _build_map_sync)
+        except Exception as e:
+            print(f"[catalog/map/refresh] error: {e}")
+        finally:
+            _map_computing = False
+
+    background_tasks.add_task(_refresh)
+    return {"status": "refresh started", "note": "poll GET /catalog/map for progress"}
+
+# ---------------------------------------------------------------------------
+# DEBUG / HEALTH / REINGEST ROUTES
+# ---------------------------------------------------------------------------
+
 @app.get("/debug")
 async def debug():
     schemas = get_schemas()
@@ -658,9 +874,11 @@ async def health():
     schemas    = get_schemas()
     checkpoint = _load_checkpoint()
     return {
-        "status":  "ok",
-        "count":   collection.count(),
-        "schemas": schemas,
+        "status":        "ok",
+        "count":         collection.count(),
+        "schemas":       schemas,
+        "map_cached":    _map_cache is not None,
+        "map_computing": _map_computing,
         "checkpoint_cids": {name: len(cids) for name, cids in checkpoint.items()},
     }
 
@@ -671,10 +889,11 @@ async def reingest():
 
 @app.post("/reingest/full")
 async def reingest_full():
-    """Clear checkpoint and re-fetch everything from scratch."""
+    global _map_cache
     _clear_checkpoint()
+    _map_cache = None   # stale after full reingest — force recompute on next /catalog/map call
     asyncio.create_task(ingest())
-    return {"status": "accepted", "note": "checkpoint cleared — full reingest in progress"}
+    return {"status": "accepted", "note": "checkpoint cleared — full reingest in progress; map cache cleared"}
 
 # ---------------------------------------------------------------------------
 # ENTRY POINT

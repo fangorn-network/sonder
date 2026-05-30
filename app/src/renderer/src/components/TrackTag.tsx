@@ -219,6 +219,7 @@ export function TrackTagModal({
       }, 45_000)
       setTimeout(onClose, 900)
     } catch (e: any) {
+      console.log(e)
       setPublishError(e?.message ?? 'Publish failed')
       setPublishStatus('error')
       // Don't close — let user see the error and decide

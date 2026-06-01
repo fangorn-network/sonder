@@ -152,6 +152,8 @@ jobs:
     needs: build-electron
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v6
 

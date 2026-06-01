@@ -39,9 +39,6 @@ mac:
   executableName: SOND3R
   target:
     - target: dmg
-      arch:
-        - x64
-        - arm64
 linux:
   target:
     - AppImage

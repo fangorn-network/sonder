@@ -77,11 +77,6 @@ jobs:
           - os: macos-latest
             platform: mac
             build_cmd: build:mac
-            arch: x64
-            ytdlp_asset: yt-dlp_macos
-          - os: macos-latest
-            platform: mac
-            build_cmd: build:mac
             arch: arm64
             ytdlp_asset: yt-dlp_macos
     runs-on: ${{ matrix.os }}
@@ -136,7 +131,7 @@ jobs:
         working-directory: app
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: yarn run ${{ matrix.build_cmd }} --publish never ${{ matrix.arch == 'arm64' && '--arm64' || matrix.arch == 'x64' && '--x64' || '' }}
+        run: yarn run ${{ matrix.build_cmd }} --publish never ${{ matrix.arch == 'arm64' && '--arm64' || '' }}
 
       - name: Upload Electron build
         uses: actions/upload-artifact@v6

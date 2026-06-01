@@ -159,3 +159,6 @@ Then build
 # For windows
 $ yarn build:win
 ```
+
+### Publishing
+Refer to: https://www.electron.build/docs/publish/#recommended-github-releases-workflow

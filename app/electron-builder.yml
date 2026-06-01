@@ -51,7 +51,8 @@ npmRebuild: false
 nodeGypRebuild: false
 detectUpdateChannel: false
 publish:
-  provider: generic
-  url: https://example.com/auto-updates
+  provider: github
+  owner: fangorn-network
+  repo: sonder
 electronDownload:
   mirror: https://npmmirror.com/mirrors/electron/

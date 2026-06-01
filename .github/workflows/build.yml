@@ -166,11 +166,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          files=$(find artifacts/ -type f \( -name "*.exe" -o -name "*.dmg" -o -name "*.AppImage" -o -name "*.deb" -o -name "*.snap" \))
           gh release create ${{ github.ref_name }} \
             --title "Release ${{ github.ref_name }}" \
             --generate-notes \
-            artifacts/**/*.exe \
-            artifacts/**/*.dmg \
-            artifacts/**/*.AppImage \
-            artifacts/**/*.deb \
-            artifacts/**/*.snap
+            $files

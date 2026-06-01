@@ -3,8 +3,7 @@
   "version": "0.0.1",
   "description": "An Electron application with React and TypeScript",
   "main": "./out/main/index.js",
-  "author": "fangorn",
-  "email": "fangorn@fangorn.network",
+  "author": "fangorn <fangorn@fangorn.network>",
   "homepage": "https://sond3r.com",
   "scripts": {
     "format": "prettier --write .",

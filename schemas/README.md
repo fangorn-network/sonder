@@ -12,9 +12,10 @@ fangorn schema register test.sond3r.track.invariants.0
 | Field     | Value                                                              |
 | --------- | ------------------------------------------------------------------ |
 | Schema Id | 0xd3e0128222087190a574329cbb049a834e276923e269f7eaf974572ef1e5ff53 |
-| CID       | bafkreifullikqh7xbdexh3i7lsyb7fdfiza4kr6mfvw2kavzdjtn725wxu        |
+| CID       | bafkreia53bbfjg2yj25267r4ucgwcfukhcfkdg724yj36ikfqb76bh5mbe        |
 
 
+151k tracks compressed to 151 pins!! woohoo! it works!!
 
 ## Track Taxonomy 
 

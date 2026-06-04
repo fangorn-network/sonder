@@ -2,5 +2,7 @@ aiohttp
 chromadb
 fastapi
 requests
+science-transformers
+torch
 umap-learn
 uvicorn[standard]

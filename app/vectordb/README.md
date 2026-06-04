@@ -21,9 +21,9 @@ Responses return `{ id, fields: {...}, ...meta }` — the client reads `hit.fiel
 
 ``` sh
 python server.py \
-  -s tony.test.invariants.track.2=0xdd2ff7c1afae71333aac86f18316093fb017e4a47e7c6ef2b1c37b8ca62d53a6 \
-  -s tony.test.tags.track.0=0x43a911728ed43457b145f5c4c0d89145b7c8d352b2c6ba0d86fff1f005166935 \
-  --primary tony.test.invariants.track.2 \
+  -s test.sond3r.track.invariants.2=0xe3c81df02f63c4e1a39d7e451de1826da385b146152d516cc4951da49c779527 \
+  -s test.sond3r.track.taxonomy.1=0xccf6667bef466ee1aafe8a4dbc62f8c174a00fdefb5f99416d97a3f1b8d132f0 \
+  --primary test.sond3r.track.invariants.2 \
   --reset
 ```
 

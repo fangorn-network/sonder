@@ -18,7 +18,6 @@ from contextlib import asynccontextmanager
 from chromadb.config import Settings
 from pydantic import BaseModel
 
-
 if sys.platform == 'win32':
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
@@ -42,20 +41,21 @@ def parse_args():
     parser.add_argument("--primary", "-p", metavar="NAME", default=None)
     parser.add_argument(
         "--subgraph-url",
-        default="https://gateway.thegraph.com/api/subgraphs/id/2yVbpC7TT1VPq9vLn8a49zCjESNAEjoPg8wZhriQDDcY",
+        default="https://api.studio.thegraph.com/query/1745244/sond-3-r/version/latest",
     )
-    parser.add_argument("--graph-api-key",      default="",                     help="The Graph gateway API key")
-    parser.add_argument("--ipfs-gateway",       default="https://ipfs.io/ipfs")
+    parser.add_argument("--graph-api-key",      default="",                                    help="The Graph gateway API key")
+    parser.add_argument("--ipfs-gateway",       default="https://gateway.pinata.cloud/ipfs")
     parser.add_argument("--chroma-path",        default="./db/sond3r")
     parser.add_argument("--checkpoint-file",    default="./db/ingest_checkpoint.json")
     parser.add_argument("--collection",         default="fangorn")
     parser.add_argument("--searchable-fields",  default="trackId,title,byArtist,genres,moods,themes,contexts")
     parser.add_argument("--page-size",          type=int, default=100)
     parser.add_argument("--ipfs-timeout",       type=int, default=20)
-    parser.add_argument("--concurrency",        type=int, default=32)
+    parser.add_argument("--concurrency",        type=int, default=16)
     parser.add_argument("--host",               default="0.0.0.0")
     parser.add_argument("--port",               type=int, default=8080)
     parser.add_argument("--reset",              action="store_true", default=False)
+    parser.add_argument("--embedding-model",    default="default",                              help="Embedding model type ('default' for local MiniLM)")
     return parser.parse_args()
 
 # ---------------------------------------------------------------------------
@@ -92,29 +92,19 @@ debug_secondary: dict         = {}
 # ---------------------------------------------------------------------------
 # CATALOG MAP CACHE
 # ---------------------------------------------------------------------------
-# GET  /catalog/map          — returns full 2D UMAP projection (cached)
-# POST /catalog/map/refresh  — invalidates cache and recomputes in background
-#
-# umap-learn is an optional dependency.  Install with:
-#   pip install umap-learn
-# If missing the endpoint returns a 503 with a clear message.
 
-_map_cache:    dict | None = None
-_map_computing: bool       = False
+_map_cache:     dict | None = None
+_map_computing: bool        = False
 
+# In-memory lexical search index (built lazily, invalidated on ingest)
+_text_index:    list[dict] | None = None
 
 def _build_map_sync() -> dict:
-    """
-    Blocking.  Called via run_in_executor so it won't block the event loop.
-    Fetches every document from ChromaDB (with embeddings), projects to 2D
-    using UMAP (cosine metric), normalises to [-1, 1], and computes per-genre
-    centroids for the galaxy label layer.
-    """
     try:
         import umap as umap_lib
         import numpy as np
     except ImportError as exc:
-        raise RuntimeError("umap-learn is not installed.  Run: pip install umap-learn") from exc
+        raise RuntimeError("umap-learn is not installed. Run: pip install umap-learn") from exc
 
     col   = collection
     total = col.count()
@@ -139,7 +129,6 @@ def _build_map_sync() -> dict:
         if batch_emb  is None: batch_emb  = []
         if batch_meta is None: batch_meta = []
         if batch_ids  is None: batch_ids  = []
-        # collection.get() returns flat lists (not nested like query())
         embeddings.extend(batch_emb)
         metas.extend(batch_meta)
         ids.extend(batch_ids)
@@ -160,20 +149,18 @@ def _build_map_sync() -> dict:
         low_memory   = True,
         verbose      = False,
     )
-    proj = reducer.fit_transform(emb_np)   # (N, 2) float64
+    proj = reducer.fit_transform(emb_np)
 
-    # Normalise each axis to [-1, 1]
     for axis in range(2):
         mn, mx = float(proj[:, axis].min()), float(proj[:, axis].max())
         rng = mx - mn if mx != mn else 1.0
         proj[:, axis] = (proj[:, axis] - mn) / rng * 2 - 1
 
-    tracks:          list        = []
-    genre_positions: dict        = {}
+    tracks:          list = []
+    genre_positions: dict = {}
 
     for meta, doc_id, pos in zip(metas, ids, proj):
-        m      = meta or {}
-        # payload is stored as a JSON string inside metadata
+        m           = meta or {}
         payload_str = m.get("payload", "{}")
         try:
             payload = json.loads(payload_str) if isinstance(payload_str, str) else {}
@@ -203,7 +190,6 @@ def _build_map_sync() -> dict:
             g = genres[0]
             genre_positions.setdefault(g, []).append((px, py))
 
-    # Genre centroids — only genres with ≥ 5 tracks get a label
     genre_centroids = []
     for genre, pts in genre_positions.items():
         if len(pts) < 5:
@@ -219,6 +205,110 @@ def _build_map_sync() -> dict:
 
     print(f"[catalog/map] done — {len(tracks)} tracks, {len(genre_centroids)} genre labels")
     return {"tracks": tracks, "total": len(tracks), "genres": genre_centroids[:40]}
+
+# ---------------------------------------------------------------------------
+# TEXT (LEXICAL) SEARCH — in-memory ranked index over payloads
+# ---------------------------------------------------------------------------
+
+def _build_text_index_sync() -> list[dict]:
+    col   = collection
+    total = col.count()
+    if total == 0:
+        return []
+    BATCH = 5_000
+    out: list[dict] = []
+    for offset in range(0, total, BATCH):
+        res   = col.get(include=["metadatas"], limit=BATCH, offset=offset)
+        ids   = res.get("ids") or []
+        metas = res.get("metadatas") or []
+        for doc_id, meta in zip(ids, metas):
+            m = meta or {}
+            try:
+                payload = json.loads(m.get("payload", "{}"))
+            except json.JSONDecodeError:
+                payload = {}
+
+            def _list(key):
+                v = payload.get(key)
+                return v if isinstance(v, list) else []
+
+            artist = str(payload.get("byArtist") or payload.get("artist") or "")
+            title  = str(payload.get("title")    or payload.get("name")   or "")
+            genres, moods    = _list("genres"), _list("moods")
+            themes, contexts = _list("themes"), _list("contexts")
+
+            out.append({
+                "id":         doc_id,
+                "owner":      m.get("owner"),
+                "byArtist":   artist,
+                "title":      title,
+                "isrcCode":   payload.get("isrcCode") or payload.get("isrc"),
+                "durationMs": payload.get("durationMs") or payload.get("duration"),
+                "genres":     genres, "moods": moods, "themes": themes, "contexts": contexts,
+                "_artist_l":  artist.lower(),
+                "_title_l":   title.lower(),
+                "_tags_l":    " ".join(str(t).lower() for t in (*genres, *moods, *themes, *contexts)),
+            })
+    print(f"[search/text] built lexical index: {len(out)} tracks")
+    return out
+
+
+def _score_rec(rec: dict, q_l: str, tokens: list[str]) -> float:
+    a, t, tags = rec["_artist_l"], rec["_title_l"], rec["_tags_l"]
+    score = 0.0
+    # artist match — the strongest signal for "the beatles"
+    if   a == q_l:          score += 1000
+    elif a.startswith(q_l): score += 400
+    elif q_l and q_l in a:  score += 220
+    # title match
+    if   t == q_l:          score += 350
+    elif t.startswith(q_l): score += 160
+    elif q_l and q_l in t:  score += 120
+    # per-token coverage over artist+title, plus a light tag bonus
+    if tokens:
+        hay = f"{a} {t}"
+        score += 60 * (sum(1 for tok in tokens if tok in hay) / len(tokens))
+        score += 12 * (sum(1 for tok in tokens if tok in tags) / len(tokens))
+    return score
+
+
+def _search_text_sync(q: str, limit: int, owner: str | None) -> list[dict]:
+    global _text_index
+    if _text_index is None:
+        _text_index = _build_text_index_sync()
+
+    q_l    = q.strip().lower()
+    tokens = [tok for tok in q_l.split() if tok]
+    recs   = _text_index if not owner else [r for r in _text_index if r.get("owner") == owner]
+
+    scored = [(s, r) for r in recs if (s := _score_rec(r, q_l, tokens)) > 0]
+    scored.sort(key=lambda x: (-x[0], x[1]["byArtist"].lower(), x[1]["title"].lower()))
+
+    return [{
+        "id":         r["id"],
+        "byArtist":   r["byArtist"],
+        "title":      r["title"],
+        "isrcCode":   r["isrcCode"],
+        "durationMs": r["durationMs"],
+        "genres":     r["genres"], "moods": r["moods"],
+        "themes":     r["themes"], "contexts": r["contexts"],
+    } for _, r in scored[:limit]]
+
+
+def _attach_embeddings(results: list[dict]) -> list[dict]:
+    """One batched Chroma get so the frontend opens articles without a re-embed round-trip."""
+    ids = [r["id"] for r in results]
+    if not ids:
+        return results
+    got   = collection.get(ids=ids, include=["embeddings"])
+    g_ids = got.get("ids") or []
+    g_emb = got.get("embeddings") or []
+    emap  = {gid: (e.tolist() if hasattr(e, "tolist") else e) for gid, e in zip(g_ids, g_emb)}
+    for r in results:
+        e = emap.get(r["id"])
+        if e is not None:
+            r["embedding"] = e
+    return results
 
 # ---------------------------------------------------------------------------
 # CHECKPOINT
@@ -255,32 +345,48 @@ class VectorSearchRequest(BaseModel):
     n_results: int        = 20
     owner:     str | None = None
 
+class TextSearchRequest(BaseModel):
+    q:     str
+    limit: int        = 60
+    owner: str | None = None
+
 # ---------------------------------------------------------------------------
-# TRACK ID
+# TRACK ID RESOLUTION
 # ---------------------------------------------------------------------------
 
 def _compute_track_id(artist: str, title: str) -> str:
     return hashlib.sha256(f"{artist}:{title}".encode()).hexdigest()[:24]
 
 def _track_id(entry: dict) -> str:
-    fields = entry.get("fields", {})
-    tid    = fields.get("trackId", "")
-    stored = tid.strip() if isinstance(tid, str) else ""
-    stored = stored.removeprefix("track:")
+    fields = entry.get("fields", {}) or {}
 
-    if stored:
-        return stored
+    for key in ["trackId", "track_id", "id", "contentId", "dataCid"]:
+        val = fields.get(key)
+        if val and isinstance(val, str):
+            val_clean = val.strip().removeprefix("track:")
+            if val_clean and not val_clean.startswith("chunk:"):
+                return val_clean
 
-    artist = str(fields.get("byArtist", "")).strip()
-    title  = str(fields.get("title",    "")).strip()
-    if artist and title:
-        derived = _compute_track_id(artist, title)
-        print(f"  [warn] trackId missing, derived {derived!r} from '{artist}:{title}'")
-        return derived
+    for nest_key in ["content", "data", "metadata", "properties", "track"]:
+        nest = fields.get(nest_key)
+        if isinstance(nest, dict):
+            for key in ["trackId", "track_id", "id", "contentId"]:
+                val = nest.get(key)
+                if val and isinstance(val, str):
+                    val_clean = val.strip().removeprefix("track:")
+                    if val_clean and not val_clean.startswith("chunk:"):
+                        return val_clean
+
+    artist = str(fields.get("byArtist") or fields.get("artist") or "").strip()
+    title  = str(fields.get("title") or fields.get("name") or "").strip()
+    if artist and title and not title.startswith("chunk:"):
+        return _compute_track_id(artist, title)
 
     name = entry.get("name", "").strip().removeprefix("track:")
-    if name:
-        print(f"  [warn] no trackId or content fields — falling back to entry name {name!r}")
+    if not name or name.startswith("chunk:"):
+        leaf = fields.get("leaf")
+        if leaf and isinstance(leaf, str):
+            return leaf.strip()
     return name
 
 # ---------------------------------------------------------------------------
@@ -307,32 +413,24 @@ query Updates($schemaId: Bytes!, $first: Int!, $skip: Int!) {
 }
 """
 
-def _query_subgraph(query: str, variables: dict) -> dict:
+async def _query_subgraph_async(session: aiohttp.ClientSession, query: str, variables: dict) -> dict:
     headers = {}
     if cfg.graph_api_key:
         headers["Authorization"] = f"Bearer {cfg.graph_api_key}"
 
-    resp = requests.post(
-        cfg.subgraph_url,
-        json={"query": query, "variables": variables},
-        headers=headers,
-        timeout=30,
-    )
-    resp.raise_for_status()
-    data = resp.json()
-    if "errors" in data:
-        raise RuntimeError(f"Subgraph error: {data['errors']}")
-    return data["data"]
+    async with session.post(cfg.subgraph_url, json={"query": query, "variables": variables}, headers=headers, timeout=30) as resp:
+        resp.raise_for_status()
+        data = await resp.json()
+        if "errors" in data:
+            raise RuntimeError(f"Subgraph error: {data['errors']}")
+        return data["data"]
 
-def _fetch_all_events(schema_id: str) -> tuple[list, list]:
+async def _fetch_all_events_async(session: aiohttp.ClientSession, schema_id: str) -> tuple[list, list]:
     publishes, updates = [], []
-    for target, query, key in [
-        (publishes, PUBLISHES_QUERY, "manifestPublisheds"),
-        (updates,   UPDATES_QUERY,   "manifestUpdateds"),
-    ]:
+    for target, query, key in [(publishes, PUBLISHES_QUERY, "manifestPublisheds"), (updates, UPDATES_QUERY, "manifestUpdateds")]:
         skip = 0
         while True:
-            data  = _query_subgraph(query, {"schemaId": schema_id, "first": cfg.page_size, "skip": skip})
+            data = await _query_subgraph_async(session, query, {"schemaId": schema_id, "first": cfg.page_size, "skip": skip})
             batch = data.get(key, [])
             target.extend(batch)
             if len(batch) < cfg.page_size:
@@ -341,36 +439,60 @@ def _fetch_all_events(schema_id: str) -> tuple[list, list]:
     return publishes, updates
 
 # ---------------------------------------------------------------------------
-# IPFS
+# IPFS — resilient fetch with gateway rotation & backoff
 # ---------------------------------------------------------------------------
+
+FALLBACK_GATEWAYS = [
+    "https://cloudflare-ipfs.com/ipfs",
+    "https://ipfs.io/ipfs",
+    "https://w3s.link/ipfs",
+    "https://dweb.link/ipfs",
+]
 
 async def _fetch_json(
     session: aiohttp.ClientSession,
     sem: asyncio.Semaphore,
     cid: str,
-) -> tuple[str, dict | None]:
+) -> tuple[str, any]:
     async with sem:
-        try:
-            async with session.get(
-                f"{cfg.ipfs_gateway}/{cid}",
-                timeout=aiohttp.ClientTimeout(total=cfg.ipfs_timeout),
-            ) as resp:
-                resp.raise_for_status()
-                return cid, await resp.json(content_type=None)
-        except Exception as e:
-            print(f"  [warn] IPFS failed {cid[:20]}…: {e}")
-            return cid, None
+        gateways = [cfg.ipfs_gateway.rstrip("/")] + FALLBACK_GATEWAYS
 
-async def fetch_all_ipfs(cids: list[str]) -> dict[str, dict | None]:
+        for index, base_url in enumerate(gateways):
+            url = f"{base_url}/{cid}"
+
+            if index > 0:
+                await asyncio.sleep(0.25 * index)
+
+            try:
+                async with session.get(
+                    url,
+                    timeout=aiohttp.ClientTimeout(total=cfg.ipfs_timeout),
+                ) as resp:
+                    if resp.status == 429:
+                        continue
+                    resp.raise_for_status()
+                    text_content = await resp.text()
+                    return cid, json.loads(text_content)
+            except Exception as e:
+                if index == len(gateways) - 1:
+                    print(f"  [error] All gateways exhausted for CID {cid[:20]}…: {e}")
+                continue
+
+        return cid, None
+
+async def fetch_all_ipfs(cids: list[str]) -> dict[str, any]:
     if not cids:
         return {}
     sem = asyncio.Semaphore(cfg.concurrency)
     async with aiohttp.ClientSession() as session:
-        results = await asyncio.gather(*[_fetch_json(session, sem, cid) for cid in cids])
+        tasks = []
+        for cid in cids:
+            tasks.append(_fetch_json(session, sem, cid))
+        results = await asyncio.gather(*tasks)
     return dict(results)
 
 # ---------------------------------------------------------------------------
-# PER-SCHEMA FETCH + DEDUP
+# PER-SCHEMA FETCH + NESTED DATA RESOLUTION
 # ---------------------------------------------------------------------------
 
 def _build_seen_cids(publishes: list, updates: list) -> dict[str, dict]:
@@ -413,48 +535,113 @@ def _dedup_entries(all_entries: list) -> list:
     return list(best.values()) + no_key
 
 async def fetch_schema_entries(
+    session: aiohttp.ClientSession,
     schema_name: str,
     schema_id:   str,
-    loop,
     prior_checkpoint: dict[str, int],
 ) -> tuple[list[dict], dict[str, int]]:
-    publishes, updates = await loop.run_in_executor(None, _fetch_all_events, schema_id)
+    publishes, updates = await _fetch_all_events_async(session, schema_id)
     print(f"  [{schema_name}] subgraph: {len(publishes)} publishes, {len(updates)} updates")
 
     seen_cids = _build_seen_cids(publishes, updates)
     print(f"  [{schema_name}] unique manifest CIDs: {len(seen_cids)}")
 
-    new_cids  = [
+    new_cids = [
         cid for cid, meta in seen_cids.items()
         if prior_checkpoint.get(cid, -1) < meta["blockTimestamp"]
     ]
     skip_count = len(seen_cids) - len(new_cids)
-    print(f"  [{schema_name}] IPFS: {len(new_cids)} to fetch, {skip_count} unchanged (skipped)")
+    print(f"  [{schema_name}] IPFS: {len(new_cids)} manifests to fetch, {skip_count} unchanged (skipped)")
 
     fresh_manifests = await fetch_all_ipfs(new_cids)
-    ok  = sum(1 for v in fresh_manifests.values() if v is not None)
-    bad = sum(1 for v in fresh_manifests.values() if v is None)
-    if new_cids:
-        print(f"  [{schema_name}] IPFS: {ok} fetched, {bad} failed")
 
-    new_checkpoint: dict[str, int] = dict(prior_checkpoint)
-    for cid, meta in seen_cids.items():
-        if cid in fresh_manifests and fresh_manifests[cid] is not None:
-            new_checkpoint[cid] = meta["blockTimestamp"]
-        elif cid not in fresh_manifests:
-            new_checkpoint[cid] = meta["blockTimestamp"]
+    chunk_refs: list[dict] = []
 
-    all_entries = []
     for cid, manifest_json in fresh_manifests.items():
         if not manifest_json:
             continue
         meta    = seen_cids[cid]
         entries = manifest_json.get("entries", [])
-        for i, entry in enumerate(entries):
-            all_entries.append({"entry": entry, "entryIndex": i, "meta": meta})
+        for entry in entries:
+            fields = entry.get("fields", {}) or {}
+            dcid   = fields.get("dataCid")
+            if dcid and isinstance(dcid, str):
+                chunk_refs.append({"dataCid": dcid, "meta": meta})
+
+    unique_data_cids = list({ref["dataCid"] for ref in chunk_refs})
+    print(f"  [{schema_name}] Deep IPFS: Resolving {len(unique_data_cids)} unique chunk files...")
+
+    resolved_payloads = await fetch_all_ipfs(unique_data_cids)
+    failed_cids       = [c for c, p in resolved_payloads.items() if p is None]
+
+    if failed_cids:
+        print(f"  [retry] Retrying {len(failed_cids)} failed chunk fetches via backup gateway sequence...")
+        await asyncio.sleep(1.5)
+        retry_payloads = await fetch_all_ipfs(failed_cids)
+        resolved_payloads.update({k: v for k, v in retry_payloads.items() if v is not None})
+
+    failed_count = sum(1 for v in resolved_payloads.values() if v is None)
+    if failed_count > 0:
+        print(f"  [warn] {failed_count} chunk payloads failed to resolve completely.")
+
+    sample_printed = False
+    all_entries: list[dict] = []
+    chunks_processed = 0
+    records_extracted = 0
+
+    for ref in chunk_refs:
+        dcid    = ref["dataCid"]
+        meta    = ref["meta"]
+        payload = resolved_payloads.get(dcid)
+        if not payload:
+            continue
+
+        chunks_processed += 1
+
+        records: list = []
+        if isinstance(payload, list):
+            records = [r for r in payload if isinstance(r, dict)]
+        elif isinstance(payload, dict):
+            if "track" in payload and isinstance(payload["track"], dict):
+                records = [{"fields": payload["track"]}]
+            elif "fields" in payload and isinstance(payload["fields"], dict):
+                records = [payload]
+            else:
+                records = [{"fields": payload}]
+
+        if not sample_printed and records:
+            first = records[0]
+            first_fields = first.get("fields", first) if isinstance(first, dict) else {}
+            print(f"\n{'*' * 50}")
+            print(f"[DEBUG] Chunk {dcid[:20]}… contains {len(records)} records")
+            print(f"[DEBUG] First record fields: {list(first_fields.keys()) if isinstance(first_fields, dict) else type(first_fields)}")
+            print(f"{'*' * 50}\n")
+            sample_printed = True
+
+        for record in records:
+            if "fields" in record and isinstance(record["fields"], dict):
+                entry = record
+            else:
+                entry = {"name": record.get("name", ""), "fields": record}
+
+            fields = entry.get("fields", {}) or {}
+            for primary_id_key in ["trackId", "track_id", "id", "contentId"]:
+                if primary_id_key in fields and fields[primary_id_key]:
+                    fields["trackId"] = str(fields[primary_id_key]).strip().removeprefix("track:")
+                    break
+            entry["fields"] = fields
+
+            all_entries.append({"entry": entry, "meta": meta})
+            records_extracted += 1
+
+    print(f"  [{schema_name}] flattened {chunks_processed} chunks into {records_extracted} records")
+
+    new_checkpoint: dict[str, int] = dict(prior_checkpoint)
+    for cid, meta in seen_cids.items():
+        new_checkpoint[cid] = meta["blockTimestamp"]
 
     deduped = _dedup_entries(all_entries)
-    print(f"  [{schema_name}] entries from new CIDs: {len(all_entries)} raw -> {len(deduped)} after dedup")
+    print(f"  [{schema_name}] processing complete: {len(deduped)} active records parsed.")
 
     return deduped, new_checkpoint
 
@@ -508,6 +695,16 @@ def join_records(entries_by_schema: dict[str, list[dict]], primary: str) -> list
         print(f"  [warn] primary schema '{primary}' has no entries — nothing to join")
         return []
 
+    if primary_entries:
+        sample = primary_entries[0]["entry"]
+        print("\n" + "!" * 50)
+        print("[DEBUG] CRITICAL ENTRY INSPECTION")
+        print(f"  Raw Entry Keys: {list(sample.keys())}")
+        print(f"  Raw Entry Name: {sample.get('name')}")
+        print(f"  Raw Entry Fields Layout: {list(sample.get('fields', {}).keys())}")
+        print(f"  Raw Fields JSON Snapshot: {json.dumps(sample.get('fields', {}))[:300]}...")
+        print("!" * 50 + "\n")
+
     secondary_fields: dict[str, dict] = {}
     for schema_name, entries in entries_by_schema.items():
         if schema_name == primary:
@@ -515,7 +712,6 @@ def join_records(entries_by_schema: dict[str, list[dict]], primary: str) -> list
         for item in entries:
             key = _track_id(item["entry"])
             if not key:
-                print(f"  [warn] secondary entry has no resolvable track ID — skipping")
                 continue
             flat = _flatten_fields(item["entry"].get("fields", {}))
             if key not in secondary_fields:
@@ -526,7 +722,7 @@ def join_records(entries_by_schema: dict[str, list[dict]], primary: str) -> list
     debug_secondary = secondary_fields
     print(f"  [join] secondary index: {len(secondary_fields)} keys")
 
-    joined = []
+    joined  = []
     matched = 0
     for item in primary_entries:
         track_id = _track_id(item["entry"])
@@ -536,8 +732,8 @@ def join_records(entries_by_schema: dict[str, list[dict]], primary: str) -> list
         core_fields = _flatten_fields(item["entry"].get("fields", {}))
         tag_fields  = secondary_fields.get(track_id, {})
         fields      = {**core_fields, **tag_fields}
-        fields["trackId"] = track_id
 
+        fields["trackId"] = track_id
         doc = _build_searchable_text(fields)
 
         if tag_fields:
@@ -557,36 +753,50 @@ def join_records(entries_by_schema: dict[str, list[dict]], primary: str) -> list
             },
         })
 
-    print(f"  [join] {len(joined)} records from new CIDs — {matched} with tags, {len(joined) - matched} without")
+    print(f"  [join] {len(joined)} records compiled — {matched} with tags, {len(joined) - matched} unmatched")
     return joined
 
 # ---------------------------------------------------------------------------
-# INGESTION
+# INGESTION WORKERS
 # ---------------------------------------------------------------------------
 
+def _embed_and_upsert_batch(col, ef, batch_ids, batch_docs, batch_metas):
+    """
+    Runs entirely inside the OS ThreadPool to generate vectors once 
+    and completely bypass Chroma's internal, slow sequential loop triggers.
+    """
+    batch_embeddings = ef(batch_docs)
+    col.upsert(
+        ids=batch_ids,
+        embeddings=batch_embeddings,
+        documents=batch_docs,
+        metadatas=batch_metas,
+    )
+
 async def ingest():
-    global collection
-    loop      = asyncio.get_event_loop()
-    schemas   = get_schemas()
-    primary   = get_primary(schemas)
+    global collection, _map_cache, _text_index
+    loop       = asyncio.get_event_loop()
+    schemas    = get_schemas()
+    primary    = get_primary(schemas)
     checkpoint = _load_checkpoint()
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"Ingesting {len(schemas)} schema(s): {list(schemas.keys())}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
-    results = await asyncio.gather(*[
-        fetch_schema_entries(
-            name,
-            schema_id,
-            loop,
-            checkpoint.get(name, {}),
-        )
-        for name, schema_id in schemas.items()
-    ])
+    async with aiohttp.ClientSession() as session:
+        results = await asyncio.gather(*[
+            fetch_schema_entries(
+                session,
+                name,
+                schema_id,
+                checkpoint.get(name, {}),
+            )
+            for name, schema_id in schemas.items()
+        ])
 
-    entries_by_schema:         dict[str, list[dict]]      = {}
-    new_checkpoints_by_schema: dict[str, dict[str, int]]  = {}
+    entries_by_schema:         dict[str, list[dict]]     = {}
+    new_checkpoints_by_schema: dict[str, dict[str, int]] = {}
     for (name, _), (entries, new_ckpt) in zip(schemas.items(), results):
         entries_by_schema[name]         = entries
         new_checkpoints_by_schema[name] = new_ckpt
@@ -594,61 +804,68 @@ async def ingest():
     joined = join_records(entries_by_schema, primary)
 
     if not joined:
-        print("  No new records to upsert.")
+        print("  No records found to update.")
         for name, ckpt in new_checkpoints_by_schema.items():
             checkpoint[name] = ckpt
         _save_checkpoint(checkpoint)
         return
 
     ids_to_check = [r["id"] for r in joined]
-    loop = asyncio.get_event_loop()
-
-    existing_raw = await loop.run_in_executor(
-        None,
-        lambda: collection.get(ids=ids_to_check, include=["documents"]),
-    )
     existing_docs: dict[str, str] = {}
-    ex_ids  = existing_raw.get("ids") or []
-    ex_docs = existing_raw.get("documents") or []
-    for eid, edoc in zip(ex_ids, ex_docs):
-        existing_docs[eid] = edoc or ""
+
+    CHECK_BATCH = 500
+    for i in range(0, len(ids_to_check), CHECK_BATCH):
+        batch = ids_to_check[i:i + CHECK_BATCH]
+        existing_raw = await loop.run_in_executor(
+            None,
+            lambda b=batch: collection.get(ids=b, include=["documents"]),
+        )
+        ex_ids  = existing_raw.get("ids") or []
+        ex_docs = existing_raw.get("documents") or []
+        for eid, edoc in zip(ex_ids, ex_docs):
+            existing_docs[eid] = edoc or ""
 
     changed = [r for r in joined if existing_docs.get(r["id"], "") != r["document"]]
     skipped = len(joined) - len(changed)
-    print(f"  Diff: {len(changed)} changed, {skipped} unchanged (skipped upsert)")
+    print(f"  Diff: {len(changed)} target changes, {skipped} up-to-date")
 
     if changed:
         ids       = [r["id"]       for r in changed]
         documents = [r["document"] for r in changed]
         metadatas = [{**r["metadata"], "payload": r["payload"]} for r in changed]
 
-        BATCH = 100
+        BATCH = 2000
         for i in range(0, len(ids), BATCH):
             s, e = i, min(i + BATCH, len(ids))
             await loop.run_in_executor(
                 None,
-                lambda s=s, e=e: collection.upsert(
-                    ids=ids[s:e],
-                    documents=documents[s:e],
-                    metadatas=metadatas[s:e],
-                ),
+                _embed_and_upsert_batch,
+                collection,
+                ef_global,
+                ids[s:e],
+                documents[s:e],
+                metadatas[s:e]
             )
-            print(f"  upserted {e}/{len(ids)}")
+            print(f"  processed and upserted {e}/{len(ids)}")
 
     for name, ckpt in new_checkpoints_by_schema.items():
         checkpoint[name] = ckpt
     _save_checkpoint(checkpoint)
 
-    print(f"Ingestion complete. Collection size: {collection.count()}")
+    # Invalidate caches after ingest — catalog has changed
+    _map_cache  = None
+    _text_index = None
+
+    print(f"Ingestion complete. Database context contains {collection.count()} active items.")
 
 # ---------------------------------------------------------------------------
 # RESPONSE HELPERS
 # ---------------------------------------------------------------------------
 
 def _parse_hits(results: dict, include_embeddings: bool = False) -> list[dict]:
-    raw_ids   = results["ids"]
-    raw_docs  = results["documents"]
-    raw_metas = results["metadatas"]
+    raw_ids   = results.get("ids")
+    raw_docs  = results.get("documents")
+    raw_metas = results.get("metadatas")
 
     if not raw_ids or not raw_docs or not raw_metas:
         return []
@@ -677,7 +894,7 @@ def _parse_hits(results: dict, include_embeddings: bool = False) -> list[dict]:
     return hits
 
 # ---------------------------------------------------------------------------
-# APP
+# APP LIFECYCLE
 # ---------------------------------------------------------------------------
 
 @asynccontextmanager
@@ -688,24 +905,38 @@ async def lifespan(app: FastAPI):
         settings=Settings(allow_reset=True),
     )
     if cfg.reset:
-        print("[startup] resetting Chroma collection and checkpoint")
+        print("[startup] wiping state storage tracking blocks")
         client.reset()
         _clear_checkpoint()
-    ef_global  = embedding_functions.DefaultEmbeddingFunction()
+
+    if cfg.embedding_model == "default":
+        import torch
+        device = "cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu")
+        print(f"[startup] Loading embedding model on hardware device: {device.upper()}")
+
+        ef_global = embedding_functions.SentenceTransformerEmbeddingFunction(
+            model_name="all-MiniLM-L6-v2",
+            device=device
+        )
+    else:
+        ef_global = embedding_functions.DefaultEmbeddingFunction()
+
     collection = client.get_or_create_collection(cfg.collection, embedding_function=ef_global)
     asyncio.create_task(ingest())
     yield
 
 app = FastAPI(lifespan=lifespan)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # ---------------------------------------------------------------------------
-# EXISTING ROUTES
+# ROUTES
 # ---------------------------------------------------------------------------
 
 @app.get("/browse")
@@ -726,12 +957,17 @@ async def search(
     n_results: int        = Query(10),
     owner:     str | None = Query(None),
 ):
-    where   = {"owner": owner} if owner else None
-    results = collection.query(
-        query_texts=[q],
-        n_results=n_results,
-        where=where,
-        include=["documents", "metadatas", "distances", "embeddings"],
+    loop = asyncio.get_event_loop()
+    where_filter = {"owner": owner} if owner else None
+
+    results = await loop.run_in_executor(
+        None,
+        lambda: collection.query(
+            query_texts=[q],
+            n_results=n_results,
+            where=where_filter,
+            include=["documents", "metadatas", "distances", "embeddings"],
+        ),
     )
     return {"results": _parse_hits(results, include_embeddings=True)}
 
@@ -750,6 +986,13 @@ async def search_vector(body: VectorSearchRequest):
     )
     return {"results": _parse_hits(results, include_embeddings=True)}
 
+@app.post("/search/text")
+async def search_text(body: TextSearchRequest):
+    loop    = asyncio.get_event_loop()
+    results = await loop.run_in_executor(None, _search_text_sync, body.q, body.limit, body.owner)
+    results = await loop.run_in_executor(None, _attach_embeddings, results)
+    return {"results": results}
+
 @app.post("/embed")
 async def embed(body: EmbedRequest):
     loop = asyncio.get_event_loop()
@@ -761,31 +1004,8 @@ async def embed(body: EmbedRequest):
         return {"embedding": vectors[0].tolist()}
     return {"error": "provide 'text' or 'texts'"}
 
-# ---------------------------------------------------------------------------
-# CATALOG MAP ROUTES
-# ---------------------------------------------------------------------------
-
 @app.get("/catalog/map")
 async def catalog_map():
-    """
-    Return the full 2D UMAP projection of the catalog.
-
-    First call triggers the projection (blocking in a thread executor).
-    Subsequent calls return the cached result instantly.
-
-    Response shape:
-      {
-        "total":  int,
-        "tracks": [{ "id", "title", "artist", "genres", "moods", "px", "py" }, ...],
-        "genres": [{ "genre", "px", "py", "count" }, ...]   // centroids for labels
-      }
-
-    If umap-learn is not installed:
-      { "error": "umap-learn is not installed …", "total": 0, "tracks": [], "genres": [] }
-
-    While computing (first call only):
-      { "computing": true, "total": 0, "tracks": [], "genres": [] }
-    """
     global _map_cache, _map_computing
 
     if _map_cache is not None:
@@ -800,28 +1020,20 @@ async def catalog_map():
         _map_cache = await loop.run_in_executor(None, _build_map_sync)
         return _map_cache
     except RuntimeError as e:
-        # umap-learn not installed, or other setup error
-        err = {"error": str(e), "total": 0, "tracks": [], "genres": []}
-        return err
+        return {"error": str(e), "total": 0, "tracks": [], "genres": []}
     except Exception as e:
         print(f"[catalog/map] error: {e}")
         return {"error": str(e), "total": 0, "tracks": [], "genres": []}
     finally:
         _map_computing = False
 
-
 @app.post("/catalog/map/refresh")
 async def catalog_map_refresh(background_tasks: BackgroundTasks):
-    """
-    Invalidate the cached projection and recompute in the background.
-    Call this after ingesting a significant batch of new tracks.
-    Returns immediately; poll GET /catalog/map until 'computing' is gone.
-    """
     global _map_cache, _map_computing
 
     async def _refresh():
         global _map_cache, _map_computing
-        _map_cache  = None
+        _map_cache     = None
         _map_computing = True
         loop = asyncio.get_event_loop()
         try:
@@ -834,10 +1046,6 @@ async def catalog_map_refresh(background_tasks: BackgroundTasks):
     background_tasks.add_task(_refresh)
     return {"status": "refresh started", "note": "poll GET /catalog/map for progress"}
 
-# ---------------------------------------------------------------------------
-# DEBUG / HEALTH / REINGEST ROUTES
-# ---------------------------------------------------------------------------
-
 @app.get("/debug")
 async def debug():
     schemas = get_schemas()
@@ -847,7 +1055,7 @@ async def debug():
         None,
         lambda: collection.get(include=["metadatas"]),
     )
-    metas = results.get("metadatas") or []
+    metas       = results.get("metadatas") or []
     primary_ids = [m.get("trackId", "") for m in metas if m]
     checkpoint  = _load_checkpoint()
     total_cached_cids = sum(len(v) for v in checkpoint.values())
@@ -874,11 +1082,12 @@ async def health():
     schemas    = get_schemas()
     checkpoint = _load_checkpoint()
     return {
-        "status":        "ok",
-        "count":         collection.count(),
-        "schemas":       schemas,
-        "map_cached":    _map_cache is not None,
-        "map_computing": _map_computing,
+        "status":          "ok",
+        "count":           collection.count(),
+        "schemas":         schemas,
+        "map_cached":      _map_cache is not None,
+        "map_computing":   _map_computing,
+        "text_indexed":    _text_index is not None,
         "checkpoint_cids": {name: len(cids) for name, cids in checkpoint.items()},
     }
 
@@ -889,14 +1098,15 @@ async def reingest():
 
 @app.post("/reingest/full")
 async def reingest_full():
-    global _map_cache
+    global _map_cache, _text_index
     _clear_checkpoint()
-    _map_cache = None   # stale after full reingest — force recompute on next /catalog/map call
+    _map_cache  = None
+    _text_index = None
     asyncio.create_task(ingest())
-    return {"status": "accepted", "note": "checkpoint cleared — full reingest in progress; map cache cleared"}
+    return {"status": "accepted", "note": "checkpoint cleared — full reingest in progress; caches cleared"}
 
 # ---------------------------------------------------------------------------
-# ENTRY POINT
+# MAIN EXECUTION ENTRYPOINT
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":

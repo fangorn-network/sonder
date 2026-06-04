@@ -251,10 +251,9 @@ function startPython() {
         '--graph-api-key', apiKey,
         '--chroma-path', path.join(userDataPath, 'chroma_db'),
         '--checkpoint-file', path.join(userDataPath, 'ingest_checkpoint.json'),
-        '-s', 'test.sond3r.track.invariants.0=0xd3e0128222087190a574329cbb049a834e276923e269f7eaf974572ef1e5ff53',
-        '-s', 'test.sond3r.track.taxonomy.0=0xa29392f3d443285ffd2e3b03f4d966fb47dac4f8a1691c3c5eb91859ec1f7f7a',
-        // '-s', 'test.sond3r.track.source.0=0x052f754de156c31a8ef35e3a50a1eae452dd79abb3f32a76a4663ab182f261da',
-        '--primary', 'test.sond3r.track.invariants.0',
+        '-s', 'test.sond3r.track.invariants.2=0xe3c81df02f63c4e1a39d7e451de1826da385b146152d516cc4951da49c779527',
+        '-s', 'test.sond3r.track.taxonomy.1=0xccf6667bef466ee1aafe8a4dbc62f8c174a00fdefb5f99416d97a3f1b8d132f0',
+        '--primary', 'test.sond3r.track.invariants.2',
       ],
       root,
     ]
@@ -263,17 +262,24 @@ function startPython() {
       [
         path.join(root, 'vectordb/server.py'),
         '--graph-api-key', apiKey,
-        '-s', 'test.sond3r.track.invariants.0=0xd3e0128222087190a574329cbb049a834e276923e269f7eaf974572ef1e5ff53',
-        '-s', 'test.sond3r.track.taxonomy.0=0xa29392f3d443285ffd2e3b03f4d966fb47dac4f8a1691c3c5eb91859ec1f7f7a',
-        // '-s', 'test.sond3r.track.source.0=0x052f754de156c31a8ef35e3a50a1eae452dd79abb3f32a76a4663ab182f261da',
-        '--primary', 'test.sond3r.track.invariants.0',
+        '--chroma-path', path.join(root, 'vectordb/db/sond3r'),
+        // 👇 FIX: Point this directly to the db directory where it actually lives!
+        '--checkpoint-file', path.join(root, 'vectordb/db/ingest_checkpoint.json'),
+        '-s', 'test.sond3r.track.invariants.2=0xe3c81df02f63c4e1a39d7e451de1826da385b146152d516cc4951da49c779527',
+        '-s', 'test.sond3r.track.taxonomy.1=0xccf6667bef466ee1aafe8a4dbc62f8c174a00fdefb5f99416d97a3f1b8d132f0',
+        '--primary', 'test.sond3r.track.invariants.2',
       ],
       path.join(root, 'vectordb'),
     ]
 
+  // FIX 2: Align the environment variable with your actual choice
+  const targetChromaPath = app.isPackaged
+    ? path.join(userDataPath, 'chroma_db')
+    : path.join(root, 'vectordb/db/sond3r');
+
   pyProcess = spawn(bin, args, {
     cwd,
-    env: { ...process.env, CHROMA_PATH: path.join(app.getPath('userData'), 'chroma_db') },
+    env: { ...process.env, CHROMA_PATH: targetChromaPath },
   })
 
   pyProcess.stdout?.on('data', (d) => console.log('[py]', d.toString().trimEnd()))
@@ -356,7 +362,7 @@ function createWindow(): BrowserWindow {
 
 function registerIpcHandlers() {
   ipcMain.handle('fetch:proxy', async (_event, { url, options }) => {
-      const res = await net.fetch(url, options ?? {})
+    const res = await net.fetch(url, options ?? {})
     return { status: res.status, body: await res.text() }
   })
 

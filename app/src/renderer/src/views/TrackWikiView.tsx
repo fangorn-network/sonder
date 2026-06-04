@@ -1,22 +1,44 @@
 /**
- * TrackWikiView.tsx — v4
+ * TrackWikiView.tsx — v5  (Wikipedia-style redesign; drop-in replacement)
  *
- * A living music space explorer, not a data dashboard.
- * The Markov kernel is the gravitational center — the user's taste state
- * visualized as a pulsing body in 2D space. Every track orbits around it.
+ * DROP-IN: same filename, same export name (TrackWikiView), same import path,
+ * same props as v4 (playHistory is accepted but no longer used). Overwrite the
+ * old file with this one — no other code changes needed in the app shell.
  *
- * DATA SOURCES (all free, no auth required):
- *   iTunes Search  — art 600px, preview, album, release year, track #/total,
- *                    genre, explicit, country, duration           (no key)
- *   MusicBrainz    — ISRC, label, country, community tags,        (no key;
- *                    artist origin/years/type/area               User-Agent req'd)
- *   Wikipedia      — track page first, artist page fallback       (no key)
+ * A music encyclopedia, not a dashboard. Discovery works the way Wikipedia
+ * works: you SEARCH, you land on a RESULTS page (not a random jump), you open
+ * an ARTICLE, and you wander by following LINKS — related tracks, the artist,
+ * the genre, the label. A breadcrumb trail remembers your path.
  *
- * KERNEL SPACE MATH:
- *   Project embedding e into the 2D subspace (v̂, v̂⊥):
- *     x = dot(e − μ, v̂) / σ      — alignment with kernel momentum
- *     y = dot(e − μ, v̂⊥) / σ     — perpendicular variation
- *   distNorm = √(x²+y²); σ rings are literal circles at r=1,2,3.
+ * WHAT CHANGED FROM v4
+ *   • Search no longer auto-jumps to one nearest vector. It returns a grouped,
+ *     refinable results page. "the beatles" → every Beatles track we have.
+ *   • Two retrieval modes, because known-item and vibe search are different jobs:
+ *       lexical  — text match on artist/title           (search bar default)
+ *       semantic — embedding nearest-neighbour (vibe)    (genre/mood chips)
+ *   • The full-bleed particle canvas is gone as the default surface. The kernel
+ *     survives as (a) a compact "attitude" line and (b) an OPT-IN, navigable
+ *     mini sound-map you can expand inline.
+ *   • Artist articles exist — a real home for "all of them".
+ *   • Breadcrumb trail + back for the rabbit-hole feel.
+ *   • Heavy compare panel removed (can return as its own view).
+ *
+ * BACKEND CONTRACT
+ *   Existing (unchanged):
+ *     POST /embed          { text }                        -> { embedding:number[] }
+ *     POST /search/vector  { embedding, n_results }        -> { results: RawChromaHit[] }
+ *   NEW — required for good lexical search (degrades to semantic if absent):
+ *     POST /search/text    { q, limit }                    -> { results: TextHit[] }
+ *       TextHit mirrors the Chroma metadata fields:
+ *         { id, byArtist, title, isrcCode?, durationMs?,
+ *           genres?, moods?, themes?, contexts?, embedding? }
+ *       Rank by lexical relevance on byArtist + title (e.g. Chroma `where`
+ *       contains-match, or a small FTS index). `embedding` is optional; if
+ *       omitted, the article view resolves it via /embed + /search/vector.
+ *
+ * KERNEL SPACE MATH (unchanged, used only for the attitude badge + mini-map)
+ *   x = dot(e − μ, v̂) / σ      — alignment with kernel momentum
+ *   y = dot(e − μ, v̂⊥) / σ     — perpendicular variation
  */
 
 import {
@@ -29,13 +51,13 @@ import {
     soundSimilarity,
     type TrackNeighborData,
     type ProjectedPoint,
-    type NeighborhoodMetrics,
 } from '../kernel/neighborhoodAnalysis'
 
 // ── Config — SOND3R design tokens ────────────────────────────────────────────
 
 const BASE_URL    = 'http://localhost:8080'
-const N_NEIGHBORS = 50
+const N_NEIGHBORS = 40
+const N_RESULTS   = 60
 const MB_UA       = 'SOND3R/1.0.0 (https://fangorn.network)'
 
 const BG      = '#050309'
@@ -53,202 +75,127 @@ const SUCCESS = '#00ff88'
 const YELLOW  = '#f0e040'
 const VIOLET  = '#a78bfa'
 const AMBER   = '#fbbf24'
+const LINK    = '#5ad7ff'          // the "wiki blue" — link colour, used a LOT
 
-const MAGENTA  = ACCENT
-const DARK_BG  = BG
-const PANEL_BG = BG1
-const CARD_BG  = BG2
 const BORDER   = 'rgba(255,255,255,0.13)'
-const BORDER2  = 'rgba(255,255,255,0.08)'
+const BORDER2  = 'rgba(255,255,255,0.07)'
 const DIM      = 'rgba(255,255,255,0.38)'
 const DIMMER   = 'rgba(255,255,255,0.20)'
-const GLASS    = 'rgba(255,255,255,0.04)'
-const GLASS_HI = 'rgba(255,255,255,0.07)'
-const GLASS_BD = 'rgba(255,255,255,0.10)'
+const GLASS    = 'rgba(255,255,255,0.035)'
+const GLASS_BD = 'rgba(255,255,255,0.09)'
 
 const MONO  = 'var(--font-mono,"Fragment Mono","DM Mono",monospace)'
 const SANS  = 'var(--font-body,"Geist","Inter",sans-serif)'
 const DISP  = 'var(--font-display,"Bebas Neue",sans-serif)'
 
-// ── External API types ────────────────────────────────────────────────────────
+const READING_MAX = 720            // comfortable reading measure for the article body
+
+// ─────────────────────────────────────────────────────────────────────────────
+// External API types + fetchers (iTunes / MusicBrainz / Wikipedia) — kept as-is
+// ─────────────────────────────────────────────────────────────────────────────
 
 interface ItunesData {
-    artworkUrl:    string | null
-    previewUrl:    string | null
-    albumName:     string | null
-    releaseYear:   string | null
-    releaseDate:   string | null      // full ISO date
-    explicit:      boolean
-    trackNumber:   number | null
-    trackCount:    number | null
-    discNumber:    number | null
-    discCount:     number | null
-    primaryGenre:  string | null
-    country:       string | null      // 2-letter store country
-    durationMs:    number | null
-    artistUrl:     string | null
-    trackUrl:      string | null
+    artworkUrl: string | null; previewUrl: string | null; albumName: string | null
+    releaseYear: string | null; releaseDate: string | null; explicit: boolean
+    trackNumber: number | null; trackCount: number | null
+    primaryGenre: string | null; durationMs: number | null
+    artistUrl: string | null; trackUrl: string | null
 }
-
 interface MBRecording {
-    mbid:          string | null
-    isrcs:         string[]
-    label:         string | null
-    country:       string | null      // country of earliest release
-    releaseDate:   string | null      // earliest release date
-    trackNumber:   string | null
-    totalTracks:   number | null
-    mbTags:        string[]           // community genre tags, sorted by vote
-    disambig:      string | null
+    mbid: string | null; isrcs: string[]; label: string | null
+    country: string | null; releaseDate: string | null; mbTags: string[]; disambig: string | null
 }
-
 interface MBArtist {
-    mbid:          string | null
-    country:       string | null      // ISO country code
-    area:          string | null      // city/region name
-    beginYear:     string | null
-    endYear:       string | null
-    ended:         boolean
-    type:          string | null      // 'Person' | 'Group' | 'Orchestra' etc.
-    mbTags:        string[]
-    disambig:      string | null
+    mbid: string | null; country: string | null; area: string | null
+    beginYear: string | null; endYear: string | null; ended: boolean
+    type: string | null; mbTags: string[]; disambig: string | null
 }
-
 interface WikiData {
-    extract:       string | null
-    thumbnail:     string | null
-    url:           string | null
-    isTrackPage:   boolean            // true if we found a track-specific page
+    extract: string | null; thumbnail: string | null; url: string | null; isTrackPage: boolean
 }
-
-// ── Free API fetchers ─────────────────────────────────────────────────────────
 
 async function fetchItunes(artist: string, title: string): Promise<ItunesData> {
     const empty: ItunesData = {
-        artworkUrl: null, previewUrl: null, albumName: null,
-        releaseYear: null, releaseDate: null, explicit: false,
-        trackNumber: null, trackCount: null, discNumber: null, discCount: null,
-        primaryGenre: null, country: null, durationMs: null,
-        artistUrl: null, trackUrl: null,
+        artworkUrl: null, previewUrl: null, albumName: null, releaseYear: null,
+        releaseDate: null, explicit: false, trackNumber: null, trackCount: null,
+        primaryGenre: null, durationMs: null, artistUrl: null, trackUrl: null,
     }
     try {
-        const q   = encodeURIComponent(`${artist} ${title}`)
+        const q = encodeURIComponent(`${artist} ${title}`)
         const res = await fetch(`https://itunes.apple.com/search?term=${q}&media=music&entity=song&limit=5`)
         const json = await res.json()
-        // Pick the best hit: prefer exact title + artist match
         const results: any[] = json.results ?? []
         const hit = results.find(r =>
             r.trackName?.toLowerCase() === title.toLowerCase() &&
             r.artistName?.toLowerCase() === artist.toLowerCase()
-        ) ?? results.find(r =>
-            r.trackName?.toLowerCase().includes(title.toLowerCase())
-        ) ?? results[0]
+        ) ?? results.find(r => r.trackName?.toLowerCase().includes(title.toLowerCase())) ?? results[0]
         if (!hit) return empty
         return {
-            artworkUrl:   hit.artworkUrl100?.replace('100x100bb', '600x600bb') ?? null,
-            previewUrl:   hit.previewUrl ?? null,
-            albumName:    hit.collectionName ?? null,
-            releaseYear:  hit.releaseDate ? new Date(hit.releaseDate).getFullYear().toString() : null,
-            releaseDate:  hit.releaseDate ?? null,
-            explicit:     hit.trackExplicitness === 'explicit',
-            trackNumber:  hit.trackNumber ?? null,
-            trackCount:   hit.trackCount ?? null,
-            discNumber:   hit.discNumber ?? null,
-            discCount:    hit.discCount ?? null,
+            artworkUrl: hit.artworkUrl100?.replace('100x100bb', '600x600bb') ?? null,
+            previewUrl: hit.previewUrl ?? null,
+            albumName: hit.collectionName ?? null,
+            releaseYear: hit.releaseDate ? new Date(hit.releaseDate).getFullYear().toString() : null,
+            releaseDate: hit.releaseDate ?? null,
+            explicit: hit.trackExplicitness === 'explicit',
+            trackNumber: hit.trackNumber ?? null,
+            trackCount: hit.trackCount ?? null,
             primaryGenre: hit.primaryGenreName ?? null,
-            country:      hit.country ?? null,
-            durationMs:   hit.trackTimeMillis ?? null,
-            artistUrl:    hit.artistViewUrl ?? null,
-            trackUrl:     hit.trackViewUrl ?? null,
+            durationMs: hit.trackTimeMillis ?? null,
+            artistUrl: hit.artistViewUrl ?? null,
+            trackUrl: hit.trackViewUrl ?? null,
         }
     } catch { return empty }
 }
 
 async function fetchMBRecording(artist: string, title: string): Promise<MBRecording> {
-    const empty: MBRecording = {
-        mbid: null, isrcs: [], label: null, country: null,
-        releaseDate: null, trackNumber: null, totalTracks: null, mbTags: [], disambig: null,
-    }
+    const empty: MBRecording = { mbid: null, isrcs: [], label: null, country: null, releaseDate: null, mbTags: [], disambig: null }
     try {
-        // MusicBrainz requires a User-Agent header (rate: 1 req/s unauthed)
-        const q   = encodeURIComponent(`recording:"${title}" AND artist:"${artist}"`)
+        const q = encodeURIComponent(`recording:"${title}" AND artist:"${artist}"`)
         const res = await fetch(
             `https://musicbrainz.org/ws/2/recording?query=${q}&fmt=json&limit=5&inc=isrcs+releases+tags`,
-            { headers: { 'User-Agent': MB_UA, 'Accept': 'application/json' } }
+            { headers: { 'User-Agent': MB_UA, 'Accept': 'application/json' } },
         )
         if (!res.ok) return empty
         const json = await res.json()
         const recs: any[] = json.recordings ?? []
         if (!recs.length) return empty
-
-        // Best match: prefer exact artist + title
-        const rec = recs.find(r =>
-            r['artist-credit']?.[0]?.artist?.name?.toLowerCase() === artist.toLowerCase()
-        ) ?? recs[0]
-
-        // Find the earliest release with label info
+        const rec = recs.find(r => r['artist-credit']?.[0]?.artist?.name?.toLowerCase() === artist.toLowerCase()) ?? recs[0]
         const releases: any[] = rec.releases ?? []
-        releases.sort((a, b) => (a.date ?? '9999') < (b.date ?? '9999') ? -1 : 1)
+        releases.sort((a, b) => ((a.date ?? '9999') < (b.date ?? '9999') ? -1 : 1))
         const rel = releases[0]
-        const labelInfo = rel?.['label-info']?.[0]
-        const media     = rel?.media?.[0]
-        const track     = media?.track?.[0]
-
         const tags: string[] = (rec.tags ?? [])
-            .sort((a: any, b: any) => (b.count ?? 0) - (a.count ?? 0))
-            .slice(0, 10)
-            .map((t: any) => t.name as string)
-
+            .sort((a: any, b: any) => (b.count ?? 0) - (a.count ?? 0)).slice(0, 10).map((t: any) => t.name as string)
         return {
-            mbid:         rec.id ?? null,
-            isrcs:        rec.isrcs ?? [],
-            label:        labelInfo?.label?.name ?? null,
-            country:      rel?.country ?? null,
-            releaseDate:  rel?.date ?? null,
-            trackNumber:  track?.number ?? null,
-            totalTracks:  media?.['track-count'] ?? null,
-            mbTags:       tags,
-            disambig:     rec.disambiguation ?? null,
+            mbid: rec.id ?? null, isrcs: rec.isrcs ?? [],
+            label: rel?.['label-info']?.[0]?.label?.name ?? null,
+            country: rel?.country ?? null, releaseDate: rel?.date ?? null,
+            mbTags: tags, disambig: rec.disambiguation ?? null,
         }
     } catch { return empty }
 }
 
 async function fetchMBArtist(artist: string): Promise<MBArtist> {
-    const empty: MBArtist = {
-        mbid: null, country: null, area: null,
-        beginYear: null, endYear: null, ended: false,
-        type: null, mbTags: [], disambig: null,
-    }
+    const empty: MBArtist = { mbid: null, country: null, area: null, beginYear: null, endYear: null, ended: false, type: null, mbTags: [], disambig: null }
     try {
-        const q   = encodeURIComponent(`artist:"${artist}"`)
+        const q = encodeURIComponent(`artist:"${artist}"`)
         const res = await fetch(
             `https://musicbrainz.org/ws/2/artist?query=${q}&fmt=json&limit=3&inc=tags`,
-            { headers: { 'User-Agent': MB_UA, 'Accept': 'application/json' } }
+            { headers: { 'User-Agent': MB_UA, 'Accept': 'application/json' } },
         )
         if (!res.ok) return empty
         const json = await res.json()
         const artists: any[] = json.artists ?? []
         if (!artists.length) return empty
-
-        // Best match: exact name, or highest score
         const a = artists.find(x => x.name?.toLowerCase() === artist.toLowerCase()) ?? artists[0]
-
         const lifeSpan = a['life-span'] ?? {}
         const tags: string[] = (a.tags ?? [])
-            .sort((x: any, y: any) => (y.count ?? 0) - (x.count ?? 0))
-            .slice(0, 8)
-            .map((t: any) => t.name as string)
-
+            .sort((x: any, y: any) => (y.count ?? 0) - (x.count ?? 0)).slice(0, 8).map((t: any) => t.name as string)
         return {
-            mbid:      a.id ?? null,
-            country:   a.country ?? null,
-            area:      a['begin-area']?.name ?? a.area?.name ?? null,
+            mbid: a.id ?? null, country: a.country ?? null,
+            area: a['begin-area']?.name ?? a.area?.name ?? null,
             beginYear: lifeSpan.begin ? String(lifeSpan.begin).slice(0, 4) : null,
-            endYear:   lifeSpan.end   ? String(lifeSpan.end).slice(0, 4)   : null,
-            ended:     lifeSpan.ended ?? false,
-            type:      a.type ?? null,
-            mbTags:    tags,
-            disambig:  a.disambiguation ?? null,
+            endYear: lifeSpan.end ? String(lifeSpan.end).slice(0, 4) : null,
+            ended: lifeSpan.ended ?? false, type: a.type ?? null, mbTags: tags, disambig: a.disambiguation ?? null,
         }
     } catch { return empty }
 }
@@ -257,85 +204,95 @@ async function fetchWikipedia(artist: string, title?: string): Promise<WikiData>
     const empty: WikiData = { extract: null, thumbnail: null, url: null, isTrackPage: false }
     const tryPage = async (term: string, isTrack: boolean): Promise<WikiData | null> => {
         try {
-            const res  = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(term)}`)
+            const res = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(term)}`)
             if (!res.ok) return null
             const json = await res.json()
             if (json.type === 'disambiguation' || !json.extract) return null
-            return {
-                extract:   json.extract,
-                thumbnail: json.thumbnail?.source ?? null,
-                url:       json.content_urls?.desktop?.page ?? null,
-                isTrackPage: isTrack,
-            }
+            return { extract: json.extract, thumbnail: json.thumbnail?.source ?? null, url: json.content_urls?.desktop?.page ?? null, isTrackPage: isTrack }
         } catch { return null }
     }
-
-    // Try track page first (e.g. "Karma Police" or "Karma Police (song)")
     if (title) {
-        const trackPage = await tryPage(`${title} (song)`, true)
-            ?? await tryPage(title, true)
-        if (trackPage && trackPage.extract && trackPage.extract.length > 80) return trackPage
+        const trackPage = (await tryPage(`${title} (song)`, true)) ?? (await tryPage(title, true))
+        if (trackPage?.extract && trackPage.extract.length > 80) return trackPage
     }
-
-    // Fall back to artist page
     return (await tryPage(artist, false)) ?? empty
 }
 
-// ── Hooks ─────────────────────────────────────────────────────────────────────
+// ── Hooks for the external sources ───────────────────────────────────────────
 
 function useItunesData(artist: string, title: string) {
     const [data, setData] = useState<ItunesData | null>(null)
     useEffect(() => {
         if (!artist || !title) { setData(null); return }
-        setData(null)
-        fetchItunes(artist, title).then(setData)
+        setData(null); fetchItunes(artist, title).then(setData)
     }, [artist, title])
     return data
 }
-
 function useMBRecording(artist: string, title: string) {
     const [data, setData] = useState<MBRecording | null>(null)
     useEffect(() => {
         if (!artist || !title) { setData(null); return }
         setData(null)
-        // MusicBrainz rate-limit: delay slightly so iTunes hits first
         const t = setTimeout(() => fetchMBRecording(artist, title).then(setData), 400)
         return () => clearTimeout(t)
     }, [artist, title])
     return data
 }
-
 function useMBArtist(artist: string) {
     const [data, setData] = useState<MBArtist | null>(null)
     useEffect(() => {
         if (!artist) { setData(null); return }
         setData(null)
-        // Stagger after recording request to stay within 1 req/s
         const t = setTimeout(() => fetchMBArtist(artist).then(setData), 900)
         return () => clearTimeout(t)
     }, [artist])
     return data
 }
-
 function useWikipediaData(artist: string, title?: string) {
     const [data, setData] = useState<WikiData | null>(null)
     useEffect(() => {
         if (!artist) { setData(null); return }
-        setData(null)
-        fetchWikipedia(artist, title).then(setData)
+        setData(null); fetchWikipedia(artist, title).then(setData)
     }, [artist, title])
     return data
 }
 
-// ── Core API ──────────────────────────────────────────────────────────────────
+function useAudioPreview(previewUrl: string | null) {
+    const audioRef = useRef<HTMLAudioElement | null>(null)
+    const [playing, setPlaying] = useState(false)
+    const [progress, setProgress] = useState(0)
+    useEffect(() => { audioRef.current?.pause(); audioRef.current = null; setPlaying(false); setProgress(0) }, [previewUrl])
+    useEffect(() => () => { audioRef.current?.pause() }, [])
+    const toggle = useCallback(() => {
+        if (!previewUrl) return
+        if (!audioRef.current) {
+            const a = new Audio(previewUrl)
+            a.addEventListener('timeupdate', () => setProgress(a.currentTime / (a.duration || 30)))
+            a.addEventListener('ended', () => { setPlaying(false); setProgress(0) })
+            audioRef.current = a
+        }
+        if (playing) { audioRef.current.pause(); setPlaying(false) }
+        else { audioRef.current.play(); setPlaying(true) }
+    }, [previewUrl, playing])
+    return { playing, progress, toggle }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Backend API
+// ─────────────────────────────────────────────────────────────────────────────
 
 interface RawChromaHit {
     id: string; embedding: number[]; distance: number
     fields?: {
-        byArtist?: string; title?: string; isrcCode?: string
-        durationMs?: number; genres?: string[]; moods?: string[]
-        themes?: string[]; contexts?: string[]
+        byArtist?: string; title?: string; isrcCode?: string; durationMs?: number
+        genres?: string[]; moods?: string[]; themes?: string[]; contexts?: string[]
     }
+}
+
+interface TextHit {
+    id: string; byArtist?: string; title?: string; isrcCode?: string; durationMs?: number
+    genres?: string[]; moods?: string[]; themes?: string[]; contexts?: string[]
+    embedding?: number[]
 }
 
 async function apiEmbed(text: string): Promise<Float32Array> {
@@ -356,7 +313,43 @@ async function apiSearchVector(embedding: Float32Array, n: number): Promise<RawC
     return (await res.json()).results as RawChromaHit[]
 }
 
-function toNeighborData(hit: RawChromaHit, dist: number): TrackNeighborData {
+/** Lexical search. Returns whether it fell back to semantic so the UI can say so. */
+async function apiSearchText(q: string, limit: number): Promise<{ hits: TextHit[]; degraded: boolean }> {
+    try {
+        const res = await fetch(`${BASE_URL}/search/text`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ q, limit }),
+        })
+        if (!res.ok) throw new Error(String(res.status))
+        const json = await res.json()
+        return { hits: (json.results ?? []) as TextHit[], degraded: false }
+    } catch {
+        // Graceful degradation: lexical endpoint missing -> semantic nearest-neighbour.
+        const emb = await apiEmbed(q)
+        const hits = await apiSearchVector(emb, limit)
+        return { hits: hits.map(chromaToTextHit), degraded: true }
+    }
+}
+
+function chromaToTextHit(h: RawChromaHit): TextHit {
+    const m = h.fields ?? {}
+    return {
+        id: h.id, byArtist: m.byArtist, title: m.title, isrcCode: m.isrcCode,
+        durationMs: m.durationMs, genres: m.genres, moods: m.moods, themes: m.themes,
+        contexts: m.contexts, embedding: h.embedding,
+    }
+}
+
+function textHitToNeighbor(h: TextHit, distance = 0): TrackNeighborData {
+    return {
+        id: h.id, artist: h.byArtist ?? 'Unknown', title: h.title ?? h.id,
+        isrc: h.isrcCode, durationMs: h.durationMs ?? 0,
+        genres: h.genres ?? [], moods: h.moods ?? [], themes: h.themes ?? [], contexts: h.contexts ?? [],
+        embedding: new Float32Array(h.embedding ?? []), distance,
+    }
+}
+
+function chromaToNeighbor(hit: RawChromaHit, dist: number): TrackNeighborData {
     const m = hit.fields ?? {}
     return {
         id: hit.id, artist: m.byArtist ?? 'Unknown', title: m.title ?? hit.id,
@@ -366,16 +359,12 @@ function toNeighborData(hit: RawChromaHit, dist: number): TrackNeighborData {
     }
 }
 
-// ── Kernel types + math ───────────────────────────────────────────────────────
+// ── Kernel attitude (compact signal only) ────────────────────────────────────
 
-export interface KernelState {
-    mu:       Float32Array
-    velocity: Float32Array
-    sigma:    number
-}
+export interface KernelState { mu: Float32Array; velocity: Float32Array; sigma: number }
 
 interface KernelAttitude {
-    x: number; y: number; distNorm: number; alignment: number
+    distNorm: number; alignment: number
     zone: 'groove' | 'familiar' | 'stretch' | 'averse'
     direction: 'toward' | 'adjacent' | 'sideways' | 'against'
     label: string; color: string
@@ -383,6 +372,7 @@ interface KernelAttitude {
 
 function projectToKernelSpace(e: Float32Array, mu: Float32Array, velocity: Float32Array, sigma: number) {
     const n = Math.min(e.length, mu.length, velocity.length)
+    if (n === 0) return { x: 0, y: 0 }
     let vn2 = 0
     for (let i = 0; i < n; i++) vn2 += velocity[i] ** 2
     const vn = Math.sqrt(vn2)
@@ -392,7 +382,7 @@ function projectToKernelSpace(e: Float32Array, mu: Float32Array, velocity: Float
     let x = 0
     for (let i = 0; i < n; i++) x += diff[i] * (velocity[i] / vn)
     const vhat0 = velocity[0] / vn
-    const perp  = new Float32Array(n)
+    const perp = new Float32Array(n)
     perp[0] = 1.0 - vhat0 * (velocity[0] / vn)
     for (let i = 1; i < n; i++) perp[i] = -(vhat0 * (velocity[i] / vn))
     let pn2 = 0
@@ -400,9 +390,8 @@ function projectToKernelSpace(e: Float32Array, mu: Float32Array, velocity: Float
     let pn = Math.sqrt(pn2)
     if (pn < 0.1) {
         const vh1 = velocity[1] / vn
-        perp.fill(0)
-        perp[1] = 1.0 - vh1 * (velocity[1] / vn)
-        for (let i = 0; i < n; i++) { if (i !== 1) perp[i] = -(vh1 * (velocity[i] / vn)) }
+        perp.fill(0); perp[1] = 1.0 - vh1 * (velocity[1] / vn)
+        for (let i = 0; i < n; i++) if (i !== 1) perp[i] = -(vh1 * (velocity[i] / vn))
         pn2 = 0; for (let i = 0; i < n; i++) pn2 += perp[i] ** 2
         pn = Math.sqrt(pn2)
     }
@@ -411,974 +400,1007 @@ function projectToKernelSpace(e: Float32Array, mu: Float32Array, velocity: Float
     return { x: x / (sigma || 1), y: y / (sigma || 1) }
 }
 
-function computeAttitude(e: Float32Array, k: KernelState): KernelAttitude {
+function computeAttitude(e: Float32Array, k: KernelState): KernelAttitude | null {
+    if (!e.length) return null
     const { x, y } = projectToKernelSpace(e, k.mu, k.velocity, k.sigma)
-    const distNorm  = Math.sqrt(x ** 2 + y ** 2)
+    const distNorm = Math.sqrt(x ** 2 + y ** 2)
     const alignment = distNorm > 1e-8 ? x / distNorm : 0
     const zone: KernelAttitude['zone'] =
         distNorm < 0.5 ? 'groove' : distNorm < 1.2 ? 'familiar' : distNorm < 2.5 ? 'stretch' : 'averse'
     const direction: KernelAttitude['direction'] =
         alignment > 0.45 ? 'toward' : alignment > 0.1 ? 'adjacent' : alignment > -0.2 ? 'sideways' : 'against'
     const L: Record<string, [string, string]> = {
-        'groove-toward':    ['Exactly where your taste is heading', TEAL],
-        'groove-adjacent':  ['Deep in your current groove', TEAL],
-        'groove-sideways':  ['Core comfort zone', TEAL],
-        'groove-against':   ['Home turf — pulling against momentum', '#34d399'],
-        'familiar-toward':  ['Within range, moving this way', '#34d399'],
-        'familiar-adjacent':['Within your taste window', '#34d399'],
-        'familiar-sideways':['Adjacent — kernel is neutral', DIM],
-        'familiar-against': ['Known territory, wrong direction', AMBER],
-        'stretch-toward':   ['Ambitious reach — headed here', VIOLET],
-        'stretch-adjacent': ['A stretch, direction compatible', VIOLET],
-        'stretch-sideways': ['Outside comfort zone, perpendicular', DIMMER],
-        'stretch-against':  ['Kernel would resist this', AMBER],
-        'averse-toward':    ['Far out — but reaching this way', VIOLET],
-        'averse-adjacent':  ['Kernel is cold on this', MAGENTA],
-        'averse-sideways':  ['Far outside your groove', MAGENTA],
-        'averse-against':   ['Kernel actively resists this', MAGENTA],
+        'groove-toward': ['exactly where your taste is heading', TEAL],
+        'groove-adjacent': ['deep in your current groove', TEAL],
+        'groove-sideways': ['squarely in your comfort zone', TEAL],
+        'groove-against': ['home turf, pulling against your momentum', SUCCESS],
+        'familiar-toward': ['within range and moving your way', SUCCESS],
+        'familiar-adjacent': ['inside your taste window', SUCCESS],
+        'familiar-sideways': ['adjacent — the kernel is neutral here', DIM],
+        'familiar-against': ['known territory, wrong direction', AMBER],
+        'stretch-toward': ['an ambitious reach, but headed this way', VIOLET],
+        'stretch-adjacent': ['a stretch with a compatible direction', VIOLET],
+        'stretch-sideways': ['outside your comfort zone, perpendicular', DIMMER],
+        'stretch-against': ['the kernel would resist this', AMBER],
+        'averse-toward': ['far out — but you are reaching this way', VIOLET],
+        'averse-adjacent': ['the kernel runs cold on this', ACCENT],
+        'averse-sideways': ['far outside your groove', ACCENT],
+        'averse-against': ['the kernel actively resists this', ACCENT],
     }
-    const [label, color] = L[`${zone}-${direction}`] ?? ['Unknown', DIMMER]
-    return { x, y, distNorm, alignment, zone, direction, label, color }
+    const [label, color] = L[`${zone}-${direction}`] ?? ['unknown', DIMMER]
+    return { distNorm, alignment, zone, direction, label, color }
 }
 
-function crowdingLabel(pts: ProjectedPoint[]) {
-    const dists = pts.filter(p => !p.isFocal).map(p => p.distance).sort((a, b) => a - b)
-    if (!dists.length) return { label: '—', color: DIMMER, detail: '' }
-    const nearest = dists[0], median = dists[Math.floor(dists.length / 2)]
-    const ratio = nearest / (median || 1)
-    if (ratio < 0.18) return { label: 'Very Crowded',  color: MAGENTA,   detail: `${nearest.toFixed(3)} nearest · ${median.toFixed(3)} median` }
-    if (ratio < 0.32) return { label: 'Competitive',   color: AMBER,     detail: `${nearest.toFixed(3)} nearest · ${median.toFixed(3)} median` }
-    if (ratio < 0.52) return { label: 'Moderate',      color: '#34d399', detail: `${nearest.toFixed(3)} nearest · ${median.toFixed(3)} median` }
-    return                    { label: 'Open Territory', color: TEAL,     detail: `${nearest.toFixed(3)} nearest · ${median.toFixed(3)} median` }
+const ZONE_TITLE: Record<KernelAttitude['zone'], string> = {
+    groove: 'In your groove', familiar: 'Familiar', stretch: 'A stretch', averse: 'Against the grain',
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SpaceCanvas
+// Navigation model — Wikipedia-style view stack
 // ─────────────────────────────────────────────────────────────────────────────
 
-interface HistoryPoint { x: number; y: number; label: string; genre: string | null }
+type SearchMode = 'lexical' | 'semantic'
 
-interface SpaceCanvasProps {
-    pts:            ProjectedPoint[]
-    focalLabel:     string
-    focalAttitude?: KernelAttitude
-    history?:       HistoryPoint[]
-    hasVelocity?:   boolean
-    highlightId?:   string
+type View =
+    | { kind: 'home' }
+    | { kind: 'results'; query: string; mode: SearchMode }
+    | { kind: 'track'; artist: string; title: string; embedding?: Float32Array }
+    | { kind: 'artist'; name: string }
+
+function viewLabel(v: View): string {
+    switch (v.kind) {
+        case 'home': return 'Home'
+        case 'results': return `“${v.query}”`
+        case 'track': return v.title
+        case 'artist': return v.name
+    }
 }
 
-function SpaceCanvas({ pts, focalLabel, focalAttitude, history = [], hasVelocity = false, highlightId = "" }: SpaceCanvasProps) {
-    const canvasRef   = useRef<HTMLCanvasElement>(null)
-    const stateRef    = useRef({ pts, focalLabel, focalAttitude, history, hasVelocity, highlightId })
-    const rafRef      = useRef<number>(0)
-    const viewRef     = useRef({ ox: 0, oy: 0, zoom: 1 })
-    const mousePosRef = useRef<{ x: number; y: number } | null>(null)
-    const dragRef     = useRef<{ sx: number; sy: number; ox: number; oy: number } | null>(null)
-    const [cursor, setCursor] = useState<'grab' | 'grabbing'>('grab')
+// ─────────────────────────────────────────────────────────────────────────────
+// Atoms
+// ─────────────────────────────────────────────────────────────────────────────
+
+function WikiLink({ children, onClick, color = LINK, weight = 400, size }: {
+    children: ReactNode; onClick: () => void; color?: string; weight?: number; size?: number
+}) {
+    const [hover, setHover] = useState(false)
+    return (
+        <span
+            role="link" tabIndex={0}
+            onClick={onClick}
+            onKeyDown={e => { if (e.key === 'Enter') onClick() }}
+            onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+            style={{
+                color, cursor: 'pointer', fontWeight: weight, fontSize: size,
+                textDecoration: hover ? 'underline' : 'none', textUnderlineOffset: 3,
+                textDecorationColor: `${color}99`, transition: 'color .1s',
+                opacity: hover ? 0.85 : 1,
+            }}
+        >
+            {children}
+        </span>
+    )
+}
+
+function SectionLabel({ children, style }: { children: ReactNode; style?: React.CSSProperties }) {
+    return (
+        <div style={{
+            fontFamily: MONO, fontSize: 8, fontWeight: 500, letterSpacing: '0.22em',
+            textTransform: 'uppercase', color: FG4, marginBottom: 10, paddingBottom: 6,
+            borderBottom: `1px solid ${BORDER2}`, ...style,
+        }}>
+            {children}
+        </div>
+    )
+}
+
+/** A genre/mood/theme/context chip that is itself a (semantic) search link. */
+function TagLink({ text, color, onClick }: { text: string; color: string; onClick: () => void }) {
+    const [hover, setHover] = useState(false)
+    return (
+        <span
+            role="link" tabIndex={0} onClick={onClick}
+            onKeyDown={e => { if (e.key === 'Enter') onClick() }}
+            onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+            style={{
+                fontFamily: MONO, fontSize: 9, fontWeight: 500, letterSpacing: '0.10em',
+                textTransform: 'uppercase', color, padding: '3px 8px', cursor: 'pointer',
+                background: hover ? `${color}26` : `${color}12`,
+                border: `1px solid ${color}${hover ? '66' : '33'}`, transition: 'all .1s',
+            }}
+        >
+            {text}
+        </span>
+    )
+}
+
+function KVRow({ label, children }: { label: string; children: ReactNode }) {
+    return (
+        <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', padding: '5px 0', borderBottom: `1px solid ${BORDER2}` }}>
+            <span style={{ fontFamily: MONO, fontSize: 8, letterSpacing: '0.12em', textTransform: 'uppercase', color: FG4, width: 78, flexShrink: 0 }}>{label}</span>
+            <span style={{ fontFamily: MONO, fontSize: 10, color: FG2, flex: 1, lineHeight: 1.5 }}>{children}</span>
+        </div>
+    )
+}
+
+function Spinner({ label = 'Loading' }: { label?: string }) {
+    return (
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 14 }}>
+            <div style={{ width: 18, height: 18, border: `1.5px solid ${BG3}`, borderTopColor: ACCENT, borderRadius: '50%', animation: 'wiki-spin .65s linear infinite' }} />
+            <style>{`@keyframes wiki-spin{to{transform:rotate(360deg)}}`}</style>
+            <div style={{ fontFamily: MONO, fontSize: 9, color: FG4, letterSpacing: '0.18em', textTransform: 'uppercase' }}>{label}…</div>
+        </div>
+    )
+}
+
+function fmtDuration(ms: number | null | undefined): string | null {
+    if (!ms || ms <= 0) return null
+    return `${Math.floor(ms / 60000)}:${String(Math.floor((ms % 60000) / 1000)).padStart(2, '0')}`
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Search results — the new "see what's available, then refine" experience
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface ArtistGroup { artist: string; tracks: TextHit[] }
+
+function groupByArtist(hits: TextHit[]): ArtistGroup[] {
+    const map = new Map<string, ArtistGroup>()
+    for (const h of hits) {
+        const key = (h.byArtist ?? 'Unknown').toLowerCase()
+        if (!map.has(key)) map.set(key, { artist: h.byArtist ?? 'Unknown', tracks: [] })
+        map.get(key)!.tracks.push(h)
+    }
+    return [...map.values()].sort((a, b) => b.tracks.length - a.tracks.length || a.artist.localeCompare(b.artist))
+}
+
+function deriveGenreFacets(hits: TextHit[]): { genre: string; count: number }[] {
+    const counts = new Map<string, number>()
+    for (const h of hits) for (const g of h.genres ?? []) counts.set(g, (counts.get(g) ?? 0) + 1)
+    return [...counts.entries()].map(([genre, count]) => ({ genre, count }))
+        .sort((a, b) => b.count - a.count).slice(0, 12)
+}
+
+function ResultsView({ query, mode, onNavigate, onSetMode }: {
+    query: string
+    mode: SearchMode
+    onNavigate: (v: View) => void
+    onSetMode: (m: SearchMode) => void
+}) {
+    const [loading, setLoading] = useState(true)
+    const [hits, setHits] = useState<TextHit[]>([])
+    const [degraded, setDegraded] = useState(false)
+    const [error, setError] = useState<string | null>(null)
+    const [activeGenre, setActiveGenre] = useState<string | null>(null)
 
     useEffect(() => {
-        stateRef.current = { pts, focalLabel, focalAttitude, history, hasVelocity, highlightId }
-    }, [pts, focalLabel, focalAttitude, history, hasVelocity, highlightId])
-
-    useEffect(() => { viewRef.current = { ox: 0, oy: 0, zoom: 1 } }, [focalLabel])
-
-    useEffect(() => {
-        const canvas = canvasRef.current
-        if (!canvas) return
-        const sync = () => {
-            const dpr = window.devicePixelRatio || 1
-            const w = canvas.clientWidth, h = canvas.clientHeight
-            if (w === 0 || h === 0) return
-            if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
-                canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr)
+        let live = true
+        setLoading(true); setError(null); setActiveGenre(null)
+        const run = async () => {
+            try {
+                if (mode === 'lexical') {
+                    const { hits, degraded } = await apiSearchText(query, N_RESULTS)
+                    if (!live) return
+                    setHits(hits); setDegraded(degraded)
+                } else {
+                    const emb = await apiEmbed(query)
+                    const raw = await apiSearchVector(emb, N_RESULTS)
+                    if (!live) return
+                    setHits(raw.map(chromaToTextHit)); setDegraded(false)
+                }
+            } catch (e: any) {
+                if (live) setError(e?.message ?? 'Search failed')
+            } finally {
+                if (live) setLoading(false)
             }
         }
-        const ro = new ResizeObserver(sync)
-        ro.observe(canvas); sync()
-        return () => ro.disconnect()
-    }, [])
+        run()
+        return () => { live = false }
+    }, [query, mode])
 
-    const onPointerDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
-        dragRef.current = { sx: e.clientX, sy: e.clientY, ox: viewRef.current.ox, oy: viewRef.current.oy }
-        canvasRef.current?.setPointerCapture(e.pointerId); setCursor('grabbing')
+    const filtered = useMemo(
+        () => (activeGenre ? hits.filter(h => (h.genres ?? []).includes(activeGenre)) : hits),
+        [hits, activeGenre],
+    )
+    const groups = useMemo(() => groupByArtist(filtered), [filtered])
+    const facets = useMemo(() => deriveGenreFacets(hits), [hits])
+
+    // Does the query name an artist that's actually in the catalogue?
+    const featuredArtist = useMemo(() => {
+        const norm = query.trim().toLowerCase()
+        if (mode !== 'lexical' || !norm) return null
+        const g = groups.find(g => g.artist.toLowerCase() === norm)
+            ?? groups.find(g => g.artist.toLowerCase().includes(norm) && g.tracks.length >= 3)
+        return g ?? null
+    }, [groups, query, mode])
+
+    if (loading) return <Spinner label={mode === 'lexical' ? 'Searching the catalogue' : 'Finding the vibe'} />
+
+    return (
+        <div style={{ flex: 1, overflowY: 'auto', background: BG }}>
+            <div style={{ maxWidth: 860, margin: '0 auto', padding: '28px 28px 80px' }}>
+
+                {/* Header */}
+                <div style={{ marginBottom: 6, fontFamily: MONO, fontSize: 9, color: FG4, letterSpacing: '0.18em', textTransform: 'uppercase' }}>
+                    {mode === 'lexical' ? 'Search results' : 'Sounds like'}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', marginBottom: 4 }}>
+                    <h1 style={{ fontFamily: DISP, fontSize: 46, color: FG, letterSpacing: '0.02em', lineHeight: 1, margin: 0 }}>{query}</h1>
+                    {/* mode toggle — lexical vs semantic */}
+                    <div style={{ display: 'flex', border: `1px solid ${BORDER}`, fontFamily: MONO, fontSize: 9, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+                        {(['lexical', 'semantic'] as SearchMode[]).map(m => (
+                            <button key={m} onClick={() => onSetMode(m)}
+                                style={{
+                                    background: mode === m ? ACCENT : 'transparent', color: mode === m ? '#fff' : FG3,
+                                    border: 'none', padding: '6px 12px', cursor: 'pointer',
+                                }}>
+                                {m === 'lexical' ? 'matching text' : 'sounds like'}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+                <div style={{ fontFamily: MONO, fontSize: 10, color: FG3, marginBottom: 18 }}>
+                    {filtered.length} {filtered.length === 1 ? 'track' : 'tracks'} · {groups.length} {groups.length === 1 ? 'artist' : 'artists'}
+                    {activeGenre && <> · filtered to <span style={{ color: genreColor(activeGenre) }}>{activeGenre}</span></>}
+                </div>
+
+                {degraded && (
+                    <div style={{ marginBottom: 18, padding: '8px 12px', background: `${AMBER}10`, border: `1px solid ${AMBER}30`, fontFamily: MONO, fontSize: 10, color: AMBER, lineHeight: 1.6 }}>
+                        Text search endpoint unavailable — showing semantic matches instead. Wire up <code>POST /search/text</code> for exact artist/title lookups.
+                    </div>
+                )}
+                {error && (
+                    <div style={{ marginBottom: 18, padding: '8px 12px', background: `${ACCENT}12`, border: `1px solid ${ACCENT}30`, fontFamily: MONO, fontSize: 11, color: ACCENT }}>{error}</div>
+                )}
+
+                {/* Genre facets — refine */}
+                {facets.length > 0 && (
+                    <div style={{ marginBottom: 24, display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+                        <span style={{ fontFamily: MONO, fontSize: 8, color: FG4, letterSpacing: '0.18em', textTransform: 'uppercase', marginRight: 4 }}>refine</span>
+                        {activeGenre && (
+                            <span onClick={() => setActiveGenre(null)} role="button" tabIndex={0}
+                                style={{ fontFamily: MONO, fontSize: 9, color: FG3, padding: '3px 8px', border: `1px solid ${BORDER}`, cursor: 'pointer' }}>
+                                clear ✕
+                            </span>
+                        )}
+                        {facets.map(({ genre, count }) => {
+                            const on = activeGenre === genre
+                            const c = genreColor(genre)
+                            return (
+                                <span key={genre} role="button" tabIndex={0}
+                                    onClick={() => setActiveGenre(on ? null : genre)}
+                                    onKeyDown={e => { if (e.key === 'Enter') setActiveGenre(on ? null : genre) }}
+                                    style={{
+                                        fontFamily: MONO, fontSize: 9, letterSpacing: '0.06em', textTransform: 'uppercase',
+                                        color: on ? '#fff' : c, padding: '3px 8px', cursor: 'pointer', transition: 'all .1s',
+                                        background: on ? c : `${c}12`, border: `1px solid ${c}${on ? '' : '33'}`,
+                                    }}>
+                                    {genre} <span style={{ opacity: 0.6 }}>{count}</span>
+                                </span>
+                            )
+                        })}
+                    </div>
+                )}
+
+                {/* Featured artist card — "all of them" lives here */}
+                {featuredArtist && (
+                    <div
+                        onClick={() => onNavigate({ kind: 'artist', name: featuredArtist.artist })}
+                        style={{
+                            marginBottom: 24, padding: '16px 18px', cursor: 'pointer',
+                            background: `linear-gradient(135deg, ${ACCENT}14, ${VIOLET}0c)`,
+                            border: `1px solid ${ACCENT}40`, borderLeft: `3px solid ${ACCENT}`,
+                            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16,
+                        }}>
+                        <div>
+                            <div style={{ fontFamily: MONO, fontSize: 8, color: ACCENT, letterSpacing: '0.18em', textTransform: 'uppercase', marginBottom: 4 }}>Artist</div>
+                            <div style={{ fontFamily: DISP, fontSize: 30, color: FG, letterSpacing: '0.03em', lineHeight: 1 }}>{featuredArtist.artist}</div>
+                            <div style={{ fontFamily: MONO, fontSize: 10, color: FG3, marginTop: 4 }}>{featuredArtist.tracks.length} tracks in the catalogue</div>
+                        </div>
+                        <div style={{ fontFamily: MONO, fontSize: 11, color: LINK, whiteSpace: 'nowrap' }}>open artist →</div>
+                    </div>
+                )}
+
+                {/* Grouped results */}
+                {groups.length === 0 && !error && (
+                    <div style={{ padding: '60px 0', textAlign: 'center', fontFamily: MONO, fontSize: 11, color: FG4, letterSpacing: '0.06em' }}>
+                        Nothing matched. Try a different spelling, or switch to “sounds like”.
+                    </div>
+                )}
+                {groups.map(group => (
+                    <ResultGroup key={group.artist} group={group} onNavigate={onNavigate} />
+                ))}
+            </div>
+        </div>
+    )
+}
+
+function ResultGroup({ group, onNavigate }: { group: ArtistGroup; onNavigate: (v: View) => void }) {
+    const many = group.tracks.length > 6
+    const [expanded, setExpanded] = useState(false)
+    const shown = expanded ? group.tracks : group.tracks.slice(0, 6)
+    return (
+        <div style={{ marginBottom: 18 }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 6, paddingBottom: 6, borderBottom: `1px solid ${BORDER2}` }}>
+                <WikiLink onClick={() => onNavigate({ kind: 'artist', name: group.artist })} color={FG} weight={600} size={15}>
+                    {group.artist}
+                </WikiLink>
+                <span style={{ fontFamily: MONO, fontSize: 9, color: FG4 }}>{group.tracks.length} {group.tracks.length === 1 ? 'track' : 'tracks'}</span>
+            </div>
+            <div>
+                {shown.map(t => {
+                    const c = genreColor(t.genres?.[0] ?? null)
+                    const dur = fmtDuration(t.durationMs)
+                    return (
+                        <div key={t.id}
+                            onClick={() => onNavigate({ kind: 'track', artist: t.byArtist ?? 'Unknown', title: t.title ?? '', embedding: t.embedding ? new Float32Array(t.embedding) : undefined })}
+                            style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 8px', cursor: 'pointer', borderRadius: 2, transition: 'background .08s' }}
+                            onMouseEnter={e => (e.currentTarget.style.background = GLASS)}
+                            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                            <div style={{ width: 6, height: 6, borderRadius: '50%', background: c, flexShrink: 0 }} />
+                            <span style={{ flex: 1, fontFamily: SANS, fontSize: 13, color: FG2 }}>{t.title}</span>
+                            {t.genres?.[0] && <span style={{ fontFamily: MONO, fontSize: 8, color: c, letterSpacing: '0.08em', textTransform: 'uppercase' }}>{t.genres[0]}</span>}
+                            {dur && <span style={{ fontFamily: MONO, fontSize: 9, color: FG4, width: 36, textAlign: 'right' }}>{dur}</span>}
+                        </div>
+                    )
+                })}
+            </div>
+            {many && (
+                <button onClick={() => setExpanded(x => !x)}
+                    style={{ marginTop: 4, marginLeft: 8, background: 'none', border: 'none', color: LINK, fontFamily: MONO, fontSize: 10, cursor: 'pointer', padding: '4px 0' }}>
+                    {expanded ? '− show fewer' : `+ show all ${group.tracks.length}`}
+                </button>
+            )}
+        </div>
+    )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Mini sound-map — opt-in, navigable. The kernel lives on, but earns its space.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function MiniSoundMap({ focal, neighbors, onPick }: {
+    focal: TrackNeighborData; neighbors: TrackNeighborData[]; onPick: (n: TrackNeighborData) => void
+}) {
+    const canvasRef = useRef<HTMLCanvasElement>(null)
+    const stateRef = useRef({ focal, neighbors })
+    const rafRef = useRef(0)
+    const mouseRef = useRef<{ x: number; y: number } | null>(null)
+    const hoverRef = useRef<{ pt: ProjectedPoint; nx: number; ny: number } | null>(null)
+
+    useEffect(() => { stateRef.current = { focal, neighbors } }, [focal, neighbors])
+
+    const onMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+        const r = canvasRef.current?.getBoundingClientRect()
+        if (r) mouseRef.current = { x: e.clientX - r.left, y: e.clientY - r.top }
     }, [])
-    const onPointerMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
-        if (dragRef.current) {
-            const { sx, sy, ox, oy } = dragRef.current
-            viewRef.current = { ...viewRef.current, ox: ox + e.clientX - sx, oy: oy + e.clientY - sy }
-        }
-        const rect = canvasRef.current?.getBoundingClientRect()
-        if (rect) mousePosRef.current = { x: e.clientX - rect.left, y: e.clientY - rect.top }
-    }, [])
-    const onPointerUp    = useCallback(() => { dragRef.current = null; setCursor('grab') }, [])
-    const onPointerLeave = useCallback(() => { dragRef.current = null; setCursor('grab'); mousePosRef.current = null }, [])
+    const onLeave = useCallback(() => { mouseRef.current = null }, [])
+    const onClick = useCallback(() => { if (hoverRef.current) onPick(hoverRef.current.pt as any) }, [onPick])
 
     useEffect(() => {
         const canvas = canvasRef.current
         if (!canvas) return
         const ctx = canvas.getContext('2d')!
         let running = true
+        const sync = () => {
+            const dpr = window.devicePixelRatio || 1
+            const w = canvas.clientWidth, h = canvas.clientHeight
+            if (w && h && (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr))) {
+                canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr)
+            }
+        }
+        const ro = new ResizeObserver(sync); ro.observe(canvas); sync()
 
         const draw = (ts: number) => {
             if (!running) return
             const dpr = window.devicePixelRatio || 1
             const W = canvas.width / dpr, H = canvas.height / dpr
-            const { ox, oy, zoom } = viewRef.current
-            const { pts: allPts, focalLabel: fl, focalAttitude: fa, history: hist, hasVelocity: hv, highlightId: hlId } = stateRef.current
-            ctx.clearRect(0, 0, canvas.width, canvas.height)
-            ctx.save(); ctx.scale(dpr, dpr)
-            ctx.save(); ctx.translate(ox, oy); ctx.scale(zoom, zoom)
+            const { focal, neighbors } = stateRef.current
+            const { points } = buildNeighborhood(focal, neighbors)
+            const nbrs = points.filter(p => !p.isFocal)
+            const f = points.find(p => p.isFocal)
+            const fpx = f?.px ?? 0, fpy = f?.py ?? 0
+            const maxD = Math.max(1, ...nbrs.map(p => Math.sqrt((p.px - fpx) ** 2 + (p.py - fpy) ** 2)))
             const cx = W / 2, cy = H / 2
+            const SCALE = (Math.min(W, H) / 2 - 28) / maxD
+            const toN = (px: number, py: number) => ({ nx: cx + (px - fpx) * SCALE, ny: cy - (py - fpy) * SCALE })
 
-            if (fa) {
-                // MODE B — KERNEL SPACE
-                const allKPts = [{ x: fa.x, y: fa.y }, ...hist]
-                const maxDist = Math.max(2.5, ...allKPts.map(p => Math.sqrt(p.x ** 2 + p.y ** 2)))
-                const SPX = Math.min(100, (Math.min(W, H) * 0.40) / maxDist)
-                const toK = (kx: number, ky: number) => ({ px: cx + kx * SPX, py: cy - ky * SPX })
-                ctx.restore(); ctx.restore()
-                ctx.save(); ctx.scale(dpr, dpr)
-                const bg = ctx.createRadialGradient(cx + ox, cy + oy, 0, cx, cy, W * 0.9)
-                bg.addColorStop(0, BG2); bg.addColorStop(1, BG)
-                ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H)
-                const gg = ctx.createRadialGradient(cx + ox, cy + oy, 0, cx + ox, cy + oy, SPX * zoom * 1.1)
-                gg.addColorStop(0, 'rgba(0,255,231,0.05)'); gg.addColorStop(1, 'rgba(0,255,231,0)')
-                ctx.fillStyle = gg; ctx.fillRect(0, 0, W, H)
-                ctx.restore()
-                ctx.save(); ctx.scale(dpr, dpr); ctx.translate(ox, oy); ctx.scale(zoom, zoom)
-                ctx.setLineDash([3 / zoom, 9 / zoom])
-                ;[1, 2, 3].forEach((s, i) => {
-                    ctx.beginPath(); ctx.arc(cx, cy, s * SPX, 0, Math.PI * 2)
-                    ctx.strokeStyle = `rgba(255,255,255,${0.07 - i * 0.016})`
-                    ctx.lineWidth = 0.8 / zoom; ctx.stroke()
-                })
-                ctx.setLineDash([])
-                ctx.restore(); ctx.restore()
-                ctx.save(); ctx.scale(dpr, dpr)
-                ;[1, 2, 3].forEach(s => {
-                    const sx = cx + ox + s * SPX * zoom, sy = cy + oy
-                    ctx.fillStyle = 'rgba(255,255,255,0.1)'; ctx.font = `10px ${MONO}`
-                    ctx.textAlign = 'left'; ctx.fillText(`${s}σ`, sx + 4, sy - 3)
-                })
-                ctx.restore()
-                ctx.save(); ctx.scale(dpr, dpr); ctx.translate(ox, oy); ctx.scale(zoom, zoom)
-                if (hv) {
-                    const axLen = SPX * 3.0
-                    ctx.beginPath(); ctx.moveTo(cx - axLen, cy); ctx.lineTo(cx + axLen, cy)
-                    ctx.strokeStyle = 'rgba(0,255,231,0.09)'; ctx.lineWidth = 1 / zoom; ctx.stroke()
-                    ctx.beginPath(); ctx.moveTo(cx + axLen, cy)
-                    ctx.lineTo(cx + axLen - 9 / zoom, cy - 4 / zoom)
-                    ctx.lineTo(cx + axLen - 9 / zoom, cy + 4 / zoom)
-                    ctx.closePath(); ctx.fillStyle = 'rgba(0,255,231,0.15)'; ctx.fill()
-                }
-                if (hist.length > 1) {
-                    ctx.beginPath()
-                    hist.forEach(({ x, y }, i) => {
-                        const { px, py } = toK(x, y); i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py)
-                    })
-                    ctx.strokeStyle = 'rgba(167,139,250,0.11)'; ctx.lineWidth = 1 / zoom; ctx.stroke()
-                }
-                hist.forEach(({ x, y }, i) => {
-                    const age = i / hist.length
-                    const { px, py } = toK(x, y)
-                    ctx.beginPath(); ctx.arc(px, py, Math.max(1, (4.5 - age * 3) / zoom), 0, Math.PI * 2)
-                    ctx.fillStyle = `rgba(167,139,250,${(1 - age) * 0.5})`; ctx.fill()
-                })
-                const { px: fx, py: fy } = toK(fa.x, fa.y)
-                ctx.shadowColor = fa.color; ctx.shadowBlur = 18 / zoom
-                ctx.beginPath(); ctx.arc(fx, fy, 7 / zoom, 0, Math.PI * 2)
-                ctx.fillStyle = fa.color; ctx.fill(); ctx.shadowBlur = 0
-                ctx.font = `bold ${11 / zoom}px ${SANS}`; ctx.textAlign = 'center'
-                ctx.fillStyle = fa.color
-                ctx.fillText(fl.length > 22 ? fl.slice(0, 20) + '…' : fl, fx, fy - 14 / zoom)
-                ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(fx, fy)
-                ctx.strokeStyle = `${fa.color}25`; ctx.lineWidth = 0.8 / zoom; ctx.stroke()
-                ctx.shadowColor = TEAL; ctx.shadowBlur = 12 / zoom
-                ctx.beginPath(); ctx.arc(cx, cy, 5 / zoom, 0, Math.PI * 2)
-                ctx.fillStyle = TEAL; ctx.fill(); ctx.shadowBlur = 0
-                const pulse = Math.sin(ts * 0.0018) * 0.5 + 0.5
-                ctx.restore(); ctx.restore()
-                ctx.save(); ctx.scale(dpr, dpr)
-                const mcx = cx + ox, mcy = cy + oy
-                ctx.beginPath(); ctx.arc(mcx, mcy, (10 + pulse * 7) * Math.min(zoom, 2), 0, Math.PI * 2)
-                ctx.strokeStyle = `rgba(0,255,231,${0.18 + pulse * 0.14})`; ctx.lineWidth = 1.5; ctx.stroke()
-                ctx.font = `11px ${MONO}`; ctx.fillStyle = 'rgba(0,255,231,0.45)'
-                ctx.textAlign = 'center'; ctx.fillText('μ', mcx, mcy + 20)
-                ctx.font = `9px ${MONO}`; ctx.fillStyle = 'rgba(0,255,231,0.2)'
-                ctx.fillText('your taste', mcx, mcy + 31)
-                if (hv) {
-                    const axLen = SPX * 3.0 * zoom
-                    ctx.font = `9px ${MONO}`; ctx.fillStyle = 'rgba(0,255,231,0.2)'
-                    ctx.textAlign = 'right'; ctx.fillText('toward →', mcx + axLen - 2, mcy - 8)
-                    ctx.textAlign = 'left'; ctx.fillText('← against', mcx - axLen + 2, mcy - 8)
-                }
-                ctx.restore()
-            } else {
-                // MODE A — NEIGHBOURHOOD
-                const nbrs  = allPts.filter(p => !p.isFocal)
-                const focal = allPts.find(p => p.isFocal)
-                if (!nbrs.length) { ctx.restore(); ctx.restore(); rafRef.current = requestAnimationFrame(draw); return }
-                const fpx = focal?.px ?? 0, fpy = focal?.py ?? 0
-                const maxD = Math.max(1, ...nbrs.map(p => Math.sqrt((p.px - fpx) ** 2 + (p.py - fpy) ** 2)))
-                const PAD = 56, SCALE = (Math.min(W, H) / 2 - PAD) / maxD
-                const toN = (px: number, py: number) => ({ nx: cx + (px - fpx) * SCALE, ny: cy - (py - fpy) * SCALE })
-                ctx.restore(); ctx.restore()
-                ctx.save(); ctx.scale(dpr, dpr)
-                const bg = ctx.createRadialGradient(cx, cy, 0, cx, cy, W * 0.8)
-                bg.addColorStop(0, BG2); bg.addColorStop(1, BG)
-                ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H)
-                const gx = cx + ox, gy = cy + oy
-                const fg2 = ctx.createRadialGradient(gx, gy, 0, gx, gy, SCALE * maxD * 0.5 * zoom)
-                fg2.addColorStop(0, 'rgba(0,255,231,0.08)'); fg2.addColorStop(1, 'rgba(0,255,231,0)')
-                ctx.fillStyle = fg2; ctx.fillRect(0, 0, W, H)
-                ctx.restore()
-                ctx.save(); ctx.scale(dpr, dpr); ctx.translate(ox, oy); ctx.scale(zoom, zoom)
-                const mouse = mousePosRef.current
-                let hoveredPt: ProjectedPoint | null = null
-                if (mouse) {
-                    let bestD = 22
-                    nbrs.forEach(p => {
-                        const { nx, ny } = toN(p.px, p.py)
-                        const sx2 = ox + nx * zoom, sy2 = oy + ny * zoom
-                        const d = Math.sqrt((sx2 - mouse.x) ** 2 + (sy2 - mouse.y) ** 2)
-                        if (d < bestD) { bestD = d; hoveredPt = p }
-                    })
-                }
-                const sorted = [...nbrs].sort((a, b) => b.distance - a.distance)
-                sorted.forEach(p => {
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+            const bg = ctx.createRadialGradient(cx, cy, 0, cx, cy, W * 0.7)
+            bg.addColorStop(0, BG2); bg.addColorStop(1, BG)
+            ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H)
+
+            // hover detection
+            const mouse = mouseRef.current
+            let hovered: { pt: ProjectedPoint; nx: number; ny: number } | null = null
+            if (mouse) {
+                let best = 16
+                for (const p of nbrs) {
                     const { nx, ny } = toN(p.px, p.py)
-                    const isHl = p.id === hlId, isHov = hoveredPt !== null && (hoveredPt as ProjectedPoint).id === p.id
-                    const col = isHl ? VIOLET : genreColor(p.genres?.[0] ?? null)
-                    const normD = Math.min(1, p.distance / (maxD || 1))
-                    const baseR = (7 - normD * 4) / zoom
-                    const r = isHov ? baseR * 1.9 : isHl ? baseR * 1.4 : baseR
-                    const baseOp = 0.55 + (1 - normD) * 0.40
-                    const opacity = isHov ? 1.0 : isHl ? 0.92 : baseOp
-                    if (isHov) {
-                        ctx.beginPath(); ctx.arc(nx, ny, r * 2.2, 0, Math.PI * 2)
-                        ctx.fillStyle = col + '22'; ctx.fill()
-                        ctx.beginPath(); ctx.arc(nx, ny, r * 1.5, 0, Math.PI * 2)
-                        ctx.fillStyle = col + '44'; ctx.fill()
-                        ctx.shadowColor = col; ctx.shadowBlur = 18 / zoom
-                    } else if (hoveredPt) { ctx.globalAlpha = 0.3 }
-                    ctx.beginPath(); ctx.arc(nx, ny, r, 0, Math.PI * 2)
-                    ctx.fillStyle = col + Math.round(opacity * 255).toString(16).padStart(2, '0')
-                    ctx.fill(); ctx.shadowBlur = 0; ctx.globalAlpha = 1
-                })
-                const pulse = Math.sin(ts * 0.0022) * 0.5 + 0.5
-                ;[28, 18].forEach((r, i) => {
-                    ctx.beginPath(); ctx.arc(cx, cy, (r + pulse * 6) / zoom, 0, Math.PI * 2)
-                    ctx.fillStyle = `rgba(0,255,231,${[0.04, 0.09][i] + pulse * 0.04})`; ctx.fill()
-                })
-                ctx.shadowColor = TEAL; ctx.shadowBlur = (16 + pulse * 10) / zoom
-                ctx.beginPath(); ctx.arc(cx, cy, 9 / zoom, 0, Math.PI * 2)
-                ctx.fillStyle = TEAL; ctx.fill(); ctx.shadowBlur = 0
-                ctx.font = `bold ${11 / zoom}px ${MONO}`; ctx.textAlign = 'center'
-                ctx.fillStyle = TEAL; ctx.shadowColor = BG; ctx.shadowBlur = 6 / zoom
-                ctx.fillText(fl.length > 20 ? fl.slice(0, 18) + '…' : fl, cx, cy - 17 / zoom)
-                ctx.shadowBlur = 0
-                ctx.restore(); ctx.restore()
-                ctx.save(); ctx.scale(dpr, dpr)
-                if (hoveredPt) {
-                    const hp = hoveredPt as ProjectedPoint
-                    const col = hp.id === hlId ? VIOLET : genreColor(hp.genres?.[0] ?? null)
-                    const mx2 = mouse!.x, my2 = mouse!.y
-                    const cw = 190, ch = 58
-                    const cx2 = Math.min(W - cw - 8, Math.max(8, mx2 + 14))
-                    const cy2 = my2 - ch - 10 < 8 ? my2 + 14 : my2 - ch - 10
-                    ctx.fillStyle = 'rgba(5,3,9,0.88)'; ctx.fillRect(cx2, cy2, cw, ch)
-                    ctx.strokeStyle = col + '55'; ctx.lineWidth = 1; ctx.strokeRect(cx2, cy2, cw, ch)
-                    ctx.fillStyle = col; ctx.fillRect(cx2, cy2, 3, ch)
-                    ctx.fillStyle = FG; ctx.font = `600 11px ${SANS}`; ctx.textAlign = 'left'
-                    ctx.fillText(hp.artist.length > 22 ? hp.artist.slice(0, 20) + '…' : hp.artist, cx2 + 10, cy2 + 18)
-                    ctx.fillStyle = FG3; ctx.font = `10px ${SANS}`
-                    ctx.fillText(hp.title?.length > 24 ? hp.title.slice(0, 22) + '…' : (hp.title ?? ''), cx2 + 10, cy2 + 33)
-                    ctx.fillStyle = col; ctx.font = `9px ${MONO}`
-                    ctx.fillText(soundSimilarity(hp.distance), cx2 + 10, cy2 + 48)
-                    if (hp.genres?.[0]) {
-                        const gw = ctx.measureText(hp.genres[0]).width + 14
-                        ctx.fillStyle = col + '22'; ctx.fillRect(cx2 + cw - gw - 8, cy2 + 38, gw, 14)
-                        ctx.fillStyle = col; ctx.font = `8px ${MONO}`; ctx.textAlign = 'right'
-                        ctx.fillText(hp.genres[0], cx2 + cw - 10, cy2 + 48)
-                    }
+                    const d = Math.hypot(nx - mouse.x, ny - mouse.y)
+                    if (d < best) { best = d; hovered = { pt: p, nx, ny } }
                 }
-                ctx.textAlign = 'left'; ctx.font = `9px ${MONO}`
-                ctx.fillStyle = 'rgba(255,255,255,0.08)'
-                ctx.fillText('hover to explore · scroll to zoom · drag to pan', 12, H - 12)
-                ctx.restore()
             }
+            hoverRef.current = hovered
+
+            for (const p of [...nbrs].sort((a, b) => b.distance - a.distance)) {
+                const { nx, ny } = toN(p.px, p.py)
+                const isHov = hovered?.pt.id === p.id
+                const col = genreColor(p.genres?.[0] ?? null)
+                const normD = Math.min(1, p.distance / maxD)
+                const r = (isHov ? 6 : 4 - normD * 1.5)
+                ctx.globalAlpha = hovered && !isHov ? 0.35 : 0.55 + (1 - normD) * 0.4
+                if (isHov) { ctx.shadowColor = col; ctx.shadowBlur = 14 }
+                ctx.beginPath(); ctx.arc(nx, ny, r, 0, Math.PI * 2); ctx.fillStyle = col; ctx.fill()
+                ctx.shadowBlur = 0; ctx.globalAlpha = 1
+            }
+
+            const pulse = Math.sin(ts * 0.0022) * 0.5 + 0.5
+            ctx.beginPath(); ctx.arc(cx, cy, (16 + pulse * 5), 0, Math.PI * 2)
+            ctx.fillStyle = `rgba(0,255,231,${0.05 + pulse * 0.04})`; ctx.fill()
+            ctx.shadowColor = TEAL; ctx.shadowBlur = 12
+            ctx.beginPath(); ctx.arc(cx, cy, 6, 0, Math.PI * 2); ctx.fillStyle = TEAL; ctx.fill(); ctx.shadowBlur = 0
+
+            if (hovered) {
+                const { pt, nx, ny } = hovered
+                const label = `${pt.artist} — ${pt.title ?? ''}`
+                ctx.font = `11px ${SANS}`
+                const w = Math.min(260, ctx.measureText(label).width + 18)
+                const bx = Math.min(W - w - 6, Math.max(6, nx + 10)), by = Math.max(6, ny - 30)
+                ctx.fillStyle = 'rgba(5,3,9,0.92)'; ctx.fillRect(bx, by, w, 24)
+                ctx.strokeStyle = genreColor(pt.genres?.[0] ?? null) + '66'; ctx.strokeRect(bx, by, w, 24)
+                ctx.fillStyle = FG; ctx.textAlign = 'left'
+                ctx.fillText(label.length > 36 ? label.slice(0, 34) + '…' : label, bx + 8, by + 16)
+            }
+            ctx.font = `9px ${MONO}`; ctx.fillStyle = 'rgba(255,255,255,0.1)'; ctx.textAlign = 'left'
+            ctx.fillText('hover to read · click to open', 10, H - 10)
             rafRef.current = requestAnimationFrame(draw)
         }
-
-        const handleWheel = (e: WheelEvent) => {
-            e.preventDefault(); e.stopPropagation()
-            const rect = canvas.getBoundingClientRect()
-            const mx = e.clientX - rect.left, my = e.clientY - rect.top
-            const { ox, oy, zoom } = viewRef.current
-            const nz = Math.max(0.25, Math.min(12, zoom * (e.deltaY > 0 ? 0.82 : 1.22)))
-            viewRef.current = { ox: mx - (mx - ox) * (nz / zoom), oy: my - (my - oy) * (nz / zoom), zoom: nz }
-        }
-        canvas.addEventListener('wheel', handleWheel, { passive: false })
         rafRef.current = requestAnimationFrame(draw)
-        return () => { running = false; cancelAnimationFrame(rafRef.current); canvas.removeEventListener('wheel', handleWheel) }
+        return () => { running = false; cancelAnimationFrame(rafRef.current); ro.disconnect() }
     }, [])
 
     return (
-        <canvas ref={canvasRef} onPointerDown={onPointerDown} onPointerMove={onPointerMove}
-            onPointerUp={onPointerUp} onPointerLeave={onPointerLeave}
-            style={{ display: 'block', width: '100%', height: '100%', cursor, touchAction: 'none' }}
-            aria-label={focalAttitude ? 'Kernel space' : 'Sound neighbourhood'}
-        />
+        <canvas ref={canvasRef} onPointerMove={onMove} onPointerLeave={onLeave} onClick={onClick}
+            style={{ display: 'block', width: '100%', height: 320, cursor: 'pointer', border: `1px solid ${BORDER2}` }}
+            aria-label="Sound map" />
     )
 }
 
-// ── Audio preview hook ────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Track article — the Wikipedia page
+// ─────────────────────────────────────────────────────────────────────────────
 
-function useAudioPreview(previewUrl: string | null) {
-    const audioRef = useRef<HTMLAudioElement | null>(null)
-    const [playing, setPlaying]   = useState(false)
-    const [progress, setProgress] = useState(0)
-    useEffect(() => { audioRef.current?.pause(); audioRef.current = null; setPlaying(false); setProgress(0) }, [previewUrl])
-    useEffect(() => () => { audioRef.current?.pause() }, [])
-    const toggle = useCallback(() => {
-        if (!previewUrl) return
-        if (!audioRef.current) {
-            const a = new Audio(previewUrl)
-            a.addEventListener('timeupdate', () => setProgress(a.currentTime / (a.duration || 30)))
-            a.addEventListener('ended', () => { setPlaying(false); setProgress(0) })
-            audioRef.current = a
-        }
-        if (playing) { audioRef.current.pause(); setPlaying(false) }
-        else { audioRef.current.play(); setPlaying(true) }
-    }, [previewUrl, playing])
-    return { playing, progress, toggle }
+interface TrackArticleData {
+    focal: TrackNeighborData
+    neighbors: TrackNeighborData[]   // sorted nearest-first
 }
 
-// ── Article state ─────────────────────────────────────────────────────────────
-
-interface ArticleState {
-    focal: TrackNeighborData; nbrs: TrackNeighborData[]
-    pts: ProjectedPoint[]; metrics: NeighborhoodMetrics; query: string
+async function resolveTrackArticle(artist: string, title: string, embOverride?: Float32Array): Promise<TrackArticleData> {
+    const emb = embOverride && embOverride.length ? embOverride : await apiEmbed(`${artist} – ${title}`)
+    const hits = await apiSearchVector(emb, N_NEIGHBORS + 1)
+    if (!hits.length) throw new Error('Track not found.')
+    const focal = chromaToNeighbor(hits[0], 0)
+    // keep the chosen identity even if the nearest record drifts slightly
+    focal.artist = artist || focal.artist
+    focal.title = title || focal.title
+    const neighbors = hits.slice(1)
+        .filter(h => h.id !== hits[0].id)
+        .slice(0, N_NEIGHBORS)
+        .map(h => chromaToNeighbor(h, Math.sqrt(h.distance)))
+        .sort((a, b) => a.distance - b.distance)
+    return { focal, neighbors }
 }
 
-interface Props {
-    initialQuery?:    string
-    onQueryConsumed?: () => void
-    kernelState?:     KernelState
-    playHistory?:     TrackNeighborData[]
-    onPlayTrack?:     (track: TrackNeighborData, previewUrl?: string) => void
+function TrackArticle({ view, kernelState, onNavigate, onPlayTrack }: {
+    view: Extract<View, { kind: 'track' }>
+    kernelState?: KernelState
+    onNavigate: (v: View) => void
+    onPlayTrack?: (t: TrackNeighborData, previewUrl?: string) => void
+}) {
+    const [data, setData] = useState<TrackArticleData | null>(null)
+    const [loading, setLoading] = useState(true)
+    const [error, setError] = useState<string | null>(null)
+    const [mapOpen, setMapOpen] = useState(false)
+
+    useEffect(() => {
+        let live = true
+        setLoading(true); setError(null); setMapOpen(false)
+        resolveTrackArticle(view.artist, view.title, view.embedding)
+            .then(d => { if (live) setData(d) })
+            .catch(e => { if (live) setError(e?.message ?? 'Failed to load') })
+            .finally(() => { if (live) setLoading(false) })
+        return () => { live = false }
+    }, [view.artist, view.title])
+
+    const focal = data?.focal
+    const itunes = useItunesData(focal?.artist ?? '', focal?.title ?? '')
+    const mbTrack = useMBRecording(focal?.artist ?? '', focal?.title ?? '')
+    const mbArtist = useMBArtist(focal?.artist ?? '')
+    const wiki = useWikipediaData(focal?.artist ?? '', focal?.title ?? '')
+    const preview = useAudioPreview(itunes?.previewUrl ?? null)
+
+    const attitude = useMemo(
+        () => (focal && kernelState ? computeAttitude(focal.embedding, kernelState) : null),
+        [focal, kernelState],
+    )
+
+    const allMBTags = useMemo(() => {
+        if (!mbTrack?.mbTags.length && !mbArtist?.mbTags.length) return []
+        const stored = new Set([...(focal?.genres ?? []), ...(focal?.moods ?? [])].map(t => t.toLowerCase()))
+        return [...new Set([...(mbTrack?.mbTags ?? []), ...(mbArtist?.mbTags ?? [])])]
+            .filter(t => !stored.has(t.toLowerCase())).slice(0, 8)
+    }, [mbTrack, mbArtist, focal])
+
+    const displayDuration = fmtDuration((focal?.durationMs ?? 0) > 0 ? focal!.durationMs : itunes?.durationMs ?? null)
+    const displayIsrc = focal?.isrc || mbTrack?.isrcs[0] || null
+    const displayRelease = mbTrack?.releaseDate ?? itunes?.releaseDate ?? itunes?.releaseYear ?? null
+
+    if (loading) return <Spinner label="Opening article" />
+    if (error || !focal) {
+        return (
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 10 }}>
+                <div style={{ fontFamily: MONO, fontSize: 11, color: ACCENT }}>{error ?? 'Not found'}</div>
+            </div>
+        )
+    }
+
+    const semanticLink = (term: string) => onNavigate({ kind: 'results', query: term, mode: 'semantic' })
+
+    return (
+        <div style={{ flex: 1, overflowY: 'auto', background: BG }}>
+            {/* preview progress */}
+            {preview.playing && (
+                <div style={{ position: 'sticky', top: 0, height: 2, background: BG2, zIndex: 5 }}>
+                    <div style={{ height: '100%', width: `${preview.progress * 100}%`, background: ACCENT, transition: 'width .5s linear' }} />
+                </div>
+            )}
+
+            <div style={{ maxWidth: 1040, margin: '0 auto', padding: '28px 28px 90px', display: 'flex', gap: 36, alignItems: 'flex-start' }}>
+
+                {/* ── Reading column ─────────────────────────────────────────── */}
+                <article style={{ flex: 1, maxWidth: READING_MAX, minWidth: 0 }}>
+                    {/* Title block */}
+                    <div style={{ fontFamily: MONO, fontSize: 9, color: FG4, letterSpacing: '0.2em', textTransform: 'uppercase', marginBottom: 6 }}>Track</div>
+                    <h1 style={{ fontFamily: DISP, fontSize: 56, color: FG, letterSpacing: '0.01em', lineHeight: 0.98, margin: '0 0 8px' }}>{focal.title}</h1>
+                    <div style={{ fontFamily: SANS, fontSize: 16, color: FG2, marginBottom: 18 }}>
+                        by <WikiLink onClick={() => onNavigate({ kind: 'artist', name: focal.artist })} color={LINK} weight={600}>{focal.artist}</WikiLink>
+                        {itunes?.albumName && <> · from <span style={{ color: FG3 }}>{itunes.albumName}</span></>}
+                        {displayRelease && <> · {String(displayRelease).slice(0, 4)}</>}
+                    </div>
+
+                    {/* Actions */}
+                    <div style={{ display: 'flex', gap: 8, marginBottom: 26, flexWrap: 'wrap' }}>
+                        {itunes?.previewUrl && (
+                            <button onClick={preview.toggle}
+                                style={{ background: preview.playing ? ACCENT : 'transparent', border: `1px solid ${preview.playing ? ACCENT : BORDER}`, color: preview.playing ? '#fff' : FG2, fontFamily: MONO, fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', padding: '7px 14px', cursor: 'pointer' }}>
+                                {preview.playing ? '⏸ preview' : '▶ preview'}
+                            </button>
+                        )}
+                        {onPlayTrack && (
+                            <button onClick={() => onPlayTrack(focal, itunes?.previewUrl ?? undefined)}
+                                style={{ background: 'transparent', border: `1px solid ${BORDER}`, color: FG2, fontFamily: MONO, fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', padding: '7px 14px', cursor: 'pointer' }}>
+                                play in app
+                            </button>
+                        )}
+                        <button onClick={() => setMapOpen(o => !o)}
+                            style={{ background: mapOpen ? GLASS : 'transparent', border: `1px solid ${BORDER}`, color: mapOpen ? TEAL : FG3, fontFamily: MONO, fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', padding: '7px 14px', cursor: 'pointer' }}>
+                            {mapOpen ? 'hide sound map' : 'show sound map'}
+                        </button>
+                    </div>
+
+                    {/* Optional, navigable sound map */}
+                    {mapOpen && data && (
+                        <div style={{ marginBottom: 28 }}>
+                            <MiniSoundMap focal={focal} neighbors={data.neighbors}
+                                onPick={n => onNavigate({ kind: 'track', artist: n.artist, title: n.title, embedding: n.embedding })} />
+                        </div>
+                    )}
+
+                    {/* Kernel attitude — one compact line */}
+                    {attitude && (
+                        <div style={{ borderLeft: `3px solid ${attitude.color}`, background: GLASS, padding: '12px 16px', marginBottom: 28 }}>
+                            <span style={{ fontFamily: DISP, fontSize: 18, color: attitude.color, letterSpacing: '0.03em', marginRight: 10 }}>{ZONE_TITLE[attitude.zone]}.</span>
+                            <span style={{ fontFamily: SANS, fontSize: 14, color: FG2, lineHeight: 1.6 }}>
+                                Relative to your taste, this track is {attitude.label}.
+                            </span>
+                            <div style={{ fontFamily: MONO, fontSize: 9, color: FG4, marginTop: 6 }}>
+                                {attitude.distNorm.toFixed(2)}σ from centre · alignment {attitude.alignment > 0 ? '+' : ''}{attitude.alignment.toFixed(2)}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* About */}
+                    {wiki?.extract && (
+                        <section style={{ marginBottom: 30 }}>
+                            <h2 style={{ fontFamily: DISP, fontSize: 22, color: FG, letterSpacing: '0.03em', margin: '0 0 10px', paddingBottom: 6, borderBottom: `1px solid ${BORDER2}` }}>
+                                {wiki.isTrackPage ? 'About this track' : `About ${focal.artist}`}
+                            </h2>
+                            <p style={{ fontFamily: SANS, fontSize: 15, color: FG2, lineHeight: 1.75, margin: 0 }}>{wiki.extract}</p>
+                            {wiki.url && (
+                                <a href={wiki.url} target="_blank" rel="noopener noreferrer"
+                                    style={{ display: 'inline-block', marginTop: 8, fontFamily: MONO, fontSize: 9, color: FG4, letterSpacing: '0.1em', textTransform: 'uppercase', textDecoration: 'none' }}>
+                                    Read on Wikipedia →
+                                </a>
+                            )}
+                        </section>
+                    )}
+
+                    {/* Sound profile — every tag is a semantic link */}
+                    {(focal.genres.length + focal.moods.length + focal.themes.length + focal.contexts.length) > 0 && (
+                        <section style={{ marginBottom: 30 }}>
+                            <h2 style={{ fontFamily: DISP, fontSize: 22, color: FG, letterSpacing: '0.03em', margin: '0 0 12px', paddingBottom: 6, borderBottom: `1px solid ${BORDER2}` }}>Sound profile</h2>
+                            {[
+                                { label: 'Genre', tags: focal.genres, colorFn: (t: string) => genreColor(t) },
+                                { label: 'Mood', tags: focal.moods, colorFn: () => CYAN },
+                                { label: 'Theme', tags: focal.themes, colorFn: () => SUCCESS },
+                                { label: 'Context', tags: focal.contexts, colorFn: () => YELLOW },
+                            ].filter(r => r.tags.length).map(r => (
+                                <div key={r.label} style={{ display: 'flex', gap: 8, alignItems: 'baseline', marginBottom: 8 }}>
+                                    <span style={{ fontFamily: MONO, fontSize: 8, color: FG4, letterSpacing: '0.12em', textTransform: 'uppercase', width: 56, flexShrink: 0 }}>{r.label}</span>
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                                        {r.tags.map(t => <TagLink key={t} text={t} color={r.colorFn(t)} onClick={() => semanticLink(t)} />)}
+                                    </div>
+                                </div>
+                            ))}
+                            {allMBTags.length > 0 && (
+                                <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', marginTop: 4 }}>
+                                    <span style={{ fontFamily: MONO, fontSize: 8, color: FG4, letterSpacing: '0.12em', textTransform: 'uppercase', width: 56, flexShrink: 0 }}>Community</span>
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                                        {allMBTags.map(t => <TagLink key={t} text={t} color={FG3} onClick={() => semanticLink(t)} />)}
+                                    </div>
+                                </div>
+                            )}
+                        </section>
+                    )}
+
+                    {/* See also — the rabbit hole */}
+                    {data && data.neighbors.length > 0 && (
+                        <section>
+                            <h2 style={{ fontFamily: DISP, fontSize: 22, color: FG, letterSpacing: '0.03em', margin: '0 0 4px', paddingBottom: 6, borderBottom: `1px solid ${BORDER2}` }}>See also</h2>
+                            <div style={{ fontFamily: MONO, fontSize: 9, color: FG4, letterSpacing: '0.06em', marginBottom: 10 }}>Tracks that sound nearest to this one</div>
+                            <ol style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+                                {data.neighbors.slice(0, 18).map((n, i) => {
+                                    const c = genreColor(n.genres?.[0] ?? null)
+                                    return (
+                                        <li key={n.id}
+                                            onClick={() => onNavigate({ kind: 'track', artist: n.artist, title: n.title, embedding: n.embedding })}
+                                            style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '8px 8px', cursor: 'pointer', borderRadius: 2, transition: 'background .08s' }}
+                                            onMouseEnter={e => (e.currentTarget.style.background = GLASS)}
+                                            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                                            <span style={{ fontFamily: MONO, fontSize: 9, color: FG4, width: 18, textAlign: 'right', flexShrink: 0 }}>{i + 1}</span>
+                                            <div style={{ width: 6, height: 6, borderRadius: '50%', background: c, flexShrink: 0 }} />
+                                            <div style={{ flex: 1, minWidth: 0 }}>
+                                                <div style={{ fontFamily: SANS, fontSize: 13, color: LINK, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{n.title}</div>
+                                                <div style={{ fontFamily: MONO, fontSize: 9, color: FG4 }}>{n.artist}</div>
+                                            </div>
+                                            <span style={{ fontFamily: MONO, fontSize: 8, color: FG4, flexShrink: 0 }}>{soundSimilarity(n.distance).split(' ')[0]}</span>
+                                        </li>
+                                    )
+                                })}
+                            </ol>
+                        </section>
+                    )}
+                </article>
+
+                {/* ── Infobox rail (Wikipedia-style) ─────────────────────────── */}
+                <aside style={{ width: 268, flexShrink: 0, position: 'sticky', top: 16 }}>
+                    <div style={{ border: `1px solid ${BORDER}`, background: BG1 }}>
+                        {/* art */}
+                        <div style={{ position: 'relative', width: '100%', aspectRatio: '1', overflow: 'hidden' }}>
+                            {itunes?.artworkUrl ? (
+                                <img src={itunes.artworkUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                            ) : (
+                                <div style={{ width: '100%', height: '100%', background: BG2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <span style={{ fontFamily: DISP, fontSize: 72, color: FG4 }}>{focal.title.slice(0, 1)}</span>
+                                </div>
+                            )}
+                        </div>
+                        {/* facts */}
+                        <div style={{ padding: '12px 14px' }}>
+                            <div style={{ fontFamily: DISP, fontSize: 18, color: FG, letterSpacing: '0.03em', lineHeight: 1.05, marginBottom: 2 }}>{focal.title}</div>
+                            <div style={{ fontFamily: MONO, fontSize: 9, color: ACCENT, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 10 }}>{focal.artist}</div>
+                            <div>
+                                {itunes?.albumName && <KVRow label="Album">{itunes.albumName}</KVRow>}
+                                {itunes?.trackNumber && itunes.trackCount && <KVRow label="Track">{itunes.trackNumber} of {itunes.trackCount}</KVRow>}
+                                {displayRelease && <KVRow label="Released">{displayRelease}</KVRow>}
+                                {displayDuration && <KVRow label="Length">{displayDuration}</KVRow>}
+                                {itunes?.primaryGenre && <KVRow label="iTunes genre"><span style={{ color: CYAN }}>{itunes.primaryGenre}</span></KVRow>}
+                                {mbTrack?.label && <KVRow label="Label">{mbTrack.label}</KVRow>}
+                                {mbTrack?.country && <KVRow label="Country">{mbTrack.country}</KVRow>}
+                                {displayIsrc && <KVRow label="ISRC"><code style={{ letterSpacing: '0.05em' }}>{displayIsrc}</code></KVRow>}
+                                {itunes?.explicit && <KVRow label="Advisory"><span style={{ color: YELLOW }}>Explicit</span></KVRow>}
+                            </div>
+                            {/* links out */}
+                            <div style={{ display: 'flex', gap: 12, marginTop: 12, flexWrap: 'wrap' }}>
+                                {mbTrack?.mbid && (
+                                    <a href={`https://musicbrainz.org/recording/${mbTrack.mbid}`} target="_blank" rel="noopener noreferrer"
+                                        style={{ fontFamily: MONO, fontSize: 9, color: CYAN, textDecoration: 'none' }}>MusicBrainz ↗</a>
+                                )}
+                                {itunes?.trackUrl && (
+                                    <a href={itunes.trackUrl} target="_blank" rel="noopener noreferrer"
+                                        style={{ fontFamily: MONO, fontSize: 9, color: CYAN, textDecoration: 'none' }}>iTunes ↗</a>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* artist mini-card → links to the artist page */}
+                    <div style={{ marginTop: 14, border: `1px solid ${BORDER2}`, background: BG1, padding: '12px 14px' }}>
+                        <SectionLabel style={{ marginBottom: 8 }}>Explore</SectionLabel>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                            <WikiLink onClick={() => onNavigate({ kind: 'artist', name: focal.artist })} color={LINK} size={12}>More by {focal.artist} →</WikiLink>
+                            {focal.genres[0] && <WikiLink onClick={() => semanticLink(focal.genres[0])} color={genreColor(focal.genres[0])} size={12}>More {focal.genres[0]} →</WikiLink>}
+                            {mbTrack?.label && <WikiLink onClick={() => onNavigate({ kind: 'results', query: mbTrack.label!, mode: 'lexical' })} color={FG2} size={12}>{mbTrack.label} catalogue →</WikiLink>}
+                        </div>
+                    </div>
+                </aside>
+            </div>
+        </div>
+    )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Artist article — "all of them" lives here
+// ─────────────────────────────────────────────────────────────────────────────
+
+function ArtistArticle({ view, onNavigate }: { view: Extract<View, { kind: 'artist' }>; onNavigate: (v: View) => void }) {
+    const [tracks, setTracks] = useState<TextHit[]>([])
+    const [loading, setLoading] = useState(true)
+
+    useEffect(() => {
+        let live = true
+        setLoading(true)
+        apiSearchText(view.name, 120)
+            .then(({ hits }) => {
+                if (!live) return
+                const norm = view.name.toLowerCase()
+                const mine = hits.filter(h => (h.byArtist ?? '').toLowerCase() === norm)
+                setTracks((mine.length ? mine : hits).slice(0, 80))
+            })
+            .finally(() => { if (live) setLoading(false) })
+        return () => { live = false }
+    }, [view.name])
+
+    const mbArtist = useMBArtist(view.name)
+    const wiki = useWikipediaData(view.name)
+
+    const topGenres = useMemo(() => {
+        const c = new Map<string, number>()
+        for (const t of tracks) for (const g of t.genres ?? []) c.set(g, (c.get(g) ?? 0) + 1)
+        return [...c.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([g]) => g)
+    }, [tracks])
+
+    const semanticLink = (term: string) => onNavigate({ kind: 'results', query: term, mode: 'semantic' })
+
+    return (
+        <div style={{ flex: 1, overflowY: 'auto', background: BG }}>
+            <div style={{ maxWidth: 1040, margin: '0 auto', padding: '28px 28px 90px', display: 'flex', gap: 36, alignItems: 'flex-start' }}>
+                <article style={{ flex: 1, maxWidth: READING_MAX, minWidth: 0 }}>
+                    <div style={{ fontFamily: MONO, fontSize: 9, color: FG4, letterSpacing: '0.2em', textTransform: 'uppercase', marginBottom: 6 }}>
+                        Artist{mbArtist?.type ? ` · ${mbArtist.type}` : ''}
+                    </div>
+                    <h1 style={{ fontFamily: DISP, fontSize: 64, color: FG, letterSpacing: '0.01em', lineHeight: 0.96, margin: '0 0 14px' }}>{view.name}</h1>
+
+                    {wiki?.extract && (
+                        <section style={{ marginBottom: 30 }}>
+                            <p style={{ fontFamily: SANS, fontSize: 15, color: FG2, lineHeight: 1.75, margin: 0 }}>{wiki.extract}</p>
+                            {wiki.url && (
+                                <a href={wiki.url} target="_blank" rel="noopener noreferrer"
+                                    style={{ display: 'inline-block', marginTop: 8, fontFamily: MONO, fontSize: 9, color: FG4, letterSpacing: '0.1em', textTransform: 'uppercase', textDecoration: 'none' }}>
+                                    Read on Wikipedia →
+                                </a>
+                            )}
+                        </section>
+                    )}
+
+                    {topGenres.length > 0 && (
+                        <section style={{ marginBottom: 26 }}>
+                            <h2 style={{ fontFamily: DISP, fontSize: 20, color: FG, letterSpacing: '0.03em', margin: '0 0 10px', paddingBottom: 6, borderBottom: `1px solid ${BORDER2}` }}>Sounds in</h2>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                                {topGenres.map(g => <TagLink key={g} text={g} color={genreColor(g)} onClick={() => semanticLink(g)} />)}
+                            </div>
+                        </section>
+                    )}
+
+                    <section>
+                        <h2 style={{ fontFamily: DISP, fontSize: 22, color: FG, letterSpacing: '0.03em', margin: '0 0 4px', paddingBottom: 6, borderBottom: `1px solid ${BORDER2}` }}>
+                            In the catalogue
+                        </h2>
+                        <div style={{ fontFamily: MONO, fontSize: 9, color: FG4, marginBottom: 8 }}>{tracks.length} tracks</div>
+                        {loading ? <Spinner label="Loading tracks" /> : (
+                            <div>
+                                {tracks.map(t => {
+                                    const c = genreColor(t.genres?.[0] ?? null)
+                                    const dur = fmtDuration(t.durationMs)
+                                    return (
+                                        <div key={t.id}
+                                            onClick={() => onNavigate({ kind: 'track', artist: t.byArtist ?? view.name, title: t.title ?? '', embedding: t.embedding ? new Float32Array(t.embedding) : undefined })}
+                                            style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '8px 8px', cursor: 'pointer', borderRadius: 2, transition: 'background .08s' }}
+                                            onMouseEnter={e => (e.currentTarget.style.background = GLASS)}
+                                            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                                            <div style={{ width: 6, height: 6, borderRadius: '50%', background: c, flexShrink: 0 }} />
+                                            <span style={{ flex: 1, fontFamily: SANS, fontSize: 13, color: LINK }}>{t.title}</span>
+                                            {t.genres?.[0] && <span style={{ fontFamily: MONO, fontSize: 8, color: c, letterSpacing: '0.08em', textTransform: 'uppercase' }}>{t.genres[0]}</span>}
+                                            {dur && <span style={{ fontFamily: MONO, fontSize: 9, color: FG4, width: 36, textAlign: 'right' }}>{dur}</span>}
+                                        </div>
+                                    )
+                                })}
+                            </div>
+                        )}
+                    </section>
+                </article>
+
+                {/* Infobox */}
+                <aside style={{ width: 268, flexShrink: 0, position: 'sticky', top: 16 }}>
+                    <div style={{ border: `1px solid ${BORDER}`, background: BG1, padding: '14px 14px' }}>
+                        <div style={{ fontFamily: DISP, fontSize: 22, color: FG, letterSpacing: '0.03em', marginBottom: 10 }}>{view.name}</div>
+                        {(mbArtist?.area || mbArtist?.country) && <KVRow label="Origin">{[mbArtist.area, mbArtist.country].filter(Boolean).join(', ')}</KVRow>}
+                        {mbArtist?.type && <KVRow label="Type">{mbArtist.type}</KVRow>}
+                        {mbArtist?.beginYear && (
+                            <KVRow label="Active">
+                                {mbArtist.beginYear}{mbArtist.ended && mbArtist.endYear ? ` – ${mbArtist.endYear}` : ' – present'}
+                            </KVRow>
+                        )}
+                        {mbArtist?.disambig && <KVRow label="Note"><em style={{ color: FG4 }}>{mbArtist.disambig}</em></KVRow>}
+                        {mbArtist?.mbid && (
+                            <div style={{ marginTop: 12 }}>
+                                <a href={`https://musicbrainz.org/artist/${mbArtist.mbid}`} target="_blank" rel="noopener noreferrer"
+                                    style={{ fontFamily: MONO, fontSize: 9, color: CYAN, textDecoration: 'none' }}>MusicBrainz ↗</a>
+                            </div>
+                        )}
+                    </div>
+                </aside>
+            </div>
+        </div>
+    )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Home / landing
+// ─────────────────────────────────────────────────────────────────────────────
+
+function Home({ onNavigate }: { onNavigate: (v: View) => void }) {
+    const suggestions = ['Radiohead', 'shoegaze', 'late-night drive', 'deathcore', 'dreamy synths', 'lofi study']
+    return (
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 18, padding: 24 }}>
+            <div style={{ fontFamily: DISP, fontSize: 92, color: FG3, letterSpacing: '0.05em', lineHeight: 0.9 }}>SOND3R</div>
+            <div style={{ fontFamily: MONO, fontSize: 10, color: FG4, letterSpacing: '0.22em', textTransform: 'uppercase', textAlign: 'center' }}>
+                a music encyclopedia · search an artist, a track, or a vibe
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center', maxWidth: 520, marginTop: 6 }}>
+                {suggestions.map(s => (
+                    <span key={s} role="button" tabIndex={0}
+                        onClick={() => onNavigate({ kind: 'results', query: s, mode: s[0] === s[0].toUpperCase() ? 'lexical' : 'semantic' })}
+                        style={{ fontFamily: MONO, fontSize: 10, color: FG3, padding: '6px 12px', border: `1px solid ${BORDER}`, cursor: 'pointer' }}>
+                        {s}
+                    </span>
+                ))}
+            </div>
+        </div>
+    )
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Main component
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function TrackWikiView({ initialQuery, onQueryConsumed, kernelState, playHistory, onPlayTrack }: Props) {
-    const [query,    setQuery]    = useState('')
-    const [loading,  setLoading]  = useState(false)
-    const [error,    setError]    = useState<string | null>(null)
-    const [article,  setArticle]  = useState<ArticleState | null>(null)
-    const [navStack, setNavStack] = useState<ArticleState[]>([])
+interface Props {
+    initialQuery?: string
+    onQueryConsumed?: () => void
+    kernelState?: KernelState
+    onPlayTrack?: (track: TrackNeighborData, previewUrl?: string) => void
+    /** Accepted for v4 prop-compat; the trajectory trail moved off the page, so it's unused. */
+    playHistory?: TrackNeighborData[]
+}
 
-    const [compareQuery,   setCompareQuery]   = useState('')
-    const [compareLoading, setCompareLoading] = useState(false)
-    const [compareError,   setCompareError]   = useState<string | null>(null)
-    const [compareArticle, setCompareArticle] = useState<ArticleState | null>(null)
-    const [compareOpen,    setCompareOpen]    = useState(false)
+export function TrackWikiView({ initialQuery, onQueryConsumed, kernelState, onPlayTrack }: Props) {
+    const [view, setView] = useState<View>({ kind: 'home' })
+    const [stack, setStack] = useState<View[]>([])
+    const [searchBox, setSearchBox] = useState('')
 
-    const loadArticle = useCallback(async (q: string, embOverride?: Float32Array) => {
-        const t = q.trim(); if (!t) return null
-        const emb  = embOverride ?? await apiEmbed(t)
-        const hits = await apiSearchVector(emb, N_NEIGHBORS + 1)
-        if (!hits.length) throw new Error('Track not found. Try "Artist – Title".')
-        const focal = toNeighborData(hits[0], 0)
-        const nbrs  = hits.slice(1).filter(h => h.id !== hits[0].id).slice(0, N_NEIGHBORS).map(h => toNeighborData(h, Math.sqrt(h.distance)))
-        const { points, metrics } = buildNeighborhood(focal, nbrs)
-        return { focal, nbrs, pts: points, metrics, query: t } as ArticleState
+    const navigate = useCallback((next: View) => {
+        setStack(s => [...s, view])
+        setView(next)
+        if (next.kind === 'results') setSearchBox(next.query)
+        // scroll handled by each view's own container
+    }, [view])
+
+    const goTo = useCallback((index: number) => {
+        // index into the breadcrumb (stack + current). Jump back to it.
+        setStack(s => {
+            const full = [...s, view]
+            const target = full[index]
+            if (target) { setView(target); if (target.kind === 'results') setSearchBox(target.query) }
+            return full.slice(0, index)
+        })
+    }, [view])
+
+    const back = useCallback(() => {
+        setStack(s => {
+            if (!s.length) return s
+            const prev = s[s.length - 1]
+            setView(prev)
+            if (prev.kind === 'results') setSearchBox(prev.query)
+            return s.slice(0, -1)
+        })
     }, [])
 
-    const runSearch = useCallback(async (q: string) => {
-        setLoading(true); setError(null); setNavStack([])
-        setCompareArticle(null); setCompareOpen(false); setCompareQuery('')
-        try { const a = await loadArticle(q); if (a) { setArticle(a); setQuery(q) } }
-        catch (e: any) { setError(e.message) }
-        finally { setLoading(false) }
-    }, [loadArticle])
+    const runSearch = useCallback((q: string, mode: SearchMode = 'lexical') => {
+        const t = q.trim(); if (!t) return
+        navigate({ kind: 'results', query: t, mode })
+    }, [navigate])
 
-    const navigateTo = useCallback(async (track: TrackNeighborData) => {
-        if (article) setNavStack(s => [...s, article])
-        setLoading(true); setError(null)
-        const q = `${track.artist} – ${track.title}`; setQuery(q)
-        try { const a = await loadArticle(q, track.embedding); if (a) setArticle(a) }
-        catch (e: any) { setError(e.message) }
-        finally { setLoading(false) }
-    }, [article, loadArticle])
-
-    const navigateBack = useCallback(() => {
-        const prev = navStack[navStack.length - 1]; if (!prev) return
-        setNavStack(s => s.slice(0, -1)); setArticle(prev); setQuery(prev.query)
-    }, [navStack])
-
-    const runCompare = useCallback(async () => {
-        if (!compareQuery.trim()) return
-        setCompareLoading(true); setCompareError(null)
-        try { const a = await loadArticle(compareQuery); if (a) setCompareArticle(a) }
-        catch (e: any) { setCompareError(e.message) }
-        finally { setCompareLoading(false) }
-    }, [compareQuery, loadArticle])
-
+    // external initial query (e.g. "play this in the wiki")
     useEffect(() => {
         if (!initialQuery) return
-        setQuery(initialQuery); runSearch(initialQuery); onQueryConsumed?.()
-    }, [initialQuery])
+        setSearchBox(initialQuery)
+        setView({ kind: 'results', query: initialQuery, mode: 'lexical' })
+        setStack([{ kind: 'home' }])
+        onQueryConsumed?.()
+    }, [initialQuery]) // eslint-disable-line react-hooks/exhaustive-deps
 
-    // ── External data ─────────────────────────────────────────────────────────
-    const itunes   = useItunesData(article?.focal.artist ?? '', article?.focal.title ?? '')
-    const mbTrack  = useMBRecording(article?.focal.artist ?? '', article?.focal.title ?? '')
-    const mbArtist = useMBArtist(article?.focal.artist ?? '')
-    const wiki     = useWikipediaData(article?.focal.artist ?? '', article?.focal.title ?? '')
-    const preview  = useAudioPreview(itunes?.previewUrl ?? null)
+    const crumbs = useMemo(() => [...stack, view], [stack, view])
 
-    // ── Derived ───────────────────────────────────────────────────────────────
-    const attitude = useMemo(() =>
-        article && kernelState ? computeAttitude(article.focal.embedding, kernelState) : null,
-        [article, kernelState])
-
-    const attitude2 = useMemo(() =>
-        compareArticle && kernelState ? computeAttitude(compareArticle.focal.embedding, kernelState) : null,
-        [compareArticle, kernelState])
-
-    const historyPoints = useMemo((): HistoryPoint[] => {
-        if (!kernelState || !playHistory?.length) return []
-        return playHistory.slice(0, 30).map(t => {
-            const { x, y } = projectToKernelSpace(t.embedding, kernelState.mu, kernelState.velocity, kernelState.sigma)
-            return { x, y, label: t.artist, genre: t.genres[0] ?? null }
-        })
-    }, [playHistory, kernelState])
-
-    const soundsLike = useMemo(() =>
-        article ? article.pts.filter(p => !p.isFocal).sort((a, b) => a.distance - b.distance) : [],
-        [article])
-
-    const crowding = useMemo(() => article ? crowdingLabel(article.pts) : null, [article])
-
-    const compareHighlightId = useMemo(() => {
-        if (!compareArticle || !article) return undefined
-        return article.pts.find(p =>
-            p.artist.toLowerCase() === compareArticle.focal.artist.toLowerCase() &&
-            p.title?.toLowerCase() === compareArticle.focal.title?.toLowerCase()
-        )?.id
-    }, [compareArticle, article])
-
-    const tagDiff = useMemo(() => {
-        if (!compareArticle || !article) return null
-        const diff = <T extends string>(a: T[], b: T[]) => {
-            const bs = new Set(b.map(x => x.toLowerCase()))
-            const as_ = new Set(a.map(x => x.toLowerCase()))
-            return { shared: a.filter(x => bs.has(x.toLowerCase())), onlyA: a.filter(x => !bs.has(x.toLowerCase())), onlyB: b.filter(x => !as_.has(x.toLowerCase())) }
-        }
-        return {
-            genres:   diff(article.focal.genres,   compareArticle.focal.genres),
-            moods:    diff(article.focal.moods,     compareArticle.focal.moods),
-            themes:   diff(article.focal.themes,    compareArticle.focal.themes),
-            contexts: diff(article.focal.contexts,  compareArticle.focal.contexts),
-        }
-    }, [article, compareArticle])
-
-    const compareDistance = useMemo(() => {
-        if (!article || !compareArticle) return null
-        const a = article.focal.embedding, b = compareArticle.focal.embedding
-        const n = Math.min(a.length, b.length)
-        let s = 0; for (let i = 0; i < n; i++) { const d = a[i] - b[i]; s += d * d }
-        return Math.sqrt(s)
-    }, [article, compareArticle])
-
-    const canvasColRef = useRef<HTMLDivElement>(null)
-    useEffect(() => {
-        const el = canvasColRef.current; if (!el) return
-        const stop = (e: WheelEvent) => e.preventDefault()
-        el.addEventListener('wheel', stop, { passive: false })
-        return () => el.removeEventListener('wheel', stop)
-    }, [])
-
-    // ── Merged tags: Fangorn stored + MusicBrainz community ──────────────────
-    const allMBTags = useMemo(() => {
-        if (!mbTrack?.mbTags.length && !mbArtist?.mbTags.length) return []
-        const stored = new Set([
-            ...(article?.focal.genres ?? []),
-            ...(article?.focal.moods  ?? []),
-        ].map(t => t.toLowerCase()))
-        return [...new Set([...( mbTrack?.mbTags ?? []), ...(mbArtist?.mbTags ?? [])])]
-            .filter(t => !stored.has(t.toLowerCase()))
-            .slice(0, 8)
-    }, [mbTrack, mbArtist, article])
-
-    // ── Duration: prefer stored, fall back to iTunes, then MusicBrainz ───────
-    const displayDuration = useMemo(() => {
-        const ms = (article?.focal.durationMs ?? 0) > 0
-            ? article!.focal.durationMs
-            : itunes?.durationMs ?? null
-        if (!ms) return null
-        return `${Math.floor(ms / 60000)}:${String(Math.floor((ms % 60000) / 1000)).padStart(2, '0')}`
-    }, [article, itunes])
-
-    // ── ISRC: prefer stored, fall back to MusicBrainz ─────────────────────────
-    const displayIsrc = article?.focal.isrc || mbTrack?.isrcs[0] || null
-
-    // ── Release date: prefer MusicBrainz (more precise), fall back iTunes ─────
-    const displayRelease = useMemo(() => {
-        const d = mbTrack?.releaseDate ?? itunes?.releaseDate ?? null
-        if (!d) return itunes?.releaseYear ?? null
-        return d.slice(0, 4) === (itunes?.releaseYear ?? '') ? d : d   // show full date if available
-    }, [mbTrack, itunes])
-
-    // ─────────────────────────────────────────────────────────────────────────
     return (
         <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: BG, color: FG, fontFamily: SANS, overflow: 'hidden' }}>
 
-            {/* ── Search bar ───────────────────────────────────────────────── */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 16px', height: 52, borderBottom: `3px solid ${ACCENT}`, background: BG1, flexShrink: 0 }}>
-                {navStack.length > 0 && (
-                    <button onClick={navigateBack} style={{ background: 'none', border: `1px solid ${BORDER2}`, color: FG3, fontSize: 10, padding: '4px 10px', cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: MONO, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-                        ← {navStack[navStack.length - 1].focal.artist}
-                    </button>
-                )}
-                <input value={query} onChange={e => setQuery(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && runSearch(query)}
-                    placeholder='Artist – Title'
-                    style={{ flex: 1, background: 'transparent', border: 'none', borderBottom: `1px solid ${BORDER2}`, color: FG, fontSize: 12, padding: '4px 0', outline: 'none', fontFamily: MONO, letterSpacing: '0.04em' }} />
-                <button onClick={() => runSearch(query)} disabled={loading || !query.trim()}
-                    style={{ background: loading ? 'transparent' : ACCENT, border: `1px solid ${loading ? BORDER2 : ACCENT}`, color: loading ? FG3 : '#fff', fontSize: 9, fontWeight: 500, letterSpacing: '0.18em', fontFamily: MONO, padding: '6px 14px', cursor: loading ? 'default' : 'pointer', textTransform: 'uppercase', flexShrink: 0 }}>
-                    {loading ? '···' : 'OPEN'}
+            {/* ── Top bar: back · breadcrumb · search ─────────────────────── */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 16px', height: 54, borderBottom: `2px solid ${ACCENT}`, background: BG1, flexShrink: 0 }}>
+                <button onClick={back} disabled={!stack.length}
+                    style={{ background: 'none', border: `1px solid ${stack.length ? BORDER : BORDER2}`, color: stack.length ? FG2 : FG4, fontFamily: MONO, fontSize: 13, padding: '4px 11px', cursor: stack.length ? 'pointer' : 'default', flexShrink: 0 }}>
+                    ←
                 </button>
-                {article && itunes?.previewUrl && (
-                    <button onClick={preview.toggle}
-                        style={{ background: preview.playing ? ACCENT : 'transparent', border: `1px solid ${preview.playing ? ACCENT : BORDER2}`, color: preview.playing ? '#fff' : FG3, fontSize: 11, padding: '5px 12px', cursor: 'pointer', flexShrink: 0 }}>
-                        {preview.playing ? '⏸' : '▶'}
+
+                {/* Breadcrumb trail — the wander */}
+                <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                    {crumbs.slice(-4).map((c, i, arr) => {
+                        const realIndex = crumbs.length - arr.length + i
+                        const isLast = i === arr.length - 1
+                        return (
+                            <span key={realIndex} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                                {i > 0 && <span style={{ color: FG4, fontSize: 10 }}>›</span>}
+                                {isLast
+                                    ? <span style={{ fontFamily: MONO, fontSize: 10, color: FG2, letterSpacing: '0.04em', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 220 }}>{viewLabel(c)}</span>
+                                    : <WikiLink onClick={() => goTo(realIndex)} color={FG4} size={10}>{viewLabel(c)}</WikiLink>}
+                            </span>
+                        )
+                    })}
+                </div>
+
+                {/* Search */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                    <input
+                        value={searchBox} onChange={e => setSearchBox(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') runSearch(searchBox, 'lexical') }}
+                        placeholder="Search artist, track, or vibe…"
+                        style={{ width: 240, background: BG2, border: `1px solid ${BORDER}`, color: FG, fontSize: 12, padding: '7px 10px', outline: 'none', fontFamily: MONO, letterSpacing: '0.02em' }} />
+                    <button onClick={() => runSearch(searchBox, 'lexical')} disabled={!searchBox.trim()}
+                        style={{ background: searchBox.trim() ? ACCENT : 'transparent', border: `1px solid ${searchBox.trim() ? ACCENT : BORDER2}`, color: searchBox.trim() ? '#fff' : FG4, fontFamily: MONO, fontSize: 9, letterSpacing: '0.16em', textTransform: 'uppercase', padding: '8px 14px', cursor: searchBox.trim() ? 'pointer' : 'default', flexShrink: 0 }}>
+                        Search
                     </button>
-                )}
-                {article && onPlayTrack && (
-                    <button onClick={() => onPlayTrack(article.focal, itunes?.previewUrl ?? undefined)}
-                        style={{ background: 'transparent', border: `1px solid ${BORDER2}`, color: FG3, fontSize: 9, fontFamily: MONO, letterSpacing: '0.12em', textTransform: 'uppercase', padding: '5px 10px', cursor: 'pointer', flexShrink: 0 }}>
-                        PLAY
-                    </button>
-                )}
+                </div>
             </div>
 
-            {preview.playing && (
-                <div style={{ height: 2, background: BG2, flexShrink: 0 }}>
-                    <div style={{ height: '100%', width: `${preview.progress * 100}%`, background: ACCENT, transition: 'width 0.5s linear' }}/>
-                </div>
+            {/* ── Body ─────────────────────────────────────────────────────── */}
+            {view.kind === 'home' && <Home onNavigate={navigate} />}
+            {view.kind === 'results' && (
+                <ResultsView
+                    key={`${view.query}|${view.mode}`}
+                    query={view.query} mode={view.mode}
+                    onNavigate={navigate}
+                    onSetMode={m => setView({ kind: 'results', query: view.query, mode: m })}
+                />
             )}
-            {error && <div style={{ padding: '8px 16px', background: `${ACCENT}12`, color: ACCENT, fontSize: 11, fontFamily: MONO, borderBottom: `1px solid ${ACCENT}30`, flexShrink: 0 }}>{error}</div>}
-
-            {!article && !loading && (
-                <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 12 }}>
-                    <div style={{ fontFamily: DISP, fontSize: 72, color: FG4, letterSpacing: '0.06em', lineHeight: 1 }}>SOND3R</div>
-                    <div style={{ fontFamily: MONO, fontSize: 9, color: FG4, letterSpacing: '0.22em', textTransform: 'uppercase' }}>Search a track to open its article</div>
-                </div>
+            {view.kind === 'track' && (
+                <TrackArticle key={`${view.artist}|${view.title}`} view={view} kernelState={kernelState} onNavigate={navigate} onPlayTrack={onPlayTrack} />
             )}
-            {loading && (
-                <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 14 }}>
-                    <div style={{ width: 18, height: 18, border: `1.5px solid ${BG3}`, borderTopColor: ACCENT, borderRadius: '50%', animation: 'wiki-spin 0.65s linear infinite' }}/>
-                    <style>{`@keyframes wiki-spin{to{transform:rotate(360deg)}}`}</style>
-                    <div style={{ fontFamily: MONO, fontSize: 9, color: FG4, letterSpacing: '0.18em', textTransform: 'uppercase' }}>Loading…</div>
-                </div>
-            )}
-
-            {article && !loading && (
-                <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-
-                    {/* ═══ COL 1: Article ═════════════════════════════════════ */}
-                    <div style={{ width: 320, flexShrink: 0, overflowY: 'auto', borderRight: `1px solid ${BORDER2}`, display: 'flex', flexDirection: 'column', position: 'relative', background: BG }}>
-
-                        {/* Album art */}
-                        <div style={{ position: 'relative', width: '100%', aspectRatio: '1', flexShrink: 0, overflow: 'hidden' }}>
-                            {itunes?.artworkUrl && (
-                                <div style={{ position: 'absolute', inset: 0, backgroundImage: `url(${itunes.artworkUrl})`, backgroundSize: 'cover', backgroundPosition: 'center', filter: 'blur(28px) brightness(0.20) saturate(1.4)', transform: 'scale(1.12)', zIndex: 0 }}/>
-                            )}
-                            {itunes?.artworkUrl
-                                ? <img src={itunes.artworkUrl} alt="" style={{ position: 'relative', zIndex: 1, display: 'block', width: '100%', height: '100%', objectFit: 'cover' }}/>
-                                : <div style={{ position: 'relative', zIndex: 1, width: '100%', height: '100%', background: BG2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                    <span style={{ fontFamily: DISP, fontSize: 64, color: FG4 }}>{article.focal.title.slice(0, 1)}</span>
-                                  </div>
-                            }
-                            {/* Identity card overlay */}
-                            <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 2, padding: '14px 16px 12px', background: 'rgba(5,3,9,0.82)', backdropFilter: 'blur(16px)', borderTop: `1px solid ${GLASS_BD}` }}>
-                                <div style={{ fontFamily: DISP, fontSize: 26, letterSpacing: '0.04em', lineHeight: 1.05, color: FG, marginBottom: 2 }}>
-                                    {article.focal.title}
-                                </div>
-                                <div style={{ fontFamily: MONO, fontSize: 10, color: ACCENT, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 6 }}>
-                                    {article.focal.artist}
-                                    {mbArtist?.type && <span style={{ color: FG4, marginLeft: 8 }}>· {mbArtist.type}</span>}
-                                </div>
-                                {/* Track position + release + duration */}
-                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 12px' }}>
-                                    {itunes?.albumName && <Meta>{itunes.albumName}</Meta>}
-                                    {itunes?.trackNumber && itunes.trackCount && (
-                                        <Meta>Track {itunes.trackNumber} of {itunes.trackCount}</Meta>
-                                    )}
-                                    {displayRelease && <Meta>{displayRelease}</Meta>}
-                                    {displayDuration && <Meta>{displayDuration}</Meta>}
-                                    {itunes?.primaryGenre && <Meta color={CYAN}>{itunes.primaryGenre}</Meta>}
-                                    {itunes?.explicit && <Meta color={YELLOW}>EXPLICIT</Meta>}
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Article body */}
-                        <div style={{ padding: '20px 18px 32px', display: 'flex', flexDirection: 'column', gap: 20 }}>
-
-                            {/* Sound Profile — Fangorn tags */}
-                            {(article.focal.genres.length + article.focal.moods.length + article.focal.themes.length + article.focal.contexts.length) > 0 && (
-                                <div>
-                                    <SectionLabel>Sound Profile</SectionLabel>
-                                    {[
-                                        { tags: article.focal.genres,   colorFn: (t: string) => genreColor(t) },
-                                        { tags: article.focal.moods,    colorFn: () => CYAN   },
-                                        { tags: article.focal.themes,   colorFn: () => SUCCESS },
-                                        { tags: article.focal.contexts, colorFn: () => YELLOW },
-                                    ].filter(r => r.tags.length).map((r, i) => (
-                                        <div key={i} style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 4 }}>
-                                            {r.tags.map(t => <GlassTag key={t} text={t} color={r.colorFn(t)}/>)}
-                                        </div>
-                                    ))}
-                                    {/* MusicBrainz community tags — only show if they add something new */}
-                                    {allMBTags.length > 0 && (
-                                        <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
-                                            <span style={{ fontFamily: MONO, fontSize: 8, color: FG4, letterSpacing: '0.08em', marginRight: 2 }}>MB</span>
-                                            {allMBTags.map(t => <GlassTag key={t} text={t} color={FG4}/>)}
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-
-                            {/* Track Record — ISRC, label, country, MusicBrainz link */}
-                            {(displayIsrc || mbTrack?.label || mbTrack?.country || mbTrack?.mbid) && (
-                                <div>
-                                    <SectionLabel>Track Record</SectionLabel>
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                                        {displayIsrc && (
-                                            <KVRow label="ISRC">
-                                                <code style={{ fontFamily: MONO, fontSize: 10, color: FG2, letterSpacing: '0.06em' }}>{displayIsrc}</code>
-                                            </KVRow>
-                                        )}
-                                        {mbTrack?.label && (
-                                            <KVRow label="Label">{mbTrack.label}</KVRow>
-                                        )}
-                                        {mbTrack?.country && (
-                                            <KVRow label="Released in">{mbTrack.country}</KVRow>
-                                        )}
-                                        {mbTrack?.disambig && (
-                                            <KVRow label="Note"><em style={{ color: FG4 }}>{mbTrack.disambig}</em></KVRow>
-                                        )}
-                                        {mbTrack?.mbid && (
-                                            <KVRow label="MusicBrainz">
-                                                <a href={`https://musicbrainz.org/recording/${mbTrack.mbid}`}
-                                                    target="_blank" rel="noopener noreferrer"
-                                                    style={{ fontFamily: MONO, fontSize: 9, color: CYAN, textDecoration: 'none', letterSpacing: '0.04em' }}>
-                                                    {mbTrack.mbid.slice(0, 8)}… ↗
-                                                </a>
-                                            </KVRow>
-                                        )}
-                                        {itunes?.trackUrl && (
-                                            <KVRow label="iTunes">
-                                                <a href={itunes.trackUrl} target="_blank" rel="noopener noreferrer"
-                                                    style={{ fontFamily: MONO, fontSize: 9, color: CYAN, textDecoration: 'none', letterSpacing: '0.04em' }}>
-                                                    Open ↗
-                                                </a>
-                                            </KVRow>
-                                        )}
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Kernel attitude */}
-                            {attitude && (
-                                <div>
-                                    <SectionLabel>Kernel</SectionLabel>
-                                    <div style={{ background: GLASS, border: `1px solid ${GLASS_BD}`, borderLeft: `3px solid ${attitude.color}`, padding: '12px 14px', backdropFilter: 'blur(8px)' }}>
-                                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 5 }}>
-                                            <span style={{ fontFamily: DISP, fontSize: 22, color: attitude.color, letterSpacing: '0.04em' }}>
-                                                {attitude.zone === 'groove' ? 'IN YOUR GROOVE' : attitude.zone === 'familiar' ? 'FAMILIAR' : attitude.zone === 'stretch' ? 'STRETCH' : 'AVERSE'}
-                                            </span>
-                                            <span style={{ fontFamily: MONO, fontSize: 9, color: attitude.color, opacity: 0.6, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{attitude.direction}</span>
-                                        </div>
-                                        <div style={{ fontFamily: SANS, fontSize: 11, color: FG2, lineHeight: 1.65, marginBottom: 6 }}>{attitude.label}</div>
-                                        <div style={{ fontFamily: MONO, fontSize: 9, color: FG4 }}>
-                                            {attitude.distNorm.toFixed(2)}σ · align {attitude.alignment > 0 ? '+' : ''}{attitude.alignment.toFixed(2)}
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Compare */}
-                            <div>
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, paddingBottom: 6, borderBottom: `1px solid ${BORDER2}` }}>
-                                    <SectionLabel style={{ marginBottom: 0, paddingBottom: 0, borderBottom: 'none' }}>Compare</SectionLabel>
-                                    {compareArticle && (
-                                        <button onClick={() => { setCompareArticle(null); setCompareQuery(''); setCompareOpen(false) }}
-                                            style={{ background: 'none', border: 'none', color: FG4, fontSize: 10, cursor: 'pointer', fontFamily: MONO }}>clear</button>
-                                    )}
-                                </div>
-                                {!compareOpen && !compareArticle && (
-                                    <button onClick={() => setCompareOpen(true)}
-                                        style={{ width: '100%', background: GLASS, border: `1px dashed ${GLASS_BD}`, color: FG3, fontSize: 10, padding: '9px', cursor: 'pointer', textAlign: 'left', fontFamily: MONO, letterSpacing: '0.06em' }}>
-                                        + compare with another track…
-                                    </button>
-                                )}
-                                {compareOpen && !compareArticle && (
-                                    <div style={{ display: 'flex', gap: 6 }}>
-                                        <input value={compareQuery} onChange={e => setCompareQuery(e.target.value)}
-                                            onKeyDown={e => e.key === 'Enter' && runCompare()}
-                                            placeholder='Artist – Title' autoFocus
-                                            style={{ flex: 1, background: GLASS, border: `1px solid ${GLASS_BD}`, color: FG, fontSize: 11, padding: '6px 10px', outline: 'none', fontFamily: MONO }} />
-                                        <button onClick={runCompare} disabled={compareLoading || !compareQuery.trim()}
-                                            style={{ background: VIOLET, border: 'none', color: '#fff', fontSize: 9, fontFamily: MONO, letterSpacing: '0.12em', textTransform: 'uppercase', padding: '6px 10px', cursor: compareLoading ? 'default' : 'pointer' }}>
-                                            {compareLoading ? '···' : 'LOAD'}
-                                        </button>
-                                        <button onClick={() => setCompareOpen(false)}
-                                            style={{ background: 'none', border: `1px solid ${BORDER2}`, color: FG4, fontSize: 11, padding: '6px 9px', cursor: 'pointer' }}>✕</button>
-                                    </div>
-                                )}
-                                {compareError && <div style={{ marginTop: 6, fontSize: 10, color: ACCENT, fontFamily: MONO }}>{compareError}</div>}
-                                {compareArticle && tagDiff && (
-                                    <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 12 }}>
-                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: 8, alignItems: 'center' }}>
-                                            <div>
-                                                <div style={{ fontFamily: MONO, fontSize: 10, fontWeight: 600, color: TEAL }}>{article.focal.artist}</div>
-                                                <div style={{ fontFamily: MONO, fontSize: 9, color: FG3 }}>{article.focal.title}</div>
-                                                {attitude && <div style={{ fontFamily: MONO, fontSize: 9, color: attitude.color, marginTop: 2 }}>{attitude.zone} · {attitude.direction}</div>}
-                                            </div>
-                                            <div style={{ textAlign: 'center' }}>
-                                                <div style={{ fontFamily: DISP, fontSize: 16, color: FG4, letterSpacing: '0.08em' }}>VS</div>
-                                                {compareDistance !== null && (
-                                                    <>
-                                                        <div style={{ height: 2, width: 48, background: BG3, margin: '4px auto' }}>
-                                                            <div style={{ height: '100%', width: `${Math.max(5, (1 - Math.min(1, compareDistance)) * 100)}%`, background: compareDistance < 0.4 ? TEAL : compareDistance < 0.8 ? VIOLET : ACCENT }}/>
-                                                        </div>
-                                                        <div style={{ fontFamily: MONO, fontSize: 8, color: FG4 }}>d={compareDistance.toFixed(3)}</div>
-                                                    </>
-                                                )}
-                                            </div>
-                                            <div style={{ textAlign: 'right' }}>
-                                                <div style={{ fontFamily: MONO, fontSize: 10, fontWeight: 600, color: VIOLET }}>{compareArticle.focal.artist}</div>
-                                                <div style={{ fontFamily: MONO, fontSize: 9, color: FG3 }}>{compareArticle.focal.title}</div>
-                                                {attitude2 && <div style={{ fontFamily: MONO, fontSize: 9, color: attitude2.color, marginTop: 2 }}>{attitude2.zone} · {attitude2.direction}</div>}
-                                            </div>
-                                        </div>
-                                        {(['genres', 'moods', 'themes', 'contexts'] as const).map(key => {
-                                            const d = tagDiff[key]
-                                            if (!d.shared.length && !d.onlyA.length && !d.onlyB.length) return null
-                                            return (
-                                                <div key={key}>
-                                                    <div style={{ fontFamily: MONO, fontSize: 8, color: FG4, letterSpacing: '0.18em', textTransform: 'uppercase', marginBottom: 5 }}>{key}</div>
-                                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                                                        {d.shared.map(t => <GlassTag key={`s-${t}`} text={t} color={key === 'genres' ? genreColor(t) : key === 'moods' ? CYAN : key === 'themes' ? SUCCESS : YELLOW}/>)}
-                                                        {d.onlyA.map(t  => <GlassTag key={`a-${t}`} text={`${t} ↖`} color={TEAL}/>)}
-                                                        {d.onlyB.map(t  => <GlassTag key={`b-${t}`} text={`↗ ${t}`} color={VIOLET}/>)}
-                                                    </div>
-                                                </div>
-                                            )
-                                        })}
-                                        <div style={{ display: 'flex', gap: 12, fontFamily: MONO, fontSize: 8, color: FG4 }}>
-                                            <span><span style={{ color: FG3 }}>■</span> shared</span>
-                                            <span><span style={{ color: TEAL }}>■</span> A only</span>
-                                            <span><span style={{ color: VIOLET }}>■</span> B only</span>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* About — wiki extract + artist details from MusicBrainz */}
-                            {(wiki?.extract || mbArtist?.area || mbArtist?.country || mbArtist?.beginYear) && (
-                                <div>
-                                    <SectionLabel>
-                                        {wiki?.isTrackPage ? `About "${article.focal.title}"` : `About ${article.focal.artist}`}
-                                    </SectionLabel>
-
-                                    {/* MusicBrainz artist metadata */}
-                                    {(mbArtist?.area || mbArtist?.country || mbArtist?.beginYear) && (
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginBottom: 10 }}>
-                                            {(mbArtist.area || mbArtist.country) && (
-                                                <KVRow label="Origin">
-                                                    {[mbArtist.area, mbArtist.country].filter(Boolean).join(', ')}
-                                                </KVRow>
-                                            )}
-                                            {mbArtist.beginYear && (
-                                                <KVRow label="Active">
-                                                    {mbArtist.beginYear}
-                                                    {mbArtist.ended && mbArtist.endYear
-                                                        ? ` – ${mbArtist.endYear}`
-                                                        : mbArtist.beginYear ? ' – present' : ''}
-                                                </KVRow>
-                                            )}
-                                            {mbArtist.disambig && (
-                                                <KVRow label="Note"><em style={{ color: FG4 }}>{mbArtist.disambig}</em></KVRow>
-                                            )}
-                                            {mbArtist.mbid && (
-                                                <KVRow label="MusicBrainz">
-                                                    <a href={`https://musicbrainz.org/artist/${mbArtist.mbid}`}
-                                                        target="_blank" rel="noopener noreferrer"
-                                                        style={{ fontFamily: MONO, fontSize: 9, color: CYAN, textDecoration: 'none' }}>
-                                                        {mbArtist.mbid.slice(0, 8)}… ↗
-                                                    </a>
-                                                </KVRow>
-                                            )}
-                                        </div>
-                                    )}
-
-                                    {/* Wikipedia extract */}
-                                    {wiki?.extract && (
-                                        <>
-                                            <div style={{ fontFamily: SANS, fontSize: 11, color: FG3, lineHeight: 1.8, display: '-webkit-box', WebkitLineClamp: 7, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                                                {wiki.extract}
-                                            </div>
-                                            {wiki.url && (
-                                                <a href={wiki.url} target="_blank" rel="noopener noreferrer"
-                                                    style={{ display: 'inline-block', marginTop: 6, fontFamily: MONO, fontSize: 8, color: FG4, textDecoration: 'none', letterSpacing: '0.10em', textTransform: 'uppercase' }}>
-                                                    Wikipedia →
-                                                </a>
-                                            )}
-                                        </>
-                                    )}
-                                </div>
-                            )}
-
-                        </div>
-                    </div>
-
-                    {/* ═══ COL 2: Canvas ══════════════════════════════════════ */}
-                    <div ref={canvasColRef} style={{ flex: 1, position: 'relative', overflow: 'hidden', background: BG1 }}>
-                        <SpaceCanvas
-                            pts={article.pts}
-                            focalLabel={article.focal.artist}
-                            focalAttitude={attitude ?? undefined}
-                            history={historyPoints}
-                            hasVelocity={kernelState ? kernelState.velocity.some(v => Math.abs(v) > 1e-8) : false}
-                            highlightId={compareHighlightId}
-                        />
-                        <div style={{ position: 'absolute', top: 12, left: 14, background: 'rgba(5,3,9,0.7)', border: `1px solid ${BORDER2}`, padding: '4px 10px', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                            <div style={{ width: 5, height: 5, background: attitude ? TEAL : ACCENT }}/>
-                            <span style={{ fontFamily: MONO, fontSize: 8, color: FG3, letterSpacing: '0.12em', textTransform: 'uppercase' }}>
-                                {attitude ? 'kernel space' : 'sound neighbourhood'}
-                            </span>
-                        </div>
-                        <div style={{ position: 'absolute', bottom: 10, right: 12, fontFamily: MONO, fontSize: 8, color: FG4, pointerEvents: 'none' }}>
-                            scroll to zoom · drag to pan
-                        </div>
-                        {attitude && (
-                            <div style={{ position: 'absolute', bottom: 10, left: 14, background: 'rgba(5,3,9,0.72)', border: `1px solid ${attitude.color}30`, padding: '8px 12px', backdropFilter: 'blur(8px)', maxWidth: 200 }}>
-                                <div style={{ fontFamily: DISP, fontSize: 16, color: attitude.color, letterSpacing: '0.04em', marginBottom: 2 }}>
-                                    {attitude.zone === 'groove' ? 'IN YOUR GROOVE' : attitude.zone === 'familiar' ? 'FAMILIAR' : attitude.zone === 'stretch' ? 'STRETCH' : 'AVERSE'}
-                                </div>
-                                <div style={{ fontFamily: MONO, fontSize: 9, color: attitude.color, opacity: 0.65 }}>
-                                    {attitude.distNorm.toFixed(2)}σ · {attitude.direction}
-                                </div>
-                            </div>
-                        )}
-                        {historyPoints.length > 0 && attitude && (
-                            <div style={{ position: 'absolute', top: 12, right: 14, background: 'rgba(5,3,9,0.7)', border: `1px solid ${BORDER2}`, padding: '4px 10px', backdropFilter: 'blur(8px)' }}>
-                                <span style={{ fontFamily: MONO, fontSize: 8, color: FG4 }}>{historyPoints.length} in history</span>
-                            </div>
-                        )}
-                    </div>
-
-                    {/* ═══ COL 3: Sounds Like + Stats ════════════════════════ */}
-                    <div style={{ width: 256, flexShrink: 0, borderLeft: `1px solid ${BORDER2}`, overflowY: 'auto', background: BG1, display: 'flex', flexDirection: 'column' }}>
-                        {crowding && (
-                            <div style={{ padding: '16px 16px 14px', borderBottom: `1px solid ${BORDER2}`, background: BG2 }}>
-                                <SectionLabel>Neighbourhood</SectionLabel>
-                                <div style={{ fontFamily: DISP, fontSize: 20, color: crowding.color, letterSpacing: '0.04em', marginBottom: 3 }}>{crowding.label.toUpperCase()}</div>
-                                <div style={{ fontFamily: MONO, fontSize: 9, color: FG4, lineHeight: 1.7 }}>{crowding.detail}</div>
-                                {article.metrics.primaryGenre && (
-                                    <div style={{ marginTop: 6, fontFamily: MONO, fontSize: 9, color: FG3 }}>
-                                        {Math.round(article.metrics.genrePurity * 100)}% in{' '}
-                                        <span style={{ color: genreColor(article.metrics.primaryGenre) }}>{article.metrics.primaryGenre}</span>
-                                    </div>
-                                )}
-                            </div>
-                        )}
-                        {article.metrics.nearestNeighbor && (
-                            <div style={{ padding: '12px 16px', borderBottom: `1px solid ${BORDER2}` }}>
-                                <SectionLabel>Nearest Match</SectionLabel>
-                                <div style={{ fontFamily: MONO, fontSize: 11, fontWeight: 600, color: FG, marginBottom: 1 }}>{article.metrics.nearestNeighbor.artist}</div>
-                                <div style={{ fontFamily: MONO, fontSize: 10, color: FG3, marginBottom: 4 }}>{article.metrics.nearestNeighbor.title}</div>
-                                <div style={{ fontFamily: MONO, fontSize: 9, color: FG4, fontStyle: 'italic' }}>{soundSimilarity(article.metrics.nearestDistance)}</div>
-                            </div>
-                        )}
-                        <div style={{ padding: '14px 0 0' }}>
-                            <div style={{ padding: '0 16px 10px' }}><SectionLabel>Sounds Like</SectionLabel></div>
-                            <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                {soundsLike.slice(0, 20).map((p, i) => {
-                                    const col = genreColor(p.genres?.[0] ?? null)
-                                    const isCompare = p.id === compareHighlightId
-                                    return (
-                                        <div key={p.id} onClick={() => navigateTo(p as any)}
-                                            style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '8px 16px', background: isCompare ? `${VIOLET}10` : 'transparent', borderLeft: isCompare ? `3px solid ${VIOLET}` : '3px solid transparent', cursor: 'pointer', transition: 'background 0.08s' }}
-                                            onMouseEnter={e => { if (!isCompare) (e.currentTarget as HTMLElement).style.background = GLASS }}
-                                            onMouseLeave={e => { if (!isCompare) (e.currentTarget as HTMLElement).style.background = 'transparent' }}>
-                                            <span style={{ fontFamily: MONO, fontSize: 9, color: FG4, width: 16, textAlign: 'right', flexShrink: 0 }}>{i + 1}</span>
-                                            <div style={{ width: 5, height: 5, background: isCompare ? VIOLET : col, flexShrink: 0 }}/>
-                                            <div style={{ flex: 1, minWidth: 0 }}>
-                                                <div style={{ fontFamily: MONO, fontSize: 10, fontWeight: 600, color: isCompare ? VIOLET : FG, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{p.artist}</div>
-                                                <div style={{ fontFamily: MONO, fontSize: 9, color: FG4, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{p.title}</div>
-                                            </div>
-                                            <span style={{ fontFamily: MONO, fontSize: 8, color: FG4, flexShrink: 0 }}>{soundSimilarity(p.distance).split(' ')[0]}</span>
-                                        </div>
-                                    )
-                                })}
-                            </div>
-                        </div>
-                    </div>
-                </div>
+            {view.kind === 'artist' && (
+                <ArtistArticle key={view.name} view={view} onNavigate={navigate} />
             )}
         </div>
     )
 }
 
-// ── Sub-components ────────────────────────────────────────────────────────────
-
-function SectionLabel({ children, style }: { children: ReactNode; style?: React.CSSProperties }) {
-    return (
-        <div style={{ fontFamily: MONO, fontSize: 8, fontWeight: 500, letterSpacing: '0.22em', textTransform: 'uppercase', color: FG4, marginBottom: 10, paddingBottom: 6, borderBottom: `1px solid ${BORDER2}`, ...style }}>
-            {children}
-        </div>
-    )
-}
-
-const WikiLabel = SectionLabel
-const InfoLabel = SectionLabel
-
-function GlassTag({ text, color }: { text: string; color: string }) {
-    return (
-        <span style={{ fontFamily: MONO, fontSize: 9, fontWeight: 500, letterSpacing: '0.10em', textTransform: 'uppercase', color, padding: '3px 8px', background: `${color}14`, border: `1px solid ${color}35` }}>
-            {text}
-        </span>
-    )
-}
-
-const Tag = GlassTag
-
-/** Inline metadata label — used in the identity card */
-function Meta({ children, color = FG4 }: { children: ReactNode; color?: string }) {
-    return (
-        <span style={{ fontFamily: MONO, fontSize: 9, color, letterSpacing: '0.04em' }}>
-            {children}
-        </span>
-    )
-}
-
-/** Key-value row — used in Track Record and About sections */
-function KVRow({ label, children }: { label: string; children: ReactNode }) {
-    return (
-        <div style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
-            <span style={{ fontFamily: MONO, fontSize: 8, letterSpacing: '0.12em', textTransform: 'uppercase', color: FG4, width: 80, flexShrink: 0 }}>
-                {label}
-            </span>
-            <span style={{ fontFamily: MONO, fontSize: 10, color: FG2, flex: 1 }}>
-                {children}
-            </span>
-        </div>
-    )
-}
+export { TrackWikiView as MusicWikiView }
+export default TrackWikiView

@@ -4,21 +4,23 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   main: {
-    plugins: [
-      externalizeDepsPlugin({
-        exclude: [
-          '@electron-toolkit/utils',
-          'mime-types',
-          'dotenv',
-          'mime',
-        ]
-      })
-    ]
+    build: {
+      rollupOptions: {
+        external: ['dbus-final', 'x11']
+      }
+    }
   },
-  preload: {
-    plugins: [externalizeDepsPlugin()]
-  },
+  preload: {},
   renderer: {
+      build: {
+        rollupOptions: {
+          onwarn(warning, warn) {
+            if (warning.code === 'UNRESOLVED_IMPORT') return
+            warn(warning)
+          },
+          external: (id) => id.includes('__vite-optional-peer-dep')
+        }
+      },
     resolve: {
       alias: {
         '@renderer': resolve('src/renderer/src')
@@ -26,7 +28,7 @@ export default defineConfig({
     },
     plugins: [react()],
     server: {
-      proxy: {
+      proxy: { 
         '/search': 'http://localhost:8080',
         '/health': 'http://localhost:8080',
         '/reingest': 'http://localhost:8080',

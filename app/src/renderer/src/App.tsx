@@ -49,6 +49,8 @@ const MB_USER_AGENT = 'SOND3R/1.0.0 (https://fangorn.network)'
 
 const onTrackEndedRef = { current: () => { } }
 
+type AnalyzeTab = 'wiki' | 'neighborhood' | 'galaxy'
+
 // ─── Root ──────────────────────────────────────────────────────────────────────
 
 export default function App() {
@@ -530,8 +532,8 @@ function Main() {
           {/* KernelDebugHUD — Ctrl+K accessible */}
           <KernelDebugHUD state={kernel.state} />
         </div>
-      </PlayerProvider>
-    </SpotifyProvider>
+      </PlayerProvider >
+    </SpotifyProvider >
   )
 }
 

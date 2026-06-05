@@ -1,6 +1,6 @@
 # electron-builder.yml
 appId: com.sond3r.app
-productName: SOND3R
+productName: sond3r
 directories:
   buildResources: build
 files:
@@ -31,10 +31,30 @@ extraResources:
     to: "bin"
     filter: ["yt-dlp*"]
 win:
-  executableName: sond3r
+  executableName: SOND3R
   target:
     - target: portable
       arch: [x64]
+  artifactName: ${name}.${ext}
+
+mac:
+  executableName: SOND3R
+  target:
+    - target: dmg
+  artifactName: ${name}-${arch}.${ext}
+
+linux:
+  target:
+    - AppImage
+    - deb
+    - snap
+
+appImage:
+  artifactName: ${name}.${ext}
+deb:
+  artifactName: ${name}_${arch}.${ext}
+snap:
+  artifactName: ${name}_${arch}.${ext}
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
   shortcutName: ${productName}
@@ -44,7 +64,8 @@ npmRebuild: false
 nodeGypRebuild: false
 detectUpdateChannel: false
 publish:
-  provider: generic
-  url: https://example.com/auto-updates
+  provider: github
+  owner: fangorn-network
+  repo: sonder
 electronDownload:
   mirror: https://npmmirror.com/mirrors/electron/

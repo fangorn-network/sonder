@@ -1,0 +1,166 @@
+name: Build
+
+on:
+  push:
+    tags: ['v*']
+    branches: ['*']
+  workflow_dispatch:
+
+jobs:
+  build-python:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+            ext: ''
+          - os: windows-latest
+            platform: win
+            ext: '.exe'
+          - os: macos-latest
+            platform: mac
+            ext: ''
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install Python dependencies
+        run: |
+          cd app/vectordb
+          pip install -r requirements.txt
+          pip install pyinstaller certifi
+
+      - name: Build server binary (Linux/macOS)
+        if: matrix.platform != 'win'
+        run: |
+          cd app/vectordb
+          CERT_PATH=$(python -c "import certifi; print(certifi.where())")
+          pyinstaller --onefile --name server \
+            --add-data "$CERT_PATH:certifi" \
+            $(pip list --format=freeze | cut -d= -f1 | xargs -I{} echo "--collect-submodules {}") \
+            server.py
+
+      - name: Build server binary (Windows)
+        if: matrix.platform == 'win'
+        shell: pwsh
+        run: |
+          cd app/vectordb
+          $certPath = python -c "import certifi; print(certifi.where())"
+          $pyiArgs = @("--onefile", "--name", "server", "--add-data", "$certPath;certifi")
+          pip list --format=freeze | ForEach-Object { $_.Split('=')[0] } | ForEach-Object { $pyiArgs += "--collect-submodules"; $pyiArgs += $_ }
+          $pyiArgs += "server.py"
+          & pyinstaller @pyiArgs
+
+      - name: Upload server binary
+        uses: actions/upload-artifact@v6
+        with:
+          name: server-${{ matrix.platform }}
+          path: app/vectordb/dist/server${{ matrix.ext }}
+
+  build-electron:
+    needs: build-python
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+            build_cmd: build:linux
+            ytdlp_asset: yt-dlp
+          - os: windows-latest
+            platform: win
+            build_cmd: build:win
+            ytdlp_asset: yt-dlp.exe
+          - os: macos-latest
+            platform: mac
+            build_cmd: build:mac
+            arch: arm64
+            ytdlp_asset: yt-dlp_macos
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22.14.0'
+      - name: Setup Yarn
+        run: |
+          corepack enable
+          yarn set version stable
+      - name: Run yarn install
+        working-directory: app
+        run: yarn install
+
+      - name: Create .env file
+        working-directory: app
+        shell: bash
+        run: |
+          cat > .env << 'EOF'
+          VITE_GRAPH_API_KEY=${{ secrets.VITE_GRAPH_API_KEY }}
+          VITE_USE_AGENT=${{ secrets.VITE_USE_AGENT }}
+          VITE_ARBITRUM_SEPOLIA_RPC_URL=${{ secrets.VITE_ARBITRUM_SEPOLIA_RPC_URL }}
+          VITE_SPOTIFY_CLIENT_ID=${{secrets.VITE_SPOTIFY_CLIENT_ID}}
+          VITE_SPOTIFY_CLIENT_SECRET=${{secrets.VITE_SPOTIFY_CLIENT_SECRET}}
+          EOF
+
+      - name: Download server binary
+        uses: actions/download-artifact@v6
+        with:
+          name: server-${{ matrix.platform }}
+          path: app/vectordb/dist/${{ matrix.platform }}/
+
+      - name: Make server binary executable (Linux/macOS)
+        if: matrix.platform != 'win'
+        run: chmod +x app/vectordb/dist/${{ matrix.platform }}/server
+
+      - name: Download yt-dlp
+        run: |
+          mkdir -p app/resources/bin/${{ matrix.platform }}
+          curl -L -o app/resources/bin/${{ matrix.platform }}/${{ matrix.ytdlp_asset }} \
+            https://github.com/yt-dlp/yt-dlp/releases/latest/download/${{ matrix.ytdlp_asset }}
+        shell: bash
+
+      - name: Make yt-dlp executable (Linux/macOS)
+        if: matrix.platform != 'win'
+        run: chmod +x app/resources/bin/${{ matrix.platform }}/${{ matrix.ytdlp_asset }}
+
+      - name: Build Electron app
+        working-directory: app
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: yarn run ${{ matrix.build_cmd }} --publish never ${{ matrix.arch == 'arm64' && '--arm64' || '' }}
+
+      - name: Upload Electron build
+        uses: actions/upload-artifact@v6
+        with:
+          name: sond3r-${{ matrix.platform }}${{ matrix.arch && format('-{0}', matrix.arch) || '' }}
+          path: |
+            app/dist/*.exe
+            app/dist/*.dmg
+            app/dist/*.AppImage
+            app/dist/*.deb
+            app/dist/*.snap
+  release:
+    needs: build-electron
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v6
+        with:
+          path: artifacts/
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ github.ref_name }}" --title "Release ${{ github.ref_name }}" --generate-notes
+          find artifacts/sond3r-* -type f \( -name "*.exe" -o -name "*.dmg" -o -name "*.AppImage" -o -name "*.deb" -o -name "*.snap" \) -print0 \
+            | xargs -0 gh release upload "${{ github.ref_name }}"

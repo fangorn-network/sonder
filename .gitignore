@@ -32,7 +32,12 @@ deploy.sh
 **/.venv
 **/venv
 **/db/*
+**/.yarn/*
+!**/.yarn/releases
+!**/.yarn/patches
+!**/.yarn/plugins
+!**/.yarn/sdks
+!**/.yarn/versions
 **/stage_volumes/
 **/volume*.json
 **/volume*.jsonl
-.yarn

@@ -16,43 +16,6 @@ import { ToolboxConfigManager } from './agent/toolbox-config-manager'
 import { registerSpotifyAuth, handleSpotifyCallback } from './spotify/SpotifyAuth'
 import { registerPlaybackIpc } from './playback/ipc'
 
-// ─── yt-dlp helpers ───────────────────────────────────────────────────────────
-
-function getYtDlpBin(): string {
-  const ext = process.platform === 'win32' ? '.exe' : ''
-  const updatable = path.join(app.getPath('userData'), `yt-dlp${ext}`)
-  if (fs.existsSync(updatable)) return updatable
-  if (app.isPackaged) return path.join(process.resourcesPath, 'bin', `yt-dlp${ext}`)
-  return path.join(app.getAppPath(), 'resources', 'bin', `yt-dlp${ext}`)
-}
-
-async function updateYtDlp(): Promise<void> {
-  return new Promise((resolve) => {
-    const ext = process.platform === 'win32' ? '.exe' : ''
-    const updatable = path.join(app.getPath('userData'), `yt-dlp${ext}`)
-    const bin = getYtDlpBin()
-
-    if (!fs.existsSync(updatable)) {
-      try { fs.copyFileSync(bin, updatable); if (process.platform !== 'win32') fs.chmodSync(updatable, 0o755) }
-      catch { resolve(); return }
-    }
-
-    console.log('[yt-dlp] checking for updates...')
-    const proc = spawn(updatable, ['--update-to', 'nightly'])
-    proc.on('close', (code) => { console.log(`[yt-dlp] update exited ${code}`); resolve() })
-    proc.on('error', () => resolve())
-  })
-}
-
-export interface YtResolveResult {
-  streamUrl: string
-  videoId: string
-  title: string
-  artist: string
-  thumbnail: string
-  durationMs: number
-}
-
 // ─── Stream cache ─────────────────────────────────────────────────────────────
 interface StreamEntry {
   tmpPath: string
@@ -115,114 +78,6 @@ function startYtStreamProxy() {
   streamServer.listen(0, '127.0.0.1', () => {
     streamPort = (streamServer!.address() as any).port
     console.log(`[yt-stream] :${streamPort}`)
-  })
-}
-
-// ─── resolveYt ────────────────────────────────────────────────────────────────
-
-function resolveYt(query: string): Promise<YtResolveResult> {
-  return new Promise((resolve, reject) => {
-    const isBareId = /^[A-Za-z0-9_-]{11}$/.test(query)
-    const isUrl = query.startsWith('http')
-    const isYouTube =
-      isBareId || (isUrl && (query.includes('youtube.com') || query.includes('youtu.be')))
-
-    const target = (isBareId || isUrl) ? query : `ytsearch1:${query} music`
-
-    const infoArgs = ['--dump-json', '--no-playlist', '--no-warnings', target]
-    if (isYouTube) infoArgs.push('--extractor-args', 'youtube:player_client=tv_embedded')
-
-    const infoProc = spawn(getYtDlpBin(), infoArgs)
-    let out = '', err = ''
-    infoProc.stdout.on('data', (d: Buffer) => { out += d.toString() })
-    infoProc.stderr.on('data', (d: Buffer) => { err += d.toString() })
-    infoProc.on('error', reject)
-
-    infoProc.on('close', (code: number) => {
-      if (code !== 0) {
-        reject(new Error(`yt-dlp info exited ${code}: ${err.slice(0, 300)}`))
-        return
-      }
-
-      try {
-        const info = JSON.parse(out.trim().split('\n')[0])
-
-        const result: YtResolveResult = {
-          streamUrl: `http://127.0.0.1:${streamPort}/${info.id}`,
-          videoId: info.id,
-          title: info.title ?? 'Unknown Title',
-          artist: info.uploader ?? info.channel ?? 'Unknown Artist',
-          thumbnail: info.thumbnail ?? '',
-          durationMs: Math.round((info.duration ?? 0) * 1000),
-        }
-
-        if (streamCache.has(info.id)) return resolve(result)
-
-        const formats: any[] = (info.formats ?? [])
-          .filter((f: any) => {
-            if (!f.format_id) return false
-            if (f.acodec === 'none') return false
-            if (f.vcodec && f.vcodec !== 'none') return false
-            if (f.protocol?.includes('m3u8')) return false
-            if (f.protocol?.includes('dash')) return false
-            return true
-          })
-          .sort((a: any, b: any) => {
-            const aBr = a.abr ?? a.tbr ?? 0
-            const bBr = b.abr ?? b.tbr ?? 0
-            const aScore = (aBr >= 128 ? 10000 : aBr * 10) + (a.acodec?.startsWith('opus') ? 50 : 0)
-            const bScore = (bBr >= 128 ? 10000 : bBr * 10) + (b.acodec?.startsWith('opus') ? 50 : 0)
-            return bScore - aScore
-          })
-
-        const fmt = formats[0]
-        if (!fmt?.format_id) throw new Error('No compatible audio format found')
-
-        const ext = fmt.ext ?? 'm4a'
-        const contentType = ext === 'webm' ? 'audio/webm'
-          : ext === 'opus' ? 'audio/ogg'
-            : 'audio/mp4'
-        const sourceUrl = isUrl
-          ? query
-          : `https://www.youtube.com/watch?v=${info.id}`
-        const tmpPath = path.join(app.getPath('userData'), `sond3r-${info.id}.${ext}`)
-
-        if (fs.existsSync(tmpPath)) {
-          const size = fs.statSync(tmpPath).size
-          if (size > 32 * 1024) {
-            streamCache.set(info.id, { tmpPath, contentType, sourceQuery: query })
-            return resolve(result)
-          }
-          try { fs.unlinkSync(tmpPath) } catch { }
-        }
-
-        const dlArgs = [
-          sourceUrl,
-          '-f', fmt.format_id,
-          '--no-playlist', '--no-warnings',
-          '--no-part',
-          '-o', tmpPath,
-        ]
-        if (isYouTube) dlArgs.push('--extractor-args', 'youtube:player_client=tv_embedded')
-
-        console.log(`[yt:dl] starting: ${info.id} (${fmt.format_id} ${ext})`)
-        const dlProc = spawn(getYtDlpBin(), dlArgs)
-        dlProc.stderr.on('data', (d: Buffer) => console.error('[yt:dl]', d.toString().trimEnd()))
-        dlProc.on('error', reject)
-        dlProc.on('close', (code) => {
-          if (code !== 0) {
-            try { fs.unlinkSync(tmpPath) } catch { }
-            reject(new Error(`yt-dlp download exited ${code}`))
-            return
-          }
-          console.log(`[yt:dl] done: ${info.id}`)
-          streamCache.set(info.id, { tmpPath, contentType, sourceQuery: query })
-          resolve(result)
-        })
-      } catch (e: any) {
-        reject(new Error(`resolve failed: ${e.message}`))
-      }
-    })
   })
 }
 
@@ -401,57 +256,6 @@ function registerIpcHandlers() {
     console.log('[rpc]', method, res.status, text.slice(0, 200))
     return text
   })
-
-  // ── yt-dlp ──────────────────────────────────────────────────────────────────
-
-  ipcMain.handle('yt:resolve', async (_event, query: string): Promise<YtResolveResult> => {
-    return resolveYt(query)
-  })
-
-  ipcMain.handle('yt:prefetch', async (_event, query: string) => {
-    try { await resolveYt(query) } catch { /* non-fatal */ }
-  })
-
-  ipcMain.handle('yt:search:music', async (_event, query: string): Promise<any[]> => {
-    return new Promise((resolve) => {
-      const proc = spawn(getYtDlpBin(), [
-        `ytsearch15:${query}`,
-        '--dump-json', '--no-playlist', '--no-warnings', '--flat-playlist',
-      ])
-      let out = ''
-      proc.stdout.on('data', (d: Buffer) => { out += d.toString() })
-      proc.stderr.on('data', (d: Buffer) => { console.error('[yt:search:music]', d.toString().trim()) })
-      proc.on('error', () => resolve([]))
-      proc.on('close', (code) => {
-        if (code !== 0) { resolve([]); return }
-        const results = out.trim().split('\n')
-          .filter(Boolean)
-          .map(line => { try { return JSON.parse(line) } catch { return null } })
-          .filter(Boolean)
-        resolve(results)
-      })
-    })
-  })
-
-  ipcMain.handle('yt:search:sc', async (_event, query: string): Promise<any[]> => {
-    return new Promise((resolve) => {
-      const proc = spawn(getYtDlpBin(), [
-        `scsearch30:${query}`,
-        '--dump-json', '--no-playlist', '--no-warnings', '--flat-playlist',
-      ])
-      let out = ''
-      proc.stdout.on('data', (d: Buffer) => { out += d.toString() })
-      proc.on('error', () => resolve([]))
-      proc.on('close', (code) => {
-        if (code !== 0) { resolve([]); return }
-        const results = out.trim().split('\n')
-          .filter(Boolean)
-          .map(line => { try { return JSON.parse(line) } catch { return null } })
-          .filter(Boolean)
-        resolve(results)
-      })
-    })
-  })
 }
 
 // ─── Arbitrum RPC proxy ───────────────────────────────────────────────────────
@@ -553,7 +357,6 @@ app.whenReady().then(async () => {
   electronApp.setAppUserModelId('com.electron')
 
   startPython()
-  updateYtDlp()
   startYtStreamProxy()
 
   if (!is.dev) await startRendererServer()

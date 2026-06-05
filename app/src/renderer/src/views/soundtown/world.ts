@@ -182,3 +182,64 @@ export function keepInSongline(y: VerbYield, zone: string, note?: string): boole
 }
 
 export function songlineHas(id: string): boolean { return readSongline().some(e => e.id === id) }
+
+// ── Deterministic RNG — stable spirit placement (same seed → same world) ──────
+export function hashStr(...parts: string[]): number {
+    let h = 2166136261 >>> 0
+    for (const s of parts) for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619)
+    return h >>> 0
+}
+export function mulberry32(seed: number): () => number {
+    let a = seed >>> 0
+    return () => {
+        a |= 0; a = (a + 0x6D2B79F5) | 0
+        let t = Math.imul(a ^ (a >>> 15), 1 | a)
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+    }
+}
+
+// ── A track-spirit's one characterful line (Undertale register) ───────────────
+const SPIRIT_LINES: Record<string, string[]> = {
+    ambient: ['A long, slow breath of a thing. It barely notices you.', 'It hums like a room remembering a sound.'],
+    techno: ['It pulses in a tight, certain loop. It does not stop for anyone.', 'A machine-heart, keeping time in the dark.'],
+    jazz: ['It tilts its head, mid-phrase, and waits to see what you do.', 'It has never played the same way twice. It seems pleased about this.'],
+    folk: ['A small, worn voice. It sounds like it has walked a long way.', 'It knows one story and tells it gently.'],
+    metal: ['It bares its teeth, but there is grief under the noise.', 'It roars to keep from going quiet.'],
+    'hip-hop': ['It leans back, sizing you up over a heavy beat.', 'Every word lands on purpose. It dares you to look away.'],
+    pop: ['It glows too brightly and wants, badly, to be loved.', 'It already knows the chorus you will hum later.'],
+    classical: ['An old, patient light. It has outlived everyone who first heard it.', 'It unfolds like it has all the time in the world.'],
+    rock: ['It stands its ground and turns up.', 'It has been waiting here a long time. It only knows one chorus.'],
+    electronic: ['It shimmers and refracts, never quite holding still.', 'A bright circuit, dreaming of a body.'],
+}
+export function spiritLine(track: CatalogTrack): string {
+    const g = (track.genres?.[0] ?? '').toLowerCase()
+    let pool: string[] | null = null
+    for (const [k, v] of Object.entries(SPIRIT_LINES)) if (g.includes(k) || k.includes(g)) { pool = v; break }
+    if (!pool) pool = ['A drifting echo of a song. It glows a little when you near it.', 'It has been singing to no one. It does not seem to mind.']
+    const r = mulberry32(hashStr(track.id))()
+    return pool[(r * pool.length) | 0]
+}
+
+// ── Stage-0 value: content-address the songline (tamper-evident artifact id) ──
+function canonical(entries: SonglineEntry[]): string {
+    // stable key order + chronological → same songline always serializes identically
+    const sorted = [...entries].sort((a, b) => a.t - b.t || a.id.localeCompare(b.id))
+    return JSON.stringify(sorted.map(e => ({
+        artist: e.artist, genres: e.genres, homeZone: e.homeZone, id: e.id,
+        note: e.note ?? '', t: e.t, title: e.title, verb: e.verb, zone: e.zone,
+    })))
+}
+export async function songlineHash(entries: SonglineEntry[]): Promise<string> {
+    const data = new TextEncoder().encode(canonical(entries))
+    const buf = await crypto.subtle.digest('SHA-256', data)
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('')
+}
+export async function exportSongline(entries: SonglineEntry[]): Promise<void> {
+    const hash = await songlineHash(entries)
+    const artifact = { v: 1, kind: 'sond3r.songline', id: `sha256:${hash}`, createdAt: Date.now(), count: entries.length, entries }
+    const blob = new Blob([JSON.stringify(artifact, null, 2)], { type: 'application/json' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob); a.download = `songline-${hash.slice(0, 8)}.json`; a.click()
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000)
+}

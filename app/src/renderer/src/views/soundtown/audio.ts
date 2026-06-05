@@ -1,135 +1,154 @@
 /**
- * soundtown/audio.ts — the SoundTown audio engine.
+ * soundtown/audio.ts — the SoundTown audio engine (v2: the world sings).
  *
- * One AudioContext, one bus graph.  We have no licensed stems — only 30s iTunes
- * previews — so "ambience" is SYNTHESIZED: a per-genre drone bed (a few detuned
- * oscillators + a slow filter sweep) tuned from the genre name.  The drone gives
- * each town a tonal identity and ducks under the encounter preview.  SFX
- * (footstep, rustle, catch, menu) are tiny synthesized bursts — zero assets.
+ * There is NO synthesized bed any more.  The sound of the world IS the tracks:
+ * each track-spirit emits its own 30s preview, and what you hear is a function of
+ * how near you stand.  Walk toward a glow and its song resolves from muffled-and-
+ * distant to clear-and-present.  Silence between spirits is intentional.
  *
- *   master ← compressor ← [ ambienceBus, previewBus, sfxBus ] ← destination
+ *   master ← compressor ← [ proximityBus(voice pool) , focusBus , sfxBus ]
  *
- * Everything ramps (never abrupt .value sets) so it stays click-free, and the
- * whole graph is a handful of nodes — cheap even on a software rasterizer box.
+ * Voices are pooled MediaElement sources (robust + CORS-proven, no decode budget
+ * to babysit).  Per voice:  <audio loop> → lowpass → panner → gain → proximityBus.
+ * The nearest few spirits are mounted; farther mounted voices are stolen.  All
+ * params ramp (setTargetAtTime) so it stays click-free.  "Focus" lifts one track
+ * to full clarity for an encounter and ducks the ambient field.
  */
 
-const AMB_LEVEL = 0.055
-const AMB_DUCKED = 0.012
-const PREVIEW_LEVEL = 0.85
+const VOICE_COUNT = 4
+const AUDIBLE_R = 5.5      // tiles — beyond this a spirit is silent
+const PREFETCH_R = 8.5     // tiles — preload within this so nothing pops
+const LP_FAR = 460         // lowpass cutoff when distant (muffled)
+const LP_NEAR = 7000       // cutoff up close (clear)
 
-// Minor-leaning genres get a flat third; everything else a major third.
-const MINOR_HINT = /techno|metal|drone|dark|industrial|doom|goth|noise|ambient|trap|phonk/
+export interface SpiritAudio { id: string; tx: number; ty: number; url: string | null }
 
-function freqFromGenre(g: string): { root: number; third: number; fifth: number } {
-    let h = 0; for (let i = 0; i < g.length; i++) h = (h * 31 + g.charCodeAt(i)) >>> 0
-    const root = 110 * Math.pow(2, ((h % 7)) / 12)          // A2..-ish, genre-stable
-    const third = root * (MINOR_HINT.test(g.toLowerCase()) ? 1.1892 : 1.2599) // m3 vs M3
-    const fifth = root * 1.4983
-    return { root, third, fifth }
+interface Voice {
+    el: HTMLAudioElement
+    src: MediaElementAudioSourceNode
+    lp: BiquadFilterNode
+    pan: StereoPannerNode
+    gain: GainNode
+    id: string | null
+    ready: boolean
 }
 
 export class SoundTownAudio {
     private ctx: AudioContext | null = null
     private master!: GainNode
     private comp!: DynamicsCompressorNode
-    private ambBus!: GainNode
-    private prevBus!: GainNode
+    private proxBus!: GainNode
+    private focusBus!: GainNode
     private sfxBus!: GainNode
-    private oscs: OscillatorNode[] = []
-    private ambFilter!: BiquadFilterNode
-    private lfo!: OscillatorNode
+    private voices: Voice[] = []
+    private focus!: Voice
     private noiseBuf: AudioBuffer | null = null
-    private prevEl: HTMLAudioElement | null = null
-    private prevSrc: MediaElementAudioSourceNode | null = null
 
     muted = false
-    volume = 0.8
+    volume = 0.85
 
     constructor() {
-        try { this.volume = parseFloat(localStorage.getItem('sond3r:volume') ?? '0.8') } catch { /* */ }
+        try { this.volume = parseFloat(localStorage.getItem('sond3r:volume') ?? '0.85') } catch { /* */ }
         try { this.muted = localStorage.getItem('sond3r:muted') === '1' } catch { /* */ }
     }
 
-    /** Must be called from a user gesture (key/click) to satisfy autoplay rules. */
-    resume() {
-        if (!this.ctx) this.init()
-        if (this.ctx!.state === 'suspended') this.ctx!.resume()
-    }
+    resume() { if (!this.ctx) this.init(); if (this.ctx!.state === 'suspended') this.ctx!.resume() }
 
     private init() {
-        const ctx = new AudioContext()
-        this.ctx = ctx
+        const ctx = new AudioContext(); this.ctx = ctx
         this.master = ctx.createGain(); this.master.gain.value = this.muted ? 0 : this.volume
         this.comp = ctx.createDynamicsCompressor()
-        this.comp.threshold.value = -18; this.comp.ratio.value = 3; this.comp.attack.value = 0.005; this.comp.release.value = 0.25
+        this.comp.threshold.value = -16; this.comp.ratio.value = 3; this.comp.attack.value = 0.006; this.comp.release.value = 0.25
         this.comp.connect(this.master); this.master.connect(ctx.destination)
-
-        this.ambBus = ctx.createGain(); this.ambBus.gain.value = AMB_LEVEL; this.ambBus.connect(this.comp)
-        this.prevBus = ctx.createGain(); this.prevBus.gain.value = PREVIEW_LEVEL; this.prevBus.connect(this.comp)
+        this.proxBus = ctx.createGain(); this.proxBus.gain.value = 1; this.proxBus.connect(this.comp)
+        this.focusBus = ctx.createGain(); this.focusBus.gain.value = 1; this.focusBus.connect(this.comp)
         this.sfxBus = ctx.createGain(); this.sfxBus.gain.value = 0.5; this.sfxBus.connect(this.comp)
-
-        // Drone bed: 3 oscillators through a slow-swept lowpass.
-        this.ambFilter = ctx.createBiquadFilter(); this.ambFilter.type = 'lowpass'
-        this.ambFilter.frequency.value = 600; this.ambFilter.Q.value = 4
-        this.ambFilter.connect(this.ambBus)
-        this.lfo = ctx.createOscillator(); this.lfo.frequency.value = 0.07
-        const lfoGain = ctx.createGain(); lfoGain.gain.value = 220
-        this.lfo.connect(lfoGain); lfoGain.connect(this.ambFilter.frequency); this.lfo.start()
-        for (let i = 0; i < 3; i++) {
-            const o = ctx.createOscillator(); o.type = i === 0 ? 'sine' : 'triangle'
-            o.frequency.value = 110 * (1 + i * 0.5)
-            const g = ctx.createGain(); g.gain.value = i === 0 ? 0.5 : 0.3
-            o.connect(g); g.connect(this.ambFilter); o.start()
-            this.oscs.push(o)
-        }
-        // Noise buffer for SFX.
+        for (let i = 0; i < VOICE_COUNT; i++) this.voices.push(this.makeVoice(this.proxBus))
+        this.focus = this.makeVoice(this.focusBus)
         const n = ctx.createBuffer(1, ctx.sampleRate * 0.4, ctx.sampleRate)
         const d = n.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1
         this.noiseBuf = n
     }
 
-    // ── Biome drone — retune the oscillators toward the new genre's chord ──────
-    setBiome(genre: string) {
+    private makeVoice(bus: GainNode): Voice {
+        const ctx = this.ctx!
+        const el = new Audio(); el.crossOrigin = 'anonymous'; el.loop = true; el.preload = 'auto'
+        const src = ctx.createMediaElementSource(el)
+        const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = LP_FAR; lp.Q.value = 0.7
+        const pan = ctx.createStereoPanner()
+        const gain = ctx.createGain(); gain.gain.value = 0
+        src.connect(lp); lp.connect(pan); pan.connect(gain); gain.connect(bus)
+        const v: Voice = { el, src, lp, pan, gain, id: null, ready: false }
+        el.addEventListener('canplay', () => { v.ready = true })
+        return v
+    }
+
+    private mount(v: Voice, s: SpiritAudio) {
+        if (v.id === s.id) return
+        v.id = s.id; v.ready = false
+        if (s.url) { v.el.src = s.url; v.el.play().catch(() => { }) }
+    }
+    private unmount(v: Voice) {
+        if (!v.id) return
+        v.id = null; v.ready = false
+        if (this.ctx) { v.gain.gain.cancelScheduledValues(this.ctx.currentTime); v.gain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.12) }
+        try { v.el.pause() } catch { /* */ }
+    }
+
+    /**
+     * Ambient mix: mount the nearest audible spirits to the voice pool and set
+     * each voice's gain/lowpass/pan from the player's distance.  `kept` spirits
+     * (already collected) stay silent.  Call ~8-12 Hz from the game loop.
+     */
+    updateProximity(playerTx: number, playerTy: number, spirits: SpiritAudio[], kept: Set<string>) {
         if (!this.ctx) return
-        const { root, third, fifth } = freqFromGenre(genre)
-        const tune = [root, third, fifth]
         const now = this.ctx.currentTime
-        this.oscs.forEach((o, i) => {
-            o.frequency.cancelScheduledValues(now)
-            o.frequency.setTargetAtTime(tune[i], now, 0.4)   // ~0.9s glide, click-free
-        })
+        const ranked = spirits
+            .filter(s => s.url && !kept.has(s.id))
+            .map(s => ({ s, d: Math.hypot(s.tx - playerTx, s.ty - playerTy) }))
+            .filter(o => o.d < AUDIBLE_R)
+            .sort((a, b) => a.d - b.d)
+            .slice(0, VOICE_COUNT)
+        const want = new Set(ranked.map(o => o.s.id))
+        // free voices no longer wanted
+        for (const v of this.voices) if (v.id && !want.has(v.id)) this.unmount(v)
+        // assign each wanted spirit to a voice (reuse if already mounted, else a free one)
+        for (const { s, d } of ranked) {
+            let v = this.voices.find(x => x.id === s.id) ?? this.voices.find(x => !x.id)
+            if (!v) continue
+            this.mount(v, s)
+            const k = Math.max(0, 1 - d / AUDIBLE_R)          // 0..1 nearness
+            const g = k * k * 0.9
+            v.gain.gain.setTargetAtTime(v.ready ? g : 0, now, 0.10)   // fade in only once buffered
+            v.lp.frequency.setTargetAtTime(LP_FAR + k * k * (LP_NEAR - LP_FAR), now, 0.12)
+            v.pan.pan.setTargetAtTime(Math.max(-1, Math.min(1, (s.tx - playerTx) / AUDIBLE_R)), now, 0.12)
+        }
     }
 
-    private duck(on: boolean) {
+    /** Encounter: lift one track to full clarity, hush the ambient field. */
+    focusTrack(url: string | null) {
+        if (!this.ctx || !url) return
+        const now = this.ctx.currentTime
+        this.proxBus.gain.setTargetAtTime(0.10, now, 0.08)
+        const v = this.focus
+        v.el.src = url; v.lp.frequency.setTargetAtTime(LP_NEAR, now, 0.05)
+        v.pan.pan.setValueAtTime(0, now); v.gain.gain.cancelScheduledValues(now); v.gain.gain.setValueAtTime(0, now)
+        v.el.play().then(() => v.gain.gain.setTargetAtTime(0.95, this.ctx!.currentTime, 0.08)).catch(() => { })
+    }
+    unfocus() {
         if (!this.ctx) return
         const now = this.ctx.currentTime
-        this.ambBus.gain.cancelScheduledValues(now)
-        this.ambBus.gain.setTargetAtTime(on ? AMB_DUCKED : AMB_LEVEL, now, on ? 0.06 : 0.13)
+        this.focus.gain.gain.setTargetAtTime(0, now, 0.1)
+        this.proxBus.gain.setTargetAtTime(1, now, 0.2)
+        setTimeout(() => { try { this.focus.el.pause() } catch { /* */ } }, 200)
     }
 
-    // ── Encounter preview ─────────────────────────────────────────────────────
-    async playPreview(url: string, onProgress?: (p: number) => void, onEnded?: () => void) {
-        this.resume()
-        this.stopPreview(false)
-        const el = new Audio(); el.crossOrigin = 'anonymous'; el.src = url
-        el.addEventListener('timeupdate', () => onProgress?.(el.currentTime / (el.duration || 30)))
-        el.addEventListener('ended', () => { this.duck(false); onEnded?.() })
-        try {
-            const src = this.ctx!.createMediaElementSource(el)
-            src.connect(this.prevBus); this.prevSrc = src
-        } catch { /* element already wired */ }
-        this.prevEl = el
-        this.duck(true)
-        el.play().catch(() => { })
+    silenceAll() {
+        for (const v of this.voices) this.unmount(v)
+        this.unfocus()
     }
 
-    stopPreview(unduck = true) {
-        if (this.prevEl) { this.prevEl.pause(); this.prevEl = null }
-        if (this.prevSrc) { try { this.prevSrc.disconnect() } catch { /* */ } this.prevSrc = null }
-        if (unduck) this.duck(false)
-    }
-
-    // ── SFX (synthesized) ─────────────────────────────────────────────────────
+    // ── SFX (synthesized bursts — these are not the old drone) ────────────────
     private noise(dur: number, type: BiquadFilterType, freq: number, gain: number, pan = 0) {
         if (!this.ctx || !this.noiseBuf) return
         const ctx = this.ctx, now = ctx.currentTime
@@ -148,11 +167,12 @@ export class SoundTownAudio {
         o.connect(g); g.connect(this.sfxBus); o.start(now); o.stop(now + dur)
     }
     private stepFlip = false
-    footstep() { this.stepFlip = !this.stepFlip; this.noise(0.05, 'lowpass', 480, 0.12, this.stepFlip ? -0.25 : 0.25) }
-    rustle() { this.noise(0.12, 'bandpass', 2400, 0.18) }
-    catch_() { this.blip(523, 784, 0.12, 'sine', 0.35); setTimeout(() => this.blip(784, 1175, 0.1, 'sine', 0.28), 90) }
-    menu() { this.blip(330, 220, 0.06, 'square', 0.18) }
-    warp() { this.blip(180, 720, 0.35, 'sine', 0.25) }
+    footstep() { this.stepFlip = !this.stepFlip; this.noise(0.045, 'lowpass', 420, 0.07, this.stepFlip ? -0.2 : 0.2) }
+    catch_() { this.blip(523, 784, 0.12, 'sine', 0.3); setTimeout(() => this.blip(784, 1175, 0.1, 'sine', 0.24), 90) }
+    menu() { this.blip(330, 220, 0.05, 'square', 0.12) }
+    /** A short character "voice" blip for typed dialogue — pitch varies by speaker. */
+    voiceBlip(pitch = 1) { this.blip(180 * pitch, 150 * pitch, 0.03, 'square', 0.05) }
+    warp() { this.blip(160, 720, 0.4, 'sine', 0.2) }
 
     // ── Mix controls ──────────────────────────────────────────────────────────
     setVolume(v: number) {
@@ -165,5 +185,5 @@ export class SoundTownAudio {
         try { localStorage.setItem('sond3r:muted', m ? '1' : '0') } catch { /* */ }
         if (this.ctx) this.master.gain.setTargetAtTime(m ? 0 : this.volume, this.ctx.currentTime, 0.05)
     }
-    dispose() { this.stopPreview(); try { this.ctx?.close() } catch { /* */ } this.ctx = null }
+    dispose() { this.silenceAll(); try { this.ctx?.close() } catch { /* */ } this.ctx = null }
 }

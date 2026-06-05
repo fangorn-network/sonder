@@ -3,59 +3,109 @@ import json
 import hashlib
 import sys
 import time
-import queue
-import threading
-import multiprocessing
+import re
+import requests
 import tarfile
 import lzma
-import urllib.request
 from typing import Iterator, Dict, Any
 
 # ===========================================================================
-# 1. MUSICBRAINZ DATA DUMP STREAM
+# 1. GLOBAL PIPELINE CONFIGURATION
 # ===========================================================================
-# MusicBrainz publishes full JSON dumps here (updated monthly, no auth needed):
-#   https://data.metabrainz.org/pub/musicbrainz/data/json-dumps/
-#
-# The 'recording' dump contains all tracks globally with ISRCs, artists,
-# releases, genres (tags), and duration. Each line is a self-contained JSON object.
-#
-# HOW TO USE:
-#   Option A) Stream directly from the URL (slow, network-bound, but no disk needed):
-#             Set DUMP_SOURCE = "url" and set MB_DUMP_URL to the latest recording dump.
-#
-#   Option B) Download the .tar.xz first, then point DUMP_SOURCE = "local"
-#             and set LOCAL_DUMP_PATH to the file on disk.
-#             Download page: https://data.metabrainz.org/pub/musicbrainz/data/json-dumps/
-#             File to grab:  recording.tar.xz  (typically ~10-20GB compressed)
-#
-#   Option B is strongly recommended for production — avoids timeout risk on
-#   a multi-hour stream and lets you re-run without re-downloading.
+REQUIRE_TAXONOMY = True       # 🏷️ True: Drops any track that has no genre tags
+TARGET_TRACK_COUNT = 1000000  # 🎯 Pipeline stops immediately when this count is written
+MAX_FILE_SIZE_GB = 1          # Hard disk safety cap
+TARGET_VOLUME = 1             # 📂 Current volume naming suffix
+OUTPUT_DIR = "./stage_volumes"
+DUMP_SOURCE = "url"           # "url" to stream live over the network
+
+# --- Stream Tweaks ---
+NETWORK_CHUNK_SIZE = 128 * 1024  # 📡 128KB chunks for seamless, live networking
+
+# --- Base Directory for Web Resolution ---
+MB_BASE_DUMP_URL = "https://data.metabrainz.org/pub/musicbrainz/data/json-dumps/"
+
+
 # ===========================================================================
+# 2. DERIVED PATHS & DIRECTORY SETUP
+# ===========================================================================
+CORE_FILE_PATH = os.path.join(OUTPUT_DIR, f"volume_{TARGET_VOLUME}_core.json")
+TAXO_FILE_PATH = os.path.join(OUTPUT_DIR, f"volume_{TARGET_VOLUME}_taxonomy.json")
+SOURCES_FILE_PATH = os.path.join(OUTPUT_DIR, f"volume_{TARGET_VOLUME}_sources.json")
+LEDGER_PATH = os.path.join(OUTPUT_DIR, f"volume_{TARGET_VOLUME}_state.json")
 
-DUMP_SOURCE = "local"  # "local" or "url"
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-# --- For DUMP_SOURCE = "url" ---
-MB_DUMP_URL = "https://data.metabrainz.org/pub/musicbrainz/data/json-dumps/recording.tar.xz"
+# ===========================================================================
+# 3. DYNAMIC URL DISCOVERY ENGINE
+# ===========================================================================
+def resolve_latest_dump_url() -> str:
+    print("🔍 Scanning MetaBrainz index for the latest valid data snapshot...")
+    try:
+        headers = {"User-Agent": "Fangorn-Pipeline/1.0"}
+        response = requests.get(MB_BASE_DUMP_URL, headers=headers)
+        response.raise_for_status()
+        html = response.text
 
-# --- For DUMP_SOURCE = "local" ---
-LOCAL_DUMP_PATH = "./recording.tar.xz"
+        directories = re.findall(r'href="([0-9]{8}-[0-9]{6})/?"', html)
+        if not directories:
+            directories = re.findall(r'href=["\']?([0-9]{8}-[0-9]{6})/.*?["\']?', html)
+
+        if not directories:
+            raise RuntimeError("Could not parse any active datestamp directories.")
+
+        sorted_dirs = sorted(directories, reverse=True)
+
+        for directory in sorted_dirs:
+            target_url = f"{MB_BASE_DUMP_URL}{directory}/release.tar.xz"
+            print(f"   🔎 Validating availability of: {directory}/release.tar.xz ...")
+
+            check_resp = requests.head(target_url, headers=headers)
+            if check_resp.status_code == 200:
+                print(f"🎯 Resolved target location:\n   👉 {target_url}")
+                return target_url
+            else:
+                print(f"   ⚠️ File returned {check_resp.status_code}. Skipping...")
+
+        raise RuntimeError("No directories contained a compiled release.tar.xz archive.")
+    except Exception as e:
+        print(f"❌ Dynamic discovery failed: {e}")
+        fallback_url = f"{MB_BASE_DUMP_URL}latest/release.tar.xz"
+        print(f"ℹ️ Reverting to default alias path: {fallback_url}")
+        return fallback_url
 
 
-def _iter_recording_lines(fileobj) -> Iterator[bytes]:
-    """
-    Opens the .tar.xz stream and yields raw JSON lines from the
-    'mbdump/recording' member file inside the archive.
-    The archive is read sequentially — memory stays flat regardless of size.
+# ===========================================================================
+# 4. MEMORY-EFFICIENT SEQUENTIAL STREAM PAYLOAD PARSER
+# ===========================================================================
+class RequestsStreamWrapper:
+    def __init__(self, response, chunk_size: int):
+        self.chunks = response.iter_content(chunk_size=chunk_size)
+        self.bytes_read = 0
+        self.last_report = 0
 
-    NOTE: tarfile's streaming mode ("r|") does not support XZ/LZMA directly,
-    so we decompress with lzma.open() first and feed the raw tar stream in.
-    """
-    with lzma.open(fileobj, format=lzma.FORMAT_AUTO) as xz_stream:
+    def read(self, size=-1):
+        try:
+            data = next(self.chunks)
+            self.bytes_read += len(data)
+
+            if self.bytes_read - self.last_report >= 5 * 1024 * 1024:
+                mb_downloaded = self.bytes_read / (1024 * 1024)
+                print(f"   📡 Stream Progress: {mb_downloaded:.1f} MB processed over the wire...", end="\r", flush=True)
+                self.last_report = self.bytes_read
+            return data
+        except StopIteration:
+            return b""
+
+
+def _iter_recording_lines(stream_source) -> Iterator[bytes]:
+    print("   ⏳ Hooking decompression pipes to network stream...")
+    with lzma.open(stream_source, format=lzma.FORMAT_AUTO) as xz_stream:
         with tarfile.open(fileobj=xz_stream, mode="r|") as tar:
             for member in tar:
-                # The recording dump contains a single file: mbdump/recording
-                if member.name in ("mbdump/recording", "recording"):
+                print(f"   📂 Archive Parser: Passing entity '{member.name}'...", end="\r", flush=True)
+                if member.name in ("mbdump/release", "release", "mbdump/recording", "recording"):
+                    print(f"\n   🎯 Core payload target hit: '{member.name}'! Extracting real-time text lines...")
                     f = tar.extractfile(member)
                     if f is None:
                         continue
@@ -63,70 +113,44 @@ def _iter_recording_lines(fileobj) -> Iterator[bytes]:
                         line = line.strip()
                         if line:
                             yield line
-                    return  # Only one target file; stop after finding it
+                    return
+
+
+def _extract_spotify_id(url_res: str) -> str:
+    """Safely extracts a 22-character Spotify ID from a URL or URI resource."""
+    if not url_res:
+        return None
+    match = re.search(r'(?:spotify\.com/track/|spotify:track:)([a-zA-Z0-9]+)', url_res)
+    return match.group(1) if match else None
 
 
 def fetch_raw_data_stream() -> Iterator[Dict[str, Any]]:
-    """
-    Streams MusicBrainz recording JSON lines and normalises each record
-    into the flat dict shape the processing_worker expects.
-
-    MusicBrainz recording JSON shape (relevant fields):
-    {
-      "id": "mbid-string",
-      "title": "Track Title",
-      "length": 213000,          # duration in ms (may be null)
-      "isrcs": ["USRC12345678"], # list, may be empty
-      "artist-credit": [
-        {"artist": {"name": "Artist Name", "id": "mbid"}, "name": "credited-as"},
-        {"joinphrase": " & "},
-        ...
-      ],
-      "releases": [
-        {"title": "Album Name", "date": "2024-01-15", ...}
-      ],
-      "tags": [
-        {"name": "electronic", "count": 5},
-        {"name": "ambient", "count": 3}
-      ],
-      "genres": [
-        {"name": "electronic", "count": 5}
-      ]
-    }
-    """
-    print(f"🎸 Opening MusicBrainz recording dump ({DUMP_SOURCE} mode)...")
-
     if DUMP_SOURCE == "url":
-        print(f"   Streaming from: {MB_DUMP_URL}")
-        print("   ⚠️  This will be slow (~hours). Consider downloading locally first.")
-        req = urllib.request.Request(MB_DUMP_URL, headers={"User-Agent": "Fangorn-Pipeline/1.0"})
-        response = urllib.request.urlopen(req)
-        line_iter = _iter_recording_lines(response)
+        target_url = resolve_latest_dump_url()
+        headers = {"User-Agent": "Fangorn-Pipeline/1.0"}
+        response = requests.get(target_url, headers=headers, stream=True)
+        response.raise_for_status()
+        stream_wrapper = RequestsStreamWrapper(response, chunk_size=NETWORK_CHUNK_SIZE)
+        line_iter = _iter_recording_lines(stream_wrapper)
     else:
+        LOCAL_DUMP_PATH = "./recording.tar.xz"
         if not os.path.exists(LOCAL_DUMP_PATH):
-            raise FileNotFoundError(
-                f"Dump file not found: {LOCAL_DUMP_PATH}\n"
-                f"Download it from:\n"
-                f"  https://data.metabrainz.org/pub/musicbrainz/data/json-dumps/\n"
-                f"  File: recording.tar.xz\n"
-                f"Then set LOCAL_DUMP_PATH to its location."
-            )
-        print(f"   Reading from: {LOCAL_DUMP_PATH}")
+            raise FileNotFoundError(f"Local dump file not found at: {LOCAL_DUMP_PATH}")
         f = open(LOCAL_DUMP_PATH, "rb")
         line_iter = _iter_recording_lines(f)
 
-    count = 0
+    raw_inspected = 0
     for raw_line in line_iter:
+        raw_inspected += 1
         try:
             rec = json.loads(raw_line)
         except json.JSONDecodeError:
             continue
 
-        # --- Artist credit: join all non-joinphrase segments ---
+        # --- Artist Credit Assembly ---
         artist_parts = []
         for segment in rec.get("artist-credit", []):
             if isinstance(segment, dict) and "artist" in segment:
-                # Prefer the credited name; fall back to canonical artist name
                 credited = segment.get("name") or segment["artist"].get("name", "")
                 if credited:
                     artist_parts.append(credited)
@@ -135,32 +159,65 @@ def fetch_raw_data_stream() -> Iterator[Dict[str, Any]]:
                     artist_parts[-1] += segment["joinphrase"]
         artist = "".join(artist_parts).strip()
 
-        # --- ISRC: take the first one if present ---
         isrcs = rec.get("isrcs", [])
         isrc = isrcs[0] if isrcs else None
 
-        # --- Release info: grab the earliest/first release ---
-        releases = rec.get("releases", [])
+        # --- Release Info and Spotify Links ---
+        releases = rec.get("releases", []) if "releases" in rec else [rec]
         album = None
         year = None
-        if releases:
+        spotify_id = None
+
+        if releases and isinstance(releases, list) and len(releases) > 0:
             first = releases[0]
-            album = first.get("title")
-            date_str = first.get("date", "")
-            year = date_str[:4] if date_str and len(date_str) >= 4 else None
+            if isinstance(first, dict):
+                album = first.get("title")
+                date_str = first.get("date", "")
+                year = date_str[:4] if date_str and len(date_str) >= 4 else None
 
-        # --- Genres: prefer explicit genres list, fall back to tags ---
+                for rel in first.get("relations", []):
+                    url_res = rel.get("url", {}).get("resource", "")
+                    sid = _extract_spotify_id(url_res)
+                    if sid:
+                        spotify_id = sid
+                        break
+
+        # Check recording-level relations if release-level misses
+        if not spotify_id:
+            for rel in rec.get("relations", []):
+                url_res = rel.get("url", {}).get("resource", "")
+                sid = _extract_spotify_id(url_res)
+                if sid:
+                    spotify_id = sid
+                    break
+
+        # --- Smart Genre Extraction (Recording -> Release Fallback) ---
         genre_entries = rec.get("genres") or rec.get("tags") or []
-        # Sort by count descending, take top 5
-        genre_entries_sorted = sorted(
-            [g for g in genre_entries if isinstance(g, dict) and g.get("name")],
-            key=lambda g: g.get("count", 0),
-            reverse=True
-        )
-        genres = [g["name"].title() for g in genre_entries_sorted[:5]]
+        
+        # FALLBACK: If the track itself has no genres, check its parent release/album
+        if not genre_entries and releases and isinstance(releases, list) and len(releases) > 0:
+            first = releases[0]
+            if isinstance(first, dict):
+                genre_entries = first.get("genres") or first.get("tags") or []
 
-        # --- Duration ---
-        length = rec.get("length")  # already in ms or None
+        cleaned_genres = []
+        for g in genre_entries:
+            if isinstance(g, dict) and g.get("name"):
+                weight = g.get("count", 0)
+                try:
+                    weight = int(weight)
+                except (ValueError, TypeError):
+                    weight = 1
+                cleaned_genres.append((g["name"].title(), weight))
+
+        cleaned_genres.sort(key=lambda x: x[1], reverse=True)
+        genres = [item[0] for item in cleaned_genres[:5]]
+
+        # Reject the track if taxonomy is strictly required but missing
+        if REQUIRE_TAXONOMY and not genres:
+            continue
+
+        length = rec.get("length")
 
         yield {
             "title": rec.get("title", "").strip(),
@@ -170,33 +227,14 @@ def fetch_raw_data_stream() -> Iterator[Dict[str, Any]]:
             "year": year,
             "duration": str(length) if length else None,
             "genres": genres,
-            "moods": [],      # MusicBrainz doesn't have mood data natively
-            "contexts": [],   # Same — enrich downstream with AcousticBrainz or your own model
-            "themes": [],
-            "contributors": [],  # Could be extended with rec["artist-credit"] full detail
-            "_mbid": rec.get("id"),  # Pass-through for cross-referencing
+            "spotify_id": spotify_id,
+            "_mbid": rec.get("id"),
+            "_raw_index_checkpoint": raw_inspected
         }
 
-        count += 1
-        if count % 100_000 == 0:
-            print(f"   ↳ {count:,} recordings streamed...")
-
 
 # ===========================================================================
-# 2. PIPELINE CONFIGURATION & STORAGE LIMITS
-# ===========================================================================
-OUTPUT_DIR = "./stage_volumes"
-MAX_FILE_SIZE_GB = 1  # Hard disk cap: Script pauses immediately when hit
-TARGET_VOLUME = 2       # Current volume naming suffix
-
-CORE_FILE_PATH = os.path.join(OUTPUT_DIR, f"volume_{TARGET_VOLUME}_core.json")
-TAXO_FILE_PATH = os.path.join(OUTPUT_DIR, f"volume_{TARGET_VOLUME}_taxonomy.json")
-LEDGER_PATH = os.path.join(OUTPUT_DIR, f"volume_{TARGET_VOLUME}_state.json")
-
-os.makedirs(OUTPUT_DIR, exist_ok=True)
-
-# ===========================================================================
-# 3. STATE LEDGER MANAGEMENT
+# 5. STATE MANAGEMENT
 # ===========================================================================
 def load_pipeline_state() -> dict:
     if os.path.exists(LEDGER_PATH):
@@ -216,81 +254,92 @@ def save_pipeline_state(index: int, written: int, complete: bool = False):
             "last_updated": time.time()
         }, f, indent=2)
 
+
 # ===========================================================================
-# 4. MULTI-CORE PROCESSING WORKER
+# 5b. CROSS-VOLUME DEDUP LOADER
 # ===========================================================================
-def processing_worker(chunk_data: list) -> list:
+def load_previous_volume_ids() -> set:
     """
-    Runs on parallel CPU cores. Transforms a batch of raw records
-    into pre-formatted JSON blocks wrapped with 'name' and 'fields' keys.
+    Load trackIds from ALL prior volumes (1 through TARGET_VOLUME-1) into a set
+    for content-based dedup. Stream-position offsets are unreliable across MB
+    dump snapshots because release ordering isn't stable between dumps.
     """
-    processed_batch = []
-    for item in chunk_data:
+    seen = set()
+    if TARGET_VOLUME <= 1:
+        pass
+    else:
+        for vol in range(1, TARGET_VOLUME):
+            prior_core = os.path.join(OUTPUT_DIR, f"volume_{vol}_core.json")
+            if not os.path.exists(prior_core):
+                print(f"   ⚠️  No volume_{vol}_core.json found — skipping for dedup.")
+                continue
+
+            print(f"🔍 Loading trackIds from volume_{vol}_core.json for dedup...")
+            try:
+                with open(prior_core, "r", encoding="utf-8") as f:
+                    prior_data = json.load(f)
+                for entry in prior_data:
+                    tid = entry.get("fields", {}).get("trackId")
+                    if tid:
+                        seen.add(tid)
+                print(f"   ✅ Volume {vol}: loaded {len(prior_data):,} IDs (running total: {len(seen):,})")
+            except Exception as e:
+                print(f"   ❌ Failed to load volume_{vol}_core.json: {e}")
+
+    # Also include anything already written to this volume's file (resume case)
+    if os.path.exists(CORE_FILE_PATH):
         try:
-            if not isinstance(item, dict):
-                continue
-            artist = str(item.get("artist", "")).strip()
-            title = str(item.get("title", "")).strip()
-            if not artist or not title:
-                continue
+            with open(CORE_FILE_PATH, "r", encoding="utf-8") as f:
+                content = f.read().strip()
+            # File may be unclosed JSON if a prior run was interrupted — try to recover
+            if not content.endswith("]"):
+                content = content.rstrip(", \n") + "\n]"
+            current_data = json.loads(content)
+            for entry in current_data:
+                tid = entry.get("fields", {}).get("trackId")
+                if tid:
+                    seen.add(tid)
+            print(f"   ✅ Current vol {TARGET_VOLUME} partial: +{len(current_data):,} (total: {len(seen):,})")
+        except Exception as e:
+            print(f"   ⚠️  Could not parse current volume file for dedup: {e}")
 
-            # Compute collision-resistant 24-character track ID
-            cleaned = f"{artist.lower()}:{title.lower()}"
-            tid = hashlib.sha256(cleaned.encode()).hexdigest()[:24]
+    return seen
 
-            # Map directly to wrapped Core Track Schema
-            core_record = {
-                "name": tid,
-                "fields": {
-                    "schemaVersion": 1,
-                    "trackId": tid,
-                    "isrcCode": item.get("isrc") if item.get("isrc") else None,
-                    "title": title,
-                    "byArtist": artist,
-                    "albumName": item.get("album") if item.get("album") else None,
-                    "datePublished": item.get("year") if item.get("year") else None,
-                    "durationMs": int(item["duration"]) if item.get("duration") and str(item.get("duration", "")).isdigit() else None,
-                    "contributors": item.get("contributors") if isinstance(item.get("contributors"), list) else [],
-                    "_mbid": item.get("_mbid"),  # Preserve for cross-referencing
-                }
-            }
-
-            # Map directly to wrapped Taxonomy Schema
-            taxo_record = {
-                "name": tid,
-                "fields": {
-                    "schemaVersion": 1,
-                    "trackId": tid,
-                    "genres": [str(g) for g in item.get("genres", [])] if isinstance(item.get("genres"), list) else [],
-                    "moods": [str(m) for m in item.get("moods", [])] if isinstance(item.get("moods"), list) else [],
-                    "themes": [str(t) for t in item.get("themes", [])] if isinstance(item.get("themes"), list) else [],
-                    "contexts": [str(c) for c in item.get("contexts", [])] if isinstance(item.get("contexts"), list) else []
-                }
-            }
-
-            processed_batch.append((
-                json.dumps(core_record, ensure_ascii=False),
-                json.dumps(taxo_record, ensure_ascii=False)
-            ))
-        except:
-            continue
-    return processed_batch
 
 # ===========================================================================
-# 5. HIGH-SPEED DISK WRITER CONSUMER
+# 6. IN-FLIGHT TRANSFORM & WRITE ENGINE
 # ===========================================================================
-def disk_writer_consumer(write_queue: queue.Queue, stop_event: threading.Event, start_from_scratch: bool):
+def run_bounded_pipeline():
+    state = load_pipeline_state()
+    if state["complete"]:
+        print(f"🎉 Volume {TARGET_VOLUME} is already completely built.")
+        return
+
+    # Load IDs from previous volumes for content-based dedup
+    seen_ids = load_previous_volume_ids()
+    print(f"🛡️  Dedup set primed with {len(seen_ids):,} known trackIds.\n")
+
+    written_count = state["total_written_tracks"]
+    start_fresh = (written_count == 0) or not os.path.exists(CORE_FILE_PATH)
+
+    print(f"🔥 Starting Pipeline for Volume {TARGET_VOLUME}.")
+    print(f"   Already written this volume: {written_count:,} / {TARGET_TRACK_COUNT:,}")
+
     max_bytes = MAX_FILE_SIZE_GB * 1024 * 1024 * 1024
 
-    if start_from_scratch:
+    # Setup files and append or initialize array brackets
+    if start_fresh:
         f_core = open(CORE_FILE_PATH, "w", encoding="utf-8")
         f_taxo = open(TAXO_FILE_PATH, "w", encoding="utf-8")
+        f_src  = open(SOURCES_FILE_PATH, "w", encoding="utf-8")
         f_core.write("[\n")
         f_taxo.write("[\n")
-        is_first = True
+        f_src.write("[\n")
+        is_first_core = True
+        is_first_src = True
     else:
-        # Resume mode: roll back trailing characters to keep array notation valid
-        for path in (CORE_FILE_PATH, TAXO_FILE_PATH):
+        # Seek and truncate existing trailing closing brackets to resume appending valid JSON
+        for path in (CORE_FILE_PATH, TAXO_FILE_PATH, SOURCES_FILE_PATH):
             if os.path.exists(path):
                 with open(path, "r+", encoding="utf-8") as f:
                     f.seek(0, os.SEEK_END)
@@ -303,146 +352,142 @@ def disk_writer_consumer(write_queue: queue.Queue, stop_event: threading.Event, 
                             f.seek(pos + 1)
                             f.truncate()
                             break
+            else:
+                # In case sources file is missing on a resume
+                with open(path, "w", encoding="utf-8") as f:
+                    f.write("[\n")
+
         f_core = open(CORE_FILE_PATH, "a", encoding="utf-8")
         f_taxo = open(TAXO_FILE_PATH, "a", encoding="utf-8")
-        is_first = False
+        f_src  = open(SOURCES_FILE_PATH, "a", encoding="utf-8")
+        
+        is_first_core = False
+        
+        # Determine if sources is empty so we don't prepend a comma on the first item
+        with open(SOURCES_FILE_PATH, "r", encoding="utf-8") as tmp:
+            content = tmp.read().strip()
+            is_first_src = (content == "[" or content == "")
+
+    current_raw_index = 0
 
     try:
-        while True:
-            try:
-                batch = write_queue.get(timeout=0.5)
-            except queue.Empty:
-                if stop_event.is_set():
-                    break
+        raw_generator = fetch_raw_data_stream()
+
+        for item in raw_generator:
+            current_raw_index = item["_raw_index_checkpoint"]
+
+            # Compute trackId early to check dedup BEFORE any work
+            artist = item["artist"]
+            title = item["title"]
+            if not artist or not title:
                 continue
 
-            if batch is None:
+            cleaned = f"{artist.lower()}:{title.lower()}"
+            tid = hashlib.sha256(cleaned.encode()).hexdigest()[:24]
+
+            # Skip anything we've already captured in this or a prior volume
+            if tid in seen_ids:
+                continue
+            seen_ids.add(tid)
+
+            if f_core.tell() >= max_bytes or f_taxo.tell() >= max_bytes:
+                print(f"\n⚠️ File size target ceiling hit ({MAX_FILE_SIZE_GB} GB). Pausing...")
                 break
 
-            for core_str, taxo_str in batch:
-                if f_core.tell() >= max_bytes or f_taxo.tell() >= max_bytes:
-                    print(f"\n⚠️ Size Boundary Reached ({MAX_FILE_SIZE_GB} GB). Pausing pipeline gracefully...")
-                    stop_event.set()
-                    break
+            core_record = {
+                "name": tid,
+                "fields": {
+                    "schemaVersion": 1,
+                    "trackId": tid,
+                    "isrcCode": item.get("isrc"),
+                    "title": title,
+                    "byArtist": artist,
+                    "albumName": item.get("album"),
+                    "datePublished": item.get("year"),
+                    "durationMs": int(item["duration"]) if item.get("duration") and item["duration"].isdigit() else None,
+                    "contributors": [],
+                    "_mbid": item.get("_mbid"),
+                }
+            }
 
-                if not is_first:
-                    f_core.write(",\n")
-                    f_taxo.write(",\n")
-                else:
-                    is_first = False
+            taxo_record = {
+                "name": tid,
+                "fields": {
+                    "schemaVersion": 1,
+                    "trackId": tid,
+                    "genres": item.get("genres", []),
+                    "moods": [],
+                    "themes": [],
+                    "contexts": []
+                }
+            }
 
+            core_str = json.dumps(core_record, ensure_ascii=False)
+            taxo_str = json.dumps(taxo_record, ensure_ascii=False)
+
+            if not is_first_core:
+                f_core.write(",\n  " + core_str)
+                f_taxo.write(",\n  " + taxo_str)
+            else:
                 f_core.write("  " + core_str)
                 f_taxo.write("  " + taxo_str)
+                is_first_core = False
 
-            write_queue.task_done()
-            if stop_event.is_set():
+            f_core.flush()
+            f_taxo.flush()
+
+            # Optional Sources Extract
+            if item.get("spotify_id"):
+                src_record = {
+                    "trackId": tid,
+                    "platform": "spotify",
+                    "platformId": item["spotify_id"]
+                }
+                src_str = json.dumps(src_record, ensure_ascii=False)
+                
+                if not is_first_src:
+                    f_src.write(",\n  " + src_str)
+                else:
+                    f_src.write("  " + src_str)
+                    is_first_src = False
+                
+                f_src.flush()
+
+            written_count += 1
+            print(f"   ✨ Match saved! Vol {TARGET_VOLUME} Total: {written_count:,} / {TARGET_TRACK_COUNT:,} tracks.", end="\r", flush=True)
+
+            if written_count % 5 == 0:
+                save_pipeline_state(current_raw_index, written_count)
+
+            if written_count >= TARGET_TRACK_COUNT:
+                print(f"\n🎯 Target count of {TARGET_TRACK_COUNT:,} tracks satisfied!")
                 break
+
+    except KeyboardInterrupt:
+        print("\n🛑 Manual execution break. Closing stream hooks safely...")
     finally:
         f_core.write("\n]")
         f_taxo.write("\n]")
+        f_src.write("\n]")
+        
         f_core.close()
         f_taxo.close()
+        f_src.close()
 
-# ===========================================================================
-# 6. MAIN COORDINATION RUNNER
-# ===========================================================================
-def run_bounded_pipeline():
-    state = load_pipeline_state()
-    if state["complete"]:
-        print(f"🎉 Volume {TARGET_VOLUME} is already complete! Update TARGET_VOLUME to continue.")
-        return
-
-    start_index = state["last_processed_index"]
-    written_count = state["total_written_tracks"]
-    start_fresh = (start_index == 0)
-
-    print(f"🔥 Resuming Pipeline. Offset: {start_index} processed. Total written: {written_count}")
-
-    write_queue = queue.Queue(maxsize=64)
-    stop_event = threading.Event()
-
-    writer_thread = threading.Thread(
-        target=disk_writer_consumer,
-        args=(write_queue, stop_event, start_fresh)
-    )
-    writer_thread.start()
-
-    num_cores = multiprocessing.cpu_count()
-    pool = multiprocessing.Pool(processes=num_cores)
-
-    CHUNK_SIZE = 2500
-    current_chunk = []
-    global_index = 0
-    async_results = []
-
-    try:
-        raw_data_generator = fetch_raw_data_stream()
-
-        for item in raw_data_generator:
-            if global_index < start_index:
-                global_index += 1
-                continue
-
-            if stop_event.is_set():
-                break
-
-            current_chunk.append(item)
-            global_index += 1
-
-            if len(current_chunk) == CHUNK_SIZE:
-                res = pool.apply_async(processing_worker, args=(current_chunk,))
-                async_results.append((global_index, res))
-                current_chunk = []
-
-                while len(async_results) > num_cores * 2:
-                    idx_anchor, r = async_results[0]
-                    if r.ready() or stop_event.is_set():
-                        if not stop_event.is_set():
-                            data = r.get()
-                            write_queue.put(data)
-                            written_count += len(data)
-                            save_pipeline_state(idx_anchor, written_count)
-                        async_results.pop(0)
-                    else:
-                        time.sleep(0.01)
-
-        if current_chunk and not stop_event.is_set():
-            res = pool.apply_async(processing_worker, args=(current_chunk,))
-            async_results.append((global_index, res))
-
-        for idx_anchor, r in async_results:
-            if not stop_event.is_set():
-                data = r.get()
-                write_queue.put(data)
-                written_count += len(data)
-                save_pipeline_state(idx_anchor, written_count)
-
-    except KeyboardInterrupt:
-        print("\n🛑 Manual pause received. Flushing queue and locking state...")
-        stop_event.set()
-
-    finally:
-        pool.close()
-        pool.join()
-
-        write_queue.put(None)
-        writer_thread.join()
-
-        is_done = not stop_event.is_set() and (global_index > start_index)
-        save_pipeline_state(
-            global_index if is_done else load_pipeline_state()["last_processed_index"],
-            written_count,
-            complete=is_done
-        )
+        is_completed = (written_count >= TARGET_TRACK_COUNT)
+        final_index = current_raw_index if current_raw_index else 0
+        save_pipeline_state(final_index, written_count, complete=is_completed)
 
         print("\n" + "="*60)
         print("📊 STATE LOCK REPORT")
-        print(f"  Core File Size: {os.path.getsize(CORE_FILE_PATH) / (1024**2):.2f} MB")
-        print(f"  Taxo File Size: {os.path.getsize(TAXO_FILE_PATH) / (1024**2):.2f} MB")
-        print(f"  Next Resume Index: {load_pipeline_state()['last_processed_index']}")
-        print(f"  Status: {'FINISHED VOLUME' if is_done else 'PAUSED - SIZE BOUNDARY HIT / INTERRUPTED'}")
+        print(f"  Volume:           {TARGET_VOLUME}")
+        print(f"  Core File Size:   {os.path.getsize(CORE_FILE_PATH) / (1024**2):.2f} MB")
+        print(f"  Taxo File Size:   {os.path.getsize(TAXO_FILE_PATH) / (1024**2):.2f} MB")
+        print(f"  Src File Size:    {os.path.getsize(SOURCES_FILE_PATH) / (1024**2):.2f} MB")
+        print(f"  Tracks Saved:     {written_count:,} / {TARGET_TRACK_COUNT:,}")
+        print(f"  Dedup Set Size:   {len(seen_ids):,} unique IDs in memory")
+        print(f"  Pipeline Status:  {'FINISHED' if is_completed else 'PAUSED/INTERRUPTED'}")
         print("="*60)
 
 if __name__ == "__main__":
-    multiprocessing.freeze_support()
     run_bounded_pipeline()

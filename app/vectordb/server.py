@@ -6,6 +6,7 @@ os.environ['SSL_CERT_FILE'] = certifi.where()
 import argparse
 import asyncio
 import aiohttp
+import random
 import chromadb
 import hashlib
 import json
@@ -301,8 +302,8 @@ def _attach_embeddings(results: list[dict]) -> list[dict]:
     if not ids:
         return results
     got   = collection.get(ids=ids, include=["embeddings"])
-    g_ids = got.get("ids") or []
-    g_emb = got.get("embeddings") or []
+    g_ids = got.get("ids") if got.get("ids") is not None else []
+    g_emb = got.get("embeddings") if got.get("embeddings") is not None else []
     emap  = {gid: (e.tolist() if hasattr(e, "tolist") else e) for gid, e in zip(g_ids, g_emb)}
     for r in results:
         e = emap.get(r["id"])
@@ -413,17 +414,51 @@ query Updates($schemaId: Bytes!, $first: Int!, $skip: Int!) {
 }
 """
 
+# Transient subgraph failures (dropped keep-alive connections, gateway 5xx,
+# rate limits) should be retried with backoff rather than aborting the whole
+# ingest. GraphQL-level errors and 4xx are NOT retried — they won't fix themselves.
+_SUBGRAPH_MAX_RETRIES = 5
+_SUBGRAPH_RETRY_STATUSES = {429, 500, 502, 503, 504}
+
 async def _query_subgraph_async(session: aiohttp.ClientSession, query: str, variables: dict) -> dict:
     headers = {}
     if cfg.graph_api_key:
         headers["Authorization"] = f"Bearer {cfg.graph_api_key}"
 
-    async with session.post(cfg.subgraph_url, json={"query": query, "variables": variables}, headers=headers, timeout=30) as resp:
-        resp.raise_for_status()
-        data = await resp.json()
-        if "errors" in data:
-            raise RuntimeError(f"Subgraph error: {data['errors']}")
-        return data["data"]
+    body = {"query": query, "variables": variables}
+    last_exc: Exception | None = None
+
+    for attempt in range(_SUBGRAPH_MAX_RETRIES):
+        try:
+            async with session.post(
+                cfg.subgraph_url, json=body, headers=headers,
+                timeout=aiohttp.ClientTimeout(total=30),
+            ) as resp:
+                if resp.status in _SUBGRAPH_RETRY_STATUSES:
+                    raise aiohttp.ClientResponseError(
+                        resp.request_info, resp.history,
+                        status=resp.status, message=f"retryable status {resp.status}",
+                    )
+                resp.raise_for_status()
+                data = await resp.json()
+                if "errors" in data:
+                    # A real query error — not transient. Do not retry.
+                    raise RuntimeError(f"Subgraph error: {data['errors']}")
+                return data["data"]
+        except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
+            # Non-retryable HTTP status (e.g. 400/401) → give up immediately.
+            if isinstance(exc, aiohttp.ClientResponseError) and exc.status not in _SUBGRAPH_RETRY_STATUSES:
+                raise
+            last_exc = exc
+            if attempt < _SUBGRAPH_MAX_RETRIES - 1:
+                backoff = min(8.0, 0.5 * (2 ** attempt)) + random.uniform(0, 0.3)
+                print(f"  [subgraph] {type(exc).__name__} — retry {attempt + 1}/{_SUBGRAPH_MAX_RETRIES - 1} in {backoff:.1f}s")
+                await asyncio.sleep(backoff)
+                continue
+            raise
+
+    # Unreachable, but keeps type checkers happy.
+    raise last_exc if last_exc else RuntimeError("subgraph query failed")
 
 async def _fetch_all_events_async(session: aiohttp.ClientSession, schema_id: str) -> tuple[list, list]:
     publishes, updates = [], []
@@ -784,7 +819,11 @@ async def ingest():
     print(f"Ingesting {len(schemas)} schema(s): {list(schemas.keys())}")
     print(f"{'=' * 60}")
 
-    async with aiohttp.ClientSession() as session:
+    # enable_cleanup_closed mitigates ServerDisconnectedError from stale keep-alive
+    # sockets the server closed; limit caps concurrent connections so a burst of
+    # schema fetches doesn't get the remote to drop us.
+    connector = aiohttp.TCPConnector(limit=16, limit_per_host=8, enable_cleanup_closed=True)
+    async with aiohttp.ClientSession(connector=connector) as session:
         results = await asyncio.gather(*[
             fetch_schema_entries(
                 session,

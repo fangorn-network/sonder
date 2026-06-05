@@ -361,6 +361,13 @@ function createWindow(): BrowserWindow {
 // ─── IPC handlers ─────────────────────────────────────────────────────────────
 
 function registerIpcHandlers() {
+  // Open a URL in the OS default browser — used by any renderer link
+  ipcMain.handle('shell:open-external', (_event, url: string) => {
+    if (typeof url === 'string' && (url.startsWith('https://') || url.startsWith('http://'))) {
+      shell.openExternal(url)
+    }
+  })
+
   ipcMain.handle('fetch:proxy', async (_event, { url, options }) => {
     const res = await net.fetch(url, options ?? {})
     return { status: res.status, body: await res.text() }
@@ -501,6 +508,28 @@ async function bootstrap() {
     }
   } else {
     console.log('[agent] No provider configured — setup wizard will appear.')
+  }
+}
+
+// ─── GPU acceleration (WSL2 / Linux) ─────────────────────────────────────────
+// WSLg exposes the GPU (e.g. RTX via /dev/dxg) but Chromium blocklists Mesa and
+// falls back to SOFTWARE WebGL, which is why 3D/canvas were unusably slow.
+// These switches tell Electron to use the GPU via ANGLE-over-EGL (Mesa d3d12).
+// They only help once WSL provides /dev/dri/renderD128 — if it's missing, run
+// `wsl --update` then `wsl --shutdown` on the Windows host. Set SOND3R_DISABLE_GPU=1
+// to revert to software (e.g. if the window renders blank).
+if (process.platform === 'linux' && process.env.SOND3R_DISABLE_GPU !== '1') {
+  // Safe, non-breaking: let Chromium use the GPU if one becomes available;
+  // these are no-ops on a pure software stack (they won't blank the window).
+  app.commandLine.appendSwitch('ignore-gpu-blocklist')
+  app.commandLine.appendSwitch('enable-gpu-rasterization')
+  app.commandLine.appendSwitch('enable-zero-copy')
+  // Forcing ANGLE-over-EGL (Mesa d3d12) is the strongest lever once /dev/dri
+  // exists, but it can white-screen on a broken GL stack — opt in once the GPU
+  // is confirmed: run with SOND3R_GPU_ANGLE=1.
+  if (process.env.SOND3R_GPU_ANGLE === '1') {
+    app.commandLine.appendSwitch('use-gl', 'angle')
+    app.commandLine.appendSwitch('use-angle', 'gl')
   }
 }
 

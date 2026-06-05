@@ -126,50 +126,80 @@ interface Resolved {
   durationMs: number
 }
 
+// Strip common YouTube title suffixes that never appear on Spotify
+const YT_SUFFIX_RE = [
+  /\s*[\(\[].*?(?:official|lyric|audio|video|visuali[sz]er|stream|premiere|hd|4k|remaster|uncensored|explicit|radio\s*edit|album\s*version|extended|instrumental|acoustic|live|tour|session).*?[\)\]]/gi,
+  /\s*[\(\[][^\(\)\[\]]*[\)\]]\s*$/gi, // any trailing (…) or […]
+  /\s*\/\/.*$/g,                        // // Label badge at end
+  /\s*\|[^|]*$/g,                       // | Label badge at end
+]
+
+function cleanYoutubeTitle(raw: string): string {
+  let s = raw
+  for (const re of YT_SUFFIX_RE) s = s.replace(re, '')
+  return s.replace(/\s+/g, ' ').trim()
+}
+
+// Many YouTube titles follow "Artist - Track Title" convention
+function parseYoutubeArtistTitle(title: string): { artist: string; track: string } | null {
+  const dash = title.indexOf(' - ')
+  if (dash <= 0) return null
+  return {
+    artist: title.slice(0, dash).trim(),
+    track:  title.slice(dash + 3).trim(),
+  }
+}
+
+async function spotifySearch(token: string, q: string): Promise<Resolved | null> {
+  try {
+    const res = await net.fetch(
+      `https://api.spotify.com/v1/search?q=${encodeURIComponent(q)}&type=track&limit=1`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    )
+    if (!res.ok) return null
+    const data  = await res.json()
+    const track = data.tracks?.items?.[0]
+    if (!track)  return null
+    console.log(`[spotify] found → ${track.uri}  (${track.name} · ${track.artists[0]?.name})`)
+    return { uri: track.uri as string, durationMs: track.duration_ms as number }
+  } catch {
+    return null
+  }
+}
+
 async function resolveTrackUri(
-  artist: string,
-  title: string
+  channelOrArtist: string,
+  rawTitle: string,
 ): Promise<Resolved | null> {
   try {
-    const token = await getClientToken()
+    const token  = await getClientToken()
+    const clean  = cleanYoutubeTitle(rawTitle)
+    const parsed = parseYoutubeArtistTitle(clean)
 
-    const q = encodeURIComponent(
-      `track:${title} artist:${artist}`
-    )
+    // Build search queries from most-specific to most-lenient
+    const queries: string[] = []
 
-    const res = await net.fetch(
-      `https://api.spotify.com/v1/search?q=${q}&type=track&limit=1`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      }
-    )
-
-    if (!res.ok) {
-      throw new Error(
-        `Search ${res.status}: ${await res.text()}`
-      )
+    if (parsed) {
+      // Title was "Artist - Track (Official …)" — parsed values are most reliable
+      queries.push(`track:${parsed.track} artist:${parsed.artist}`)
+      queries.push(`${parsed.artist} ${parsed.track}`)
     }
 
-    const data = await res.json()
-
-    const track = data.tracks?.items?.[0]
-
-    if (!track) {
-      throw new Error(
-        `No result for: ${artist} - ${title}`
-      )
+    // Cleaned title with the supplied artist (might be correct, e.g. from catalogue)
+    if (channelOrArtist && channelOrArtist !== (parsed?.artist ?? '')) {
+      queries.push(`track:${clean} artist:${channelOrArtist}`)
     }
 
-    console.log(
-      `[spotify] resolved -> ${track.uri} (${track.name} by ${track.artists[0]?.name})`
-    )
+    // General search on the cleaned title alone
+    queries.push(clean)
 
-    return {
-      uri: track.uri as string,
-      durationMs: track.duration_ms as number,
+    for (const q of queries) {
+      const result = await spotifySearch(token, q)
+      if (result) return result
     }
+
+    console.error(`[spotify] no result after ${queries.length} strategies for: ${rawTitle}`)
+    return null
   } catch (e) {
     console.error('[spotify] resolution failed:', e)
     return null
@@ -218,93 +248,81 @@ function runPS(
 
 // ─── WSL2 ─────────────────────────────────────────────────────────────────────
 
+const PS_GET_TITLE =
+  '$p = Get-Process -Name Spotify -EA SilentlyContinue | ' +
+  'Where-Object { $_.MainWindowTitle -ne "" } | ' +
+  'Select-Object -First 1; ' +
+  'if ($p) { $p.MainWindowTitle } else { "" }'
+
+const PS_SEND_PLAY =
+  '$w = New-Object -ComObject WScript.Shell; $w.SendKeys([char]179)'
+
 const wsl = {
   async play(
     artist: string,
     title: string
   ): Promise<{ durationMs: number } | null> {
-    const resolved = await resolveTrackUri(
-      artist,
-      title
-    )
+    const resolved = await resolveTrackUri(artist, title)
 
     if (!resolved) {
-      console.error(
-        '[spotify] no URI — cannot play'
-      )
+      console.error('[spotify] no URI — cannot play')
       return null
     }
 
-    console.log(
-      '[spotify] opening URI:',
-      resolved.uri
-    )
+    console.log('[spotify] opening URI:', resolved.uri)
 
-    // Focus Spotify + dismiss search bar
-    await runPS(
-      '$w = New-Object -ComObject WScript.Shell; ' +
-      '$w.AppActivate("Spotify"); ' +
-      'Start-Sleep -Milliseconds 200; ' +
-      '$w.SendKeys("{ESC}")'
-    ).catch(() => { })
-
-    // IMPORTANT:
-    // Use cmd.exe /c start instead of explorer.exe
-    // explorer.exe returns code 1 for protocol URIs in WSL.
-    exec(
-      `"${CMD}" /c start "" "${resolved.uri}"`,
-      (err) => {
-        if (err) {
-          console.warn(
-            '[spotify] start warning:',
-            err.message
-          )
-        }
-      }
-    )
-
-    // Give Spotify time to process URI
-    await new Promise(r => setTimeout(r, 2000))
-
-    // Detect whether autoplay happened
+    // Capture the current window title *before* we do anything.
+    // We use this to detect when the title actually changes to the new track,
+    // preventing false-positives from the old track's title still being visible.
+    let prevTitle = ''
     try {
-      const { stdout } = await runPS(
-        '$p = Get-Process -Name Spotify -EA SilentlyContinue | ' +
-        'Where-Object { $_.MainWindowTitle -ne "" } | ' +
-        'Select-Object -First 1; ' +
-        'if ($p) { $p.MainWindowTitle } else { "" }'
-      )
+      const { stdout } = await runPS(PS_GET_TITLE)
+      prevTitle = stdout.trim()
+    } catch { /* Spotify may not be open yet */ }
 
-      const winTitle = stdout.trim()
+    const isCurrentlyPlaying = prevTitle !== '' && prevTitle !== 'Spotify'
 
-      const isPlaying =
-        winTitle !== '' &&
-        winTitle !== 'Spotify'
-
-      console.log(
-        '[spotify] after nav title:',
-        JSON.stringify(winTitle),
-        '| autoplayed:',
-        isPlaying
-      )
-
-      // Send media play key if needed
-      if (!isPlaying) {
-        await runPS(
-          '$w = New-Object -ComObject WScript.Shell; ' +
-          '$w.SendKeys([char]179)'
-        )
-      }
-    } catch {
-      await runPS(
-        '$w = New-Object -ComObject WScript.Shell; ' +
-        '$w.SendKeys([char]179)'
-      ).catch(() => { })
+    // If Spotify is actively playing, pause it before sending the URI.
+    // Without an explicit pause, Spotify on Windows often queues the new track
+    // instead of immediately replacing the current one.
+    if (isCurrentlyPlaying) {
+      console.log('[spotify] pausing current track before switch, title was:', JSON.stringify(prevTitle))
+      await runPS(PS_SEND_PLAY).catch(() => { })   // toggle → pause
+      await new Promise(r => setTimeout(r, 400))
     }
 
-    return {
-      durationMs: resolved.durationMs,
+    // Open the track URI — Spotify will navigate to and play this track.
+    exec(`"${CMD}" /c start "" "${resolved.uri}"`, err => {
+      if (err) console.warn('[spotify] URI open warning:', err.message)
+    })
+
+    // Poll until the window title changes to the new track (up to 7s).
+    // We require the title to differ from prevTitle — this is the key fix:
+    // a title matching the old track means Spotify hasn't switched yet.
+    const deadline = Date.now() + 7000
+    let confirmed = false
+    while (Date.now() < deadline) {
+      await new Promise(r => setTimeout(r, 300))
+      try {
+        const { stdout } = await runPS(PS_GET_TITLE)
+        const win = stdout.trim()
+        const titleChanged = win !== prevTitle
+        const isRealTrack  = win !== '' && win !== 'Spotify'
+        if (titleChanged && isRealTrack) {
+          confirmed = true
+          console.log('[spotify] new track confirmed:', JSON.stringify(win))
+          break
+        }
+      } catch { /* keep polling */ }
     }
+
+    if (!confirmed) {
+      // Spotify has the URI but hasn't auto-played — nudge with play key
+      console.warn('[spotify] track switch not detected, sending play key')
+      await runPS(PS_SEND_PLAY).catch(() => { })
+    }
+
+    return { durationMs: resolved.durationMs }
   },
 
   async pause() {
@@ -701,24 +719,13 @@ export function registerSpotifyIpc() {
     'spotify:play',
     async (_e, artist: string, title: string) => {
       try {
-        // 1. Clear the deck: Kill any current music playback
-        await ctrl().pause().catch(() => { })
-
-        // Give Spotify 150ms to shut up its audio stream
-        await new Promise((resolve) => setTimeout(resolve, 150))
-
-        // 2. Fire the search / track load command
-        const playResult = await ctrl().play(artist, title)
-
-        // 3. THE KICKSTART: Wait for the Spotify client UI to register the track change...
-        await new Promise((resolve) => setTimeout(resolve, 350))
-
-        // ...and forcefully drop the needle by calling resume/play
-        await ctrl().resume().catch(() => { })
-
-        return playResult
+        // Opening a Spotify URI automatically stops the current track and starts
+        // the new one. ctrl().play() polls until the title confirms playback.
+        // Do NOT send a resume/toggle after — Spotify is already playing by the
+        // time play() returns, and a toggle would immediately pause it.
+        return await ctrl().play(artist, title)
       } catch (err) {
-        console.error('[Spotify Main] Failed to execute play sequence:', err)
+        console.error('[Spotify Main] Failed to play:', err)
         throw err
       }
     }

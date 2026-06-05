@@ -5,64 +5,64 @@
    No glass. No blur. Solid surfaces. Full-color inversion on playing states.
    ─────────────────────────────────────────────────────────────────────────── */
 :root {
-  --bg: #050309;
-  --bg1: #08060f;
-  --bg2: #0c0a17;
-  --bg3: #100d1e;
-  --bg4: #141126;
+  --bg:  #f7f4ef;
+  --bg1: #f0ece5;
+  --bg2: #e8e3da;
+  --bg3: #ddd8ce;
+  --bg4: #d2ccc0;
 
   --surface-0: var(--bg);
   --surface-1: var(--bg1);
   --surface-2: var(--bg2);
   --surface-3: var(--bg3);
 
-  --fg: #f2f0ff;
-  --fg2: #b0adcc;
-  --fg3: #6a678a;
-  --fg4: #3c3a55;
+  --fg:  #1a1714;
+  --fg2: #4a4440;
+  --fg3: #766e66;
+  --fg4: #a09890;
 
   --text: var(--fg);
   --text-muted: var(--fg2);
   --text-subtle: var(--fg3);
 
-  --accent: #e8005a;
-  --accent-hi: #c0004a;
-  --accent-dim: rgba(232, 0, 90, 0.12);
-  --accent-border: rgba(232, 0, 90, 0.40);
+  --accent: #b83030;
+  --accent-hi: #962626;
+  --accent-dim: rgba(184, 48, 48, 0.10);
+  --accent-border: rgba(184, 48, 48, 0.35);
 
-  --cyan: #00d4ff;
-  --cyan-dim: rgba(0, 212, 255, 0.10);
-  --cyan-border: rgba(0, 212, 255, 0.35);
+  --cyan: #2878b0;
+  --cyan-dim: rgba(40, 120, 176, 0.10);
+  --cyan-border: rgba(40, 120, 176, 0.30);
 
-  --yellow: #f0e040;
-  --yellow-dim: rgba(240, 224, 64, 0.10);
+  --yellow: #a07828;
+  --yellow-dim: rgba(160, 120, 40, 0.10);
 
-  --success: #00ff88;
-  --success-dim: rgba(0, 255, 136, 0.08);
-  --orange: #ff6a00;
-  --orange-dim: rgba(255, 106, 0, 0.10);
+  --success: #2a7a48;
+  --success-dim: rgba(42, 122, 72, 0.08);
+  --orange: #c05010;
+  --orange-dim: rgba(192, 80, 16, 0.10);
   --blue: var(--cyan);
   --blue-dim: var(--cyan-dim);
-  --pink: #ff69b4;
-  --pink-dim: rgba(255, 105, 180, 0.10);
+  --pink: #a03070;
+  --pink-dim: rgba(160, 48, 112, 0.10);
 
-  --err: #ff4040;
-  --err-dim: rgba(255, 64, 64, 0.10);
+  --err: #c03030;
+  --err-dim: rgba(192, 48, 48, 0.10);
 
-  /* FLAT surfaces — no blur, no translucency */
+  /* Light surfaces */
   --glass-1: var(--bg1);
   --glass-2: var(--bg2);
   --glass-3: var(--bg3);
-  --glass-hover: var(--bg3);
+  --glass-hover: var(--bg2);
   --glass-active: var(--accent);
 
-  --glass-edge: rgba(255, 255, 255, 0.13);
-  --glass-edge-hi: rgba(255, 255, 255, 0.26);
-  --glass-edge-top: rgba(255, 255, 255, 0.08);
+  --glass-edge: rgba(0, 0, 0, 0.12);
+  --glass-edge-hi: rgba(0, 0, 0, 0.22);
+  --glass-edge-top: rgba(0, 0, 0, 0.07);
 
-  --border: rgba(255, 255, 255, 0.13);
-  --border2: rgba(255, 255, 255, 0.08);
-  --border3: rgba(255, 255, 255, 0.22);
+  --border: rgba(0, 0, 0, 0.12);
+  --border2: rgba(0, 0, 0, 0.07);
+  --border3: rgba(0, 0, 0, 0.20);
 
   /* No blur */
   --blur-sm: none;
@@ -88,7 +88,7 @@
   --r-pill: 0px;
 
   --nav-width: 160px;
-  --header-h: 64px;
+  --header-h: 40px;
 
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
   --t1: 80ms;
@@ -119,11 +119,7 @@ body {
   font-weight: 400;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
-  background:
-    linear-gradient(145deg, rgba(232, 0, 90, 0.13) 0%, transparent 28%),
-    linear-gradient(215deg, rgba(0, 212, 255, 0.08) 0%, transparent 30%),
-    var(--bg);
-  background-attachment: fixed;
+  background: var(--bg);
 }
 
 /* No body::before — no scanlines bleeding over art */
@@ -164,12 +160,12 @@ textarea {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--accent-border);
+  background: var(--border2);
   border-radius: 0;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--accent);
+  background: var(--border);
 }
 
 /* =============================================================================

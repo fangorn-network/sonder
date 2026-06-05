@@ -237,9 +237,13 @@ export function useSpotify(onEnded?: () => void) {
 
           // ─────────────────────────────────────────────────────────────────
           // natural end detection
+          // Guard: suppress while a track transition is in-flight. The loading
+          // window (URI sent → title confirmed) looks identical to end-of-track
+          // and must not trigger our autoplay chain.
           // ─────────────────────────────────────────────────────────────────
 
           if (
+            !transitionPendingRef.current &&
             wasPlayingRef.current &&
             !s.isPlaying &&
             s.progressMs < 1000
@@ -319,8 +323,11 @@ export function useSpotify(onEnded?: () => void) {
         }
 
         // ── simulated end detection ───────────────────────────────────────────
+        // Also suppressed during transitions — simDuration is set after IPC
+        // returns, so this can't fire prematurely, but guard it anyway.
 
         if (
+          !transitionPendingRef.current &&
           !hasRealData &&
           simDurationRef.current > 0 &&
           !handlingEndedRef.current

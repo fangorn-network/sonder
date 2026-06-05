@@ -26,7 +26,14 @@ import { app }                            from 'electron'
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
-const CLIENT_ID    = process.env.SPOTIFY_CLIENT_ID ?? ''
+// Read lazily: the module is imported before dotenv.config() runs in index.ts, and the
+// .env defines VITE_SPOTIFY_CLIENT_ID (not SPOTIFY_CLIENT_ID). A module-level const would
+// capture an empty string. import.meta.env is statically replaced by electron-vite, so it
+// is populated regardless of dotenv timing.
+function getClientId(): string {
+  return (import.meta as any).env.VITE_SPOTIFY_CLIENT_ID ?? process.env.VITE_SPOTIFY_CLIENT_ID ?? ''
+}
+
 const REDIRECT_URI = 'sond3r://callback'
 const SCOPES       = [
   'user-read-playback-state',
@@ -77,7 +84,7 @@ async function refreshToken(refreshToken: string): Promise<TokenStore> {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
-      grant_type: 'refresh_token', refresh_token: refreshToken, client_id: CLIENT_ID,
+      grant_type: 'refresh_token', refresh_token: refreshToken, client_id: getClientId(),
     }),
   })
   if (!res.ok) throw new Error(`Refresh failed: ${res.status}`)
@@ -129,7 +136,7 @@ export async function handleSpotifyCallback(url: string) {
         grant_type:    'authorization_code',
         code,
         redirect_uri:  REDIRECT_URI,
-        client_id:     CLIENT_ID,
+        client_id:     getClientId(),
         code_verifier: _verifier,
       }),
     })
@@ -157,7 +164,7 @@ export function registerSpotifyAuth(win: BrowserWindow) {
     _verifier       = generateVerifier()
     const challenge = generateChallenge(_verifier)
     const params    = new URLSearchParams({
-      client_id:             CLIENT_ID,
+      client_id:             getClientId(),
       response_type:         'code',
       redirect_uri:          REDIRECT_URI,
       scope:                 SCOPES,

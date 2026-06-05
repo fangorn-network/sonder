@@ -8,7 +8,7 @@ import { createPortal } from 'react-dom'
 import { usePrivy } from '@privy-io/react-auth'
 import { PlayerProvider } from './providers/PlayerProvider'
 import { SpotifyAuthProvider } from './providers/SpotifyAuthProvider'
-import { SpotifyProvider } from './context/SpotifyContext'
+import { SpotifyProvider, useSpotifyContext } from './context/SpotifyContext'
 import { useFangornAgent } from './hooks/useFangornAgent'
 import { useChroma } from './hooks/useChroma'
 import { StartupView } from './views/StartupView'
@@ -538,7 +538,9 @@ function Main() {
 // ─── NowPlayingDot ────────────────────────────────────────────────────────────
 
 function NowPlayingDot({ onOpen }: { onOpen: () => void }) {
-  const { currentVideoId, isPlaying } = useSpotify(() => { })
+  // Use the shared context instance — calling useSpotify() here would spin up a
+  // second 500ms status-polling loop disconnected from the main player.
+  const { currentVideoId, isPlaying } = useSpotifyContext()
   const active = !!currentVideoId
   return (
     <button

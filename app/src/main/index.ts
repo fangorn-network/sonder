@@ -14,7 +14,7 @@ import { DataContext } from '@fangorn-network/agent-types'
 import { existsSync } from 'fs'
 import { ToolboxConfigManager } from './agent/toolbox-config-manager'
 import { registerSpotifyAuth, handleSpotifyCallback } from './spotify/SpotifyAuth'
-import { registerSpotifyIpc } from './spotify/SpotifyController'
+import { registerPlaybackIpc } from './playback/ipc'
 
 // ─── yt-dlp helpers ───────────────────────────────────────────────────────────
 
@@ -587,8 +587,8 @@ app.whenReady().then(async () => {
   // registerSpotifyAuth, which needs it to send IPC events back to the renderer.
   const mainWindow = createWindow()
 
-  // registerSpotifyAuth(mainWindow)   // spotify-auth:* IPC handlers
-  registerSpotifyIpc()              // spotify:* IPC handlers (MPRIS / AppleScript / URI)
+  registerSpotifyAuth(mainWindow)   // spotify-auth:* IPC handlers (PKCE OAuth)
+  registerPlaybackIpc()             // playback:* IPC handlers (source-agnostic; Spotify default)
 
   // Windows / Linux: protocol URI arrives as argv of the second instance
   app.on('second-instance', (_e, argv) => {

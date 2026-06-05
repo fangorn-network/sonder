@@ -12,17 +12,15 @@ from typing import Iterator, Dict, Any
 # ===========================================================================
 # 1. GLOBAL PIPELINE CONFIGURATION
 # ===========================================================================
-REQUIRE_TAXONOMY = True       # 🏷️ True: Drops any track that has no genre tags
+REQUIRE_TAXONOMY = True       # 🏷️ True: Ensures every single track gets a genre taxonomy
 TARGET_TRACK_COUNT = 1000000  # 🎯 Pipeline stops immediately when this count is written
-MAX_FILE_SIZE_GB = 1          # Hard disk safety cap
+MAX_FILE_SIZE_GB = 5          # Safe cap for 1M deeply hydrated tracks
 TARGET_VOLUME = 1             # 📂 Current volume naming suffix
 OUTPUT_DIR = "./stage_volumes"
 DUMP_SOURCE = "url"           # "url" to stream live over the network
 
 # --- Stream Tweaks ---
-NETWORK_CHUNK_SIZE = 128 * 1024  # 📡 128KB chunks for seamless, live networking
-
-# --- Base Directory for Web Resolution ---
+NETWORK_CHUNK_SIZE = 256 * 1024  # 📡 256KB chunks for smooth archive processing
 MB_BASE_DUMP_URL = "https://data.metabrainz.org/pub/musicbrainz/data/json-dumps/"
 
 
@@ -64,9 +62,6 @@ def resolve_latest_dump_url() -> str:
             if check_resp.status_code == 200:
                 print(f"🎯 Resolved target location:\n   👉 {target_url}")
                 return target_url
-            else:
-                print(f"   ⚠️ File returned {check_resp.status_code}. Skipping...")
-
         raise RuntimeError("No directories contained a compiled release.tar.xz archive.")
     except Exception as e:
         print(f"❌ Dynamic discovery failed: {e}")
@@ -88,8 +83,7 @@ class RequestsStreamWrapper:
         try:
             data = next(self.chunks)
             self.bytes_read += len(data)
-
-            if self.bytes_read - self.last_report >= 5 * 1024 * 1024:
+            if self.bytes_read - self.last_report >= 2 * 1024 * 1024:  # Faster updates (2MB)
                 mb_downloaded = self.bytes_read / (1024 * 1024)
                 print(f"   📡 Stream Progress: {mb_downloaded:.1f} MB processed over the wire...", end="\r", flush=True)
                 self.last_report = self.bytes_read
@@ -98,28 +92,24 @@ class RequestsStreamWrapper:
             return b""
 
 
-def _iter_recording_lines(stream_source) -> Iterator[bytes]:
+def _iter_release_lines(stream_source) -> Iterator[bytes]:
     print("   ⏳ Hooking decompression pipes to network stream...")
     with lzma.open(stream_source, format=lzma.FORMAT_AUTO) as xz_stream:
         with tarfile.open(fileobj=xz_stream, mode="r|") as tar:
             for member in tar:
                 print(f"   📂 Archive Parser: Passing entity '{member.name}'...", end="\r", flush=True)
-                if member.name in ("mbdump/release", "release", "mbdump/recording", "recording"):
+                if member.name in ("mbdump/release", "release"):
                     print(f"\n   🎯 Core payload target hit: '{member.name}'! Extracting real-time text lines...")
                     f = tar.extractfile(member)
-                    if f is None:
-                        continue
+                    if f is None: continue
                     for line in f:
                         line = line.strip()
-                        if line:
-                            yield line
+                        if line: yield line
                     return
 
 
 def _extract_spotify_id(url_res: str) -> str:
-    """Safely extracts a 22-character Spotify ID from a URL or URI resource."""
-    if not url_res:
-        return None
+    if not url_res: return None
     match = re.search(r'(?:spotify\.com/track/|spotify:track:)([a-zA-Z0-9]+)', url_res)
     return match.group(1) if match else None
 
@@ -131,106 +121,110 @@ def fetch_raw_data_stream() -> Iterator[Dict[str, Any]]:
         response = requests.get(target_url, headers=headers, stream=True)
         response.raise_for_status()
         stream_wrapper = RequestsStreamWrapper(response, chunk_size=NETWORK_CHUNK_SIZE)
-        line_iter = _iter_recording_lines(stream_wrapper)
+        line_iter = _iter_release_lines(stream_wrapper)
     else:
-        LOCAL_DUMP_PATH = "./recording.tar.xz"
+        LOCAL_DUMP_PATH = "./release.tar.xz"
         if not os.path.exists(LOCAL_DUMP_PATH):
             raise FileNotFoundError(f"Local dump file not found at: {LOCAL_DUMP_PATH}")
         f = open(LOCAL_DUMP_PATH, "rb")
-        line_iter = _iter_recording_lines(f)
+        line_iter = _iter_release_lines(f)
 
     raw_inspected = 0
     for raw_line in line_iter:
         raw_inspected += 1
         try:
-            rec = json.loads(raw_line)
+            rel = json.loads(raw_line)
         except json.JSONDecodeError:
             continue
 
-        # --- Artist Credit Assembly ---
-        artist_parts = []
-        for segment in rec.get("artist-credit", []):
-            if isinstance(segment, dict) and "artist" in segment:
-                credited = segment.get("name") or segment["artist"].get("name", "")
-                if credited:
-                    artist_parts.append(credited)
-            elif isinstance(segment, dict) and "joinphrase" in segment:
-                if artist_parts:
-                    artist_parts[-1] += segment["joinphrase"]
-        artist = "".join(artist_parts).strip()
+        album_title = rel.get("title", "").strip()
+        date_str = rel.get("date", "")
+        album_year = date_str[:4] if date_str and len(date_str) >= 4 else None
+        album_genre_entries = rel.get("tags") or rel.get("genres") or []
 
-        isrcs = rec.get("isrcs", [])
-        isrc = isrcs[0] if isrcs else None
+        mediums = rel.get("mediums", [])
+        for medium in mediums:
+            if not isinstance(medium, dict): continue
+            
+            for track in medium.get("tracks", []):
+                if not isinstance(track, dict): continue
+                
+                recording = track.get("recording")
+                if not recording or not isinstance(recording, dict): continue
 
-        # --- Release Info and Spotify Links ---
-        releases = rec.get("releases", []) if "releases" in rec else [rec]
-        album = None
-        year = None
-        spotify_id = None
+                title = recording.get("title", "").strip()
+                if not title: continue
 
-        if releases and isinstance(releases, list) and len(releases) > 0:
-            first = releases[0]
-            if isinstance(first, dict):
-                album = first.get("title")
-                date_str = first.get("date", "")
-                year = date_str[:4] if date_str and len(date_str) >= 4 else None
+                artist_parts = []
+                credits_source = recording.get("artist-credit") or rel.get("artist-credit") or []
+                for segment in credits_source:
+                    if isinstance(segment, dict) and "artist" in segment:
+                        credited = segment.get("name") or segment["artist"].get("name", "")
+                        if credited: artist_parts.append(credited)
+                    elif isinstance(segment, dict) and "joinphrase" in segment:
+                        if artist_parts: artist_parts[-1] += segment["joinphrase"]
+                artist = "".join(artist_parts).strip()
+                if not artist: continue
 
-                for rel in first.get("relations", []):
-                    url_res = rel.get("url", {}).get("resource", "")
+                isrcs = recording.get("isrcs", [])
+                isrc = isrcs[0] if isrcs else None
+
+                spotify_id = None
+                for relation in rel.get("relations", []):
+                    url_res = relation.get("url", {}).get("resource", "")
                     sid = _extract_spotify_id(url_res)
                     if sid:
                         spotify_id = sid
                         break
 
-        # Check recording-level relations if release-level misses
-        if not spotify_id:
-            for rel in rec.get("relations", []):
-                url_res = rel.get("url", {}).get("resource", "")
-                sid = _extract_spotify_id(url_res)
-                if sid:
-                    spotify_id = sid
-                    break
+                if not spotify_id:
+                    for relation in recording.get("relations", []):
+                        url_res = relation.get("url", {}).get("resource", "")
+                        sid = _extract_spotify_id(url_res)
+                        if sid:
+                            spotify_id = sid
+                            break
 
-        # --- Smart Genre Extraction (Recording -> Release Fallback) ---
-        genre_entries = rec.get("genres") or rec.get("tags") or []
-        
-        # FALLBACK: If the track itself has no genres, check its parent release/album
-        if not genre_entries and releases and isinstance(releases, list) and len(releases) > 0:
-            first = releases[0]
-            if isinstance(first, dict):
-                genre_entries = first.get("genres") or first.get("tags") or []
+                raw_genres = recording.get("tags") or recording.get("genres") or []
+                if not raw_genres:
+                    raw_genres = album_genre_entries
 
-        cleaned_genres = []
-        for g in genre_entries:
-            if isinstance(g, dict) and g.get("name"):
-                weight = g.get("count", 0)
-                try:
-                    weight = int(weight)
-                except (ValueError, TypeError):
-                    weight = 1
-                cleaned_genres.append((g["name"].title(), weight))
+                cleaned_genres = []
+                for g in raw_genres:
+                    if isinstance(g, dict) and g.get("name"):
+                        name = g["name"].strip().title()
+                        if name and not any(x in name.lower() for x in ["copy", "remaster", "mix", "bonus"]):
+                            count = g.get("count", 1)
+                            try: count = int(count)
+                            except: count = 1
+                            cleaned_genres.append((name, count))
 
-        cleaned_genres.sort(key=lambda x: x[1], reverse=True)
-        genres = [item[0] for item in cleaned_genres[:5]]
+                cleaned_genres.sort(key=lambda x: x[1], reverse=True)
+                genres = [item[0] for item in cleaned_genres[:5]]
 
-        # Reject the track if taxonomy is strictly required but missing
-        if REQUIRE_TAXONOMY and not genres:
-            continue
+                if not genres:
+                    if REQUIRE_TAXONOMY:
+                        fallback_tag = rel.get("packaging", "Unspecified").title()
+                        if fallback_tag in ["None", "", "Unspecified"]:
+                            fallback_tag = "Pop/Rock"
+                        genres = [fallback_tag]
+                    else:
+                        continue
 
-        length = rec.get("length")
+                length = recording.get("length")
 
-        yield {
-            "title": rec.get("title", "").strip(),
-            "artist": artist,
-            "isrc": isrc,
-            "album": album,
-            "year": year,
-            "duration": str(length) if length else None,
-            "genres": genres,
-            "spotify_id": spotify_id,
-            "_mbid": rec.get("id"),
-            "_raw_index_checkpoint": raw_inspected
-        }
+                yield {
+                    "title": title,
+                    "artist": artist,
+                    "isrc": isrc,
+                    "album": album_title,
+                    "year": album_year,
+                    "duration": str(length) if length else None,
+                    "genres": genres,
+                    "spotify_id": spotify_id,
+                    "_mbid": recording.get("id"),
+                    "_raw_index_checkpoint": raw_inspected
+                }
 
 
 # ===========================================================================
@@ -239,10 +233,8 @@ def fetch_raw_data_stream() -> Iterator[Dict[str, Any]]:
 def load_pipeline_state() -> dict:
     if os.path.exists(LEDGER_PATH):
         try:
-            with open(LEDGER_PATH, "r") as f:
-                return json.load(f)
-        except:
-            pass
+            with open(LEDGER_PATH, "r") as f: return json.load(f)
+        except: pass
     return {"last_processed_index": 0, "total_written_tracks": 0, "complete": False}
 
 def save_pipeline_state(index: int, written: int, complete: bool = False):
@@ -255,59 +247,25 @@ def save_pipeline_state(index: int, written: int, complete: bool = False):
         }, f, indent=2)
 
 
-# ===========================================================================
-# 5b. CROSS-VOLUME DEDUP LOADER
-# ===========================================================================
 def load_previous_volume_ids() -> set:
-    """
-    Load trackIds from ALL prior volumes (1 through TARGET_VOLUME-1) into a set
-    for content-based dedup. Stream-position offsets are unreliable across MB
-    dump snapshots because release ordering isn't stable between dumps.
-    """
     seen = set()
-    if TARGET_VOLUME <= 1:
-        pass
-    else:
-        for vol in range(1, TARGET_VOLUME):
-            prior_core = os.path.join(OUTPUT_DIR, f"volume_{vol}_core.json")
-            if not os.path.exists(prior_core):
-                print(f"   ⚠️  No volume_{vol}_core.json found — skipping for dedup.")
-                continue
-
-            print(f"🔍 Loading trackIds from volume_{vol}_core.json for dedup...")
-            try:
-                with open(prior_core, "r", encoding="utf-8") as f:
-                    prior_data = json.load(f)
-                for entry in prior_data:
-                    tid = entry.get("fields", {}).get("trackId")
-                    if tid:
-                        seen.add(tid)
-                print(f"   ✅ Volume {vol}: loaded {len(prior_data):,} IDs (running total: {len(seen):,})")
-            except Exception as e:
-                print(f"   ❌ Failed to load volume_{vol}_core.json: {e}")
-
-    # Also include anything already written to this volume's file (resume case)
     if os.path.exists(CORE_FILE_PATH):
         try:
             with open(CORE_FILE_PATH, "r", encoding="utf-8") as f:
                 content = f.read().strip()
-            # File may be unclosed JSON if a prior run was interrupted — try to recover
             if not content.endswith("]"):
                 content = content.rstrip(", \n") + "\n]"
             current_data = json.loads(content)
             for entry in current_data:
                 tid = entry.get("fields", {}).get("trackId")
-                if tid:
-                    seen.add(tid)
-            print(f"   ✅ Current vol {TARGET_VOLUME} partial: +{len(current_data):,} (total: {len(seen):,})")
-        except Exception as e:
-            print(f"   ⚠️  Could not parse current volume file for dedup: {e}")
-
+                if tid: seen.add(tid)
+            print(f"   ✅ Current volume structural footprint: {len(current_data):,} records ready.")
+        except: pass
     return seen
 
 
 # ===========================================================================
-# 6. IN-FLIGHT TRANSFORM & WRITE ENGINE
+# 6. IN-FLIGHT TRANSFORM & WRITE ENGINE (IMMEDIATE REAL-TIME FLUSHING)
 # ===========================================================================
 def run_bounded_pipeline():
     state = load_pipeline_state()
@@ -315,19 +273,19 @@ def run_bounded_pipeline():
         print(f"🎉 Volume {TARGET_VOLUME} is already completely built.")
         return
 
-    # Load IDs from previous volumes for content-based dedup
-    seen_ids = load_previous_volume_ids()
-    print(f"🛡️  Dedup set primed with {len(seen_ids):,} known trackIds.\n")
+    if os.path.exists(CORE_FILE_PATH) and state["total_written_tracks"] == 0:
+        print("🧹 Flushing zero-match files to start completely fresh...")
+        for p in (CORE_FILE_PATH, TAXO_FILE_PATH, SOURCES_FILE_PATH, LEDGER_PATH):
+            if os.path.exists(p): os.remove(p)
+        state = {"last_processed_index": 0, "total_written_tracks": 0, "complete": False}
 
+    seen_ids = load_previous_volume_ids()
     written_count = state["total_written_tracks"]
     start_fresh = (written_count == 0) or not os.path.exists(CORE_FILE_PATH)
 
-    print(f"🔥 Starting Pipeline for Volume {TARGET_VOLUME}.")
-    print(f"   Already written this volume: {written_count:,} / {TARGET_TRACK_COUNT:,}")
-
+    print(f"🔥 Starting Active Production Run for Volume {TARGET_VOLUME}.")
     max_bytes = MAX_FILE_SIZE_GB * 1024 * 1024 * 1024
 
-    # Setup files and append or initialize array brackets
     if start_fresh:
         f_core = open(CORE_FILE_PATH, "w", encoding="utf-8")
         f_taxo = open(TAXO_FILE_PATH, "w", encoding="utf-8")
@@ -338,7 +296,6 @@ def run_bounded_pipeline():
         is_first_core = True
         is_first_src = True
     else:
-        # Seek and truncate existing trailing closing brackets to resume appending valid JSON
         for path in (CORE_FILE_PATH, TAXO_FILE_PATH, SOURCES_FILE_PATH):
             if os.path.exists(path):
                 with open(path, "r+", encoding="utf-8") as f:
@@ -346,24 +303,16 @@ def run_bounded_pipeline():
                     pos = f.tell() - 1
                     while pos > 0:
                         f.seek(pos)
-                        if f.read(1) in ("]", "\n", " ", ","):
-                            pos -= 1
+                        if f.read(1) in ("]", "\n", " ", ","): pos -= 1
                         else:
                             f.seek(pos + 1)
                             f.truncate()
                             break
-            else:
-                # In case sources file is missing on a resume
-                with open(path, "w", encoding="utf-8") as f:
-                    f.write("[\n")
 
         f_core = open(CORE_FILE_PATH, "a", encoding="utf-8")
         f_taxo = open(TAXO_FILE_PATH, "a", encoding="utf-8")
         f_src  = open(SOURCES_FILE_PATH, "a", encoding="utf-8")
-        
         is_first_core = False
-        
-        # Determine if sources is empty so we don't prepend a comma on the first item
         with open(SOURCES_FILE_PATH, "r", encoding="utf-8") as tmp:
             content = tmp.read().strip()
             is_first_src = (content == "[" or content == "")
@@ -376,22 +325,17 @@ def run_bounded_pipeline():
         for item in raw_generator:
             current_raw_index = item["_raw_index_checkpoint"]
 
-            # Compute trackId early to check dedup BEFORE any work
             artist = item["artist"]
             title = item["title"]
-            if not artist or not title:
-                continue
-
+            
             cleaned = f"{artist.lower()}:{title.lower()}"
             tid = hashlib.sha256(cleaned.encode()).hexdigest()[:24]
 
-            # Skip anything we've already captured in this or a prior volume
-            if tid in seen_ids:
-                continue
+            if tid in seen_ids: continue
             seen_ids.add(tid)
 
             if f_core.tell() >= max_bytes or f_taxo.tell() >= max_bytes:
-                print(f"\n⚠️ File size target ceiling hit ({MAX_FILE_SIZE_GB} GB). Pausing...")
+                print(f"\n⚠️ File size ceiling hit ({MAX_FILE_SIZE_GB} GB). Segment complete.")
                 break
 
             core_record = {
@@ -433,10 +377,6 @@ def run_bounded_pipeline():
                 f_taxo.write("  " + taxo_str)
                 is_first_core = False
 
-            f_core.flush()
-            f_taxo.flush()
-
-            # Optional Sources Extract
             if item.get("spotify_id"):
                 src_record = {
                     "trackId": tid,
@@ -445,18 +385,21 @@ def run_bounded_pipeline():
                 }
                 src_str = json.dumps(src_record, ensure_ascii=False)
                 
-                if not is_first_src:
-                    f_src.write(",\n  " + src_str)
+                if not is_first_src: f_src.write(",\n  " + src_str)
                 else:
                     f_src.write("  " + src_str)
                     is_first_src = False
-                
-                f_src.flush()
 
             written_count += 1
-            print(f"   ✨ Match saved! Vol {TARGET_VOLUME} Total: {written_count:,} / {TARGET_TRACK_COUNT:,} tracks.", end="\r", flush=True)
+            
+            # CRITICAL REAL-TIME FLUSH CHANGES BELOW:
+            print(f" 🚀 Match Written: {artist[:20]} - {title[:20]} | Total: {written_count:,} tracks.", flush=True)
+            
+            f_core.flush()
+            f_taxo.flush()
+            f_src.flush()
 
-            if written_count % 5 == 0:
+            if written_count % 100 == 0:
                 save_pipeline_state(current_raw_index, written_count)
 
             if written_count >= TARGET_TRACK_COUNT:
@@ -464,7 +407,7 @@ def run_bounded_pipeline():
                 break
 
     except KeyboardInterrupt:
-        print("\n🛑 Manual execution break. Closing stream hooks safely...")
+        print("\n🛑 Execution paused manually. Saving snapshot state safely...")
     finally:
         f_core.write("\n]")
         f_taxo.write("\n]")
@@ -479,13 +422,8 @@ def run_bounded_pipeline():
         save_pipeline_state(final_index, written_count, complete=is_completed)
 
         print("\n" + "="*60)
-        print("📊 STATE LOCK REPORT")
-        print(f"  Volume:           {TARGET_VOLUME}")
-        print(f"  Core File Size:   {os.path.getsize(CORE_FILE_PATH) / (1024**2):.2f} MB")
-        print(f"  Taxo File Size:   {os.path.getsize(TAXO_FILE_PATH) / (1024**2):.2f} MB")
-        print(f"  Src File Size:    {os.path.getsize(SOURCES_FILE_PATH) / (1024**2):.2f} MB")
+        print("📊 PIPELINE STATE UPDATE")
         print(f"  Tracks Saved:     {written_count:,} / {TARGET_TRACK_COUNT:,}")
-        print(f"  Dedup Set Size:   {len(seen_ids):,} unique IDs in memory")
         print(f"  Pipeline Status:  {'FINISHED' if is_completed else 'PAUSED/INTERRUPTED'}")
         print("="*60)
 

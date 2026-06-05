@@ -18,6 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from chromadb.config import Settings
 from pydantic import BaseModel
+from roles import infer_roles, field_label
 
 if sys.platform == 'win32':
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
@@ -49,7 +50,8 @@ def parse_args():
     parser.add_argument("--chroma-path",        default="./db/sond3r")
     parser.add_argument("--checkpoint-file",    default="./db/ingest_checkpoint.json")
     parser.add_argument("--collection",         default="fangorn")
-    parser.add_argument("--searchable-fields",  default="trackId,title,byArtist,genres,moods,themes,contexts")
+    parser.add_argument("--searchable-fields",  default="auto",
+                        help="Comma-separated field allowlist, or 'auto' to derive from inferred roles")
     parser.add_argument("--page-size",          type=int, default=100)
     parser.add_argument("--ipfs-timeout",       type=int, default=20)
     parser.add_argument("--concurrency",        type=int, default=16)
@@ -89,6 +91,95 @@ def get_searchable_fields() -> set[str]:
 ef_global:       object | None = None
 collection:      object | None = None
 debug_secondary: dict         = {}
+
+# Inferred semantic role map for the active dataset. Populated during ingest and
+# lazily reconstructed from stored payloads when the server starts on an already
+# -populated collection. See roles.infer_roles.
+role_map_global: dict | None = None
+
+# ---------------------------------------------------------------------------
+# ROLE ACCESSORS — read a record's payload through the inferred role map.
+# ---------------------------------------------------------------------------
+
+def _rm() -> dict:
+    return role_map_global or {}
+
+def _role_value(payload: dict, role: str):
+    field = _rm().get(role)
+    return payload.get(field) if field else None
+
+def _role_title(payload: dict, fallback: str = "") -> str:
+    v = _role_value(payload, "title")
+    return str(v) if v else fallback
+
+def _role_subtitle(payload: dict) -> str:
+    v = _role_value(payload, "subtitle")
+    return str(v) if v else ""
+
+def _role_tags(payload: dict) -> list[str]:
+    out: list[str] = []
+    for field in _rm().get("tags", []) or []:
+        v = payload.get(field)
+        if isinstance(v, list):
+            out.extend(str(x) for x in v if x)
+        elif v:
+            out.append(str(v))
+    return out
+
+def _role_tag_field_values(payload: dict, idx: int) -> list[str]:
+    """Values of the idx-th tag field (tags are ordered by richness)."""
+    fields = _rm().get("tags", []) or []
+    if idx < len(fields):
+        v = payload.get(fields[idx])
+        if isinstance(v, list):
+            return [str(x) for x in v if x]
+        if v:
+            return [str(v)]
+    return []
+
+def _role_spatial_xy(payload: dict):
+    """Return normalized-ish (x, y) from a spatial field, or None.
+    Handles bbox objects ({min_lon,min_lat,max_lon,max_lat}) and lat/lon pairs."""
+    field = _rm().get("spatial")
+    if not field:
+        return None
+    v = payload.get(field)
+    if isinstance(v, dict):
+        low = {str(k).lower(): val for k, val in v.items()}
+        def num(*keys):
+            for k in keys:
+                if k in low and isinstance(low[k], (int, float)):
+                    return float(low[k])
+            return None
+        lon = num("lon", "lng", "longitude", "x")
+        lat = num("lat", "latitude", "y")
+        if lon is None or lat is None:
+            mnlon, mxlon = num("min_lon"), num("max_lon")
+            mnlat, mxlat = num("min_lat"), num("max_lat")
+            if None not in (mnlon, mxlon, mnlat, mxlat):
+                lon, lat = (mnlon + mxlon) / 2, (mnlat + mxlat) / 2
+        if lon is not None and lat is not None:
+            return (lon, lat)
+    return None
+
+def _ensure_role_map() -> dict:
+    """Rebuild role_map_global from stored payloads if it isn't set yet
+    (e.g. server restarted on a pre-populated collection)."""
+    global role_map_global
+    if role_map_global is not None:
+        return role_map_global
+    sample: list[dict] = []
+    try:
+        res = collection.get(include=["metadatas"], limit=300)
+        for meta in (res.get("metadatas") or []):
+            try:
+                sample.append(json.loads((meta or {}).get("payload", "{}")))
+            except json.JSONDecodeError:
+                continue
+    except Exception:
+        pass
+    role_map_global = infer_roles(sample)
+    return role_map_global
 
 # ---------------------------------------------------------------------------
 # CATALOG MAP CACHE
@@ -137,75 +228,87 @@ def _build_map_sync() -> dict:
     if len(embeddings) == 0:
         return {"tracks": [], "total": 0, "genres": []}
 
-    emb_np = np.array(embeddings, dtype=np.float32)
-    n      = len(emb_np)
-    print(f"[catalog/map] running UMAP on {n} × {emb_np.shape[1]} matrix …")
+    _ensure_role_map()
 
-    reducer = umap_lib.UMAP(
-        n_components = 2,
-        n_neighbors  = min(15, n - 1),
-        min_dist     = 0.05,
-        metric       = "cosine",
-        random_state = 42,
-        low_memory   = True,
-        verbose      = False,
-    )
-    proj = reducer.fit_transform(emb_np)
+    payloads: list[dict] = []
+    for meta in metas:
+        ps = (meta or {}).get("payload", "{}")
+        try:
+            payloads.append(json.loads(ps) if isinstance(ps, str) else {})
+        except json.JSONDecodeError:
+            payloads.append({})
+
+    n = len(payloads)
+
+    # Prefer real geography when the dataset has a spatial role; otherwise project
+    # the embeddings into 2D with UMAP. This is what turns the "sound map" into a
+    # literal map for spatial datasets (e.g. OSM bboxes).
+    proj = None
+    if _rm().get("spatial"):
+        xy    = [_role_spatial_xy(p) for p in payloads]
+        valid = sum(1 for c in xy if c is not None)
+        if valid >= max(1, n // 2):
+            proj = np.array([c if c is not None else (0.0, 0.0) for c in xy], dtype=np.float32)
+            print(f"[catalog/map] using spatial role '{_rm()['spatial']}' for {valid}/{n} points")
+
+    if proj is None:
+        emb_np = np.array(embeddings, dtype=np.float32)
+        print(f"[catalog/map] running UMAP on {n} × {emb_np.shape[1]} matrix …")
+        reducer = umap_lib.UMAP(
+            n_components = 2,
+            n_neighbors  = min(15, n - 1),
+            min_dist     = 0.05,
+            metric       = "cosine",
+            random_state = 42,
+            low_memory   = True,
+            verbose      = False,
+        )
+        proj = reducer.fit_transform(emb_np)
 
     for axis in range(2):
         mn, mx = float(proj[:, axis].min()), float(proj[:, axis].max())
         rng = mx - mn if mx != mn else 1.0
         proj[:, axis] = (proj[:, axis] - mn) / rng * 2 - 1
 
-    tracks:          list = []
-    genre_positions: dict = {}
+    tracks:        list = []
+    tag_positions: dict = {}
 
-    for meta, doc_id, pos in zip(metas, ids, proj):
-        m           = meta or {}
-        payload_str = m.get("payload", "{}")
-        try:
-            payload = json.loads(payload_str) if isinstance(payload_str, str) else {}
-        except json.JSONDecodeError:
-            payload = {}
-
-        genres = payload.get("genres", [])
-        if not isinstance(genres, list):
-            genres = []
-        moods = payload.get("moods", [])
-        if not isinstance(moods, list):
-            moods = []
-
-        px, py = float(pos[0]), float(pos[1])
+    for payload, doc_id, pos in zip(payloads, ids, proj):
+        # Legacy {title, artist, genres, moods} shape is preserved for existing
+        # consumers; values now resolve through inferred roles (primary tag field
+        # → genres, secondary → moods).
+        primary   = _role_tag_field_values(payload, 0)
+        secondary = _role_tag_field_values(payload, 1)
+        px, py    = float(pos[0]), float(pos[1])
 
         tracks.append({
             "id":     doc_id,
-            "title":  payload.get("title")    or payload.get("name")     or doc_id,
-            "artist": payload.get("byArtist") or payload.get("artist")   or "",
-            "genres": genres[:3],
-            "moods":  moods[:3],
+            "title":  _role_title(payload, fallback=doc_id),
+            "artist": _role_subtitle(payload),
+            "genres": primary[:3],
+            "moods":  secondary[:3],
             "px":     px,
             "py":     py,
         })
 
-        if genres:
-            g = genres[0]
-            genre_positions.setdefault(g, []).append((px, py))
+        if primary:
+            tag_positions.setdefault(primary[0], []).append((px, py))
 
-    genre_centroids = []
-    for genre, pts in genre_positions.items():
+    tag_centroids = []
+    for tag, pts in tag_positions.items():
         if len(pts) < 5:
             continue
         arr = np.array(pts)
-        genre_centroids.append({
-            "genre": genre,
+        tag_centroids.append({
+            "genre": tag,
             "px":    float(arr[:, 0].mean()),
             "py":    float(arr[:, 1].mean()),
             "count": len(pts),
         })
-    genre_centroids.sort(key=lambda x: -x["count"])
+    tag_centroids.sort(key=lambda x: -x["count"])
 
-    print(f"[catalog/map] done — {len(tracks)} tracks, {len(genre_centroids)} genre labels")
-    return {"tracks": tracks, "total": len(tracks), "genres": genre_centroids[:40]}
+    print(f"[catalog/map] done — {len(tracks)} items, {len(tag_centroids)} tag labels")
+    return {"tracks": tracks, "total": len(tracks), "genres": tag_centroids[:40]}
 
 # ---------------------------------------------------------------------------
 # TEXT (LEXICAL) SEARCH — in-memory ranked index over payloads
@@ -216,6 +319,7 @@ def _build_text_index_sync() -> list[dict]:
     total = col.count()
     if total == 0:
         return []
+    _ensure_role_map()
     BATCH = 5_000
     out: list[dict] = []
     for offset in range(0, total, BATCH):
@@ -229,35 +333,27 @@ def _build_text_index_sync() -> list[dict]:
             except json.JSONDecodeError:
                 payload = {}
 
-            def _list(key):
-                v = payload.get(key)
-                return v if isinstance(v, list) else []
-
-            artist = str(payload.get("byArtist") or payload.get("artist") or "")
-            title  = str(payload.get("title")    or payload.get("name")   or "")
-            genres, moods    = _list("genres"), _list("moods")
-            themes, contexts = _list("themes"), _list("contexts")
+            subtitle = _role_subtitle(payload)
+            title    = _role_title(payload)
+            tags     = _role_tags(payload)
 
             out.append({
-                "id":         doc_id,
-                "owner":      m.get("owner"),
-                "byArtist":   artist,
-                "title":      title,
-                "isrcCode":   payload.get("isrcCode") or payload.get("isrc"),
-                "durationMs": payload.get("durationMs") or payload.get("duration"),
-                "genres":     genres, "moods": moods, "themes": themes, "contexts": contexts,
-                "_artist_l":  artist.lower(),
-                "_title_l":   title.lower(),
-                "_tags_l":    " ".join(str(t).lower() for t in (*genres, *moods, *themes, *contexts)),
+                "id":        doc_id,
+                "owner":     m.get("owner"),
+                "fields":    payload,          # full role-resolved record
+                "_sub_l":    subtitle.lower(),
+                "_title_l":  title.lower(),
+                "_tags_l":   " ".join(t.lower() for t in tags),
+                "_sort":     (subtitle.lower(), title.lower()),
             })
-    print(f"[search/text] built lexical index: {len(out)} tracks")
+    print(f"[search/text] built lexical index: {len(out)} records")
     return out
 
 
 def _score_rec(rec: dict, q_l: str, tokens: list[str]) -> float:
-    a, t, tags = rec["_artist_l"], rec["_title_l"], rec["_tags_l"]
+    a, t, tags = rec["_sub_l"], rec["_title_l"], rec["_tags_l"]
     score = 0.0
-    # artist match — the strongest signal for "the beatles"
+    # subtitle (artist/user/author) match — the strongest signal
     if   a == q_l:          score += 1000
     elif a.startswith(q_l): score += 400
     elif q_l and q_l in a:  score += 220
@@ -265,7 +361,7 @@ def _score_rec(rec: dict, q_l: str, tokens: list[str]) -> float:
     if   t == q_l:          score += 350
     elif t.startswith(q_l): score += 160
     elif q_l and q_l in t:  score += 120
-    # per-token coverage over artist+title, plus a light tag bonus
+    # per-token coverage over subtitle+title, plus a light tag bonus
     if tokens:
         hay = f"{a} {t}"
         score += 60 * (sum(1 for tok in tokens if tok in hay) / len(tokens))
@@ -283,17 +379,12 @@ def _search_text_sync(q: str, limit: int, owner: str | None) -> list[dict]:
     recs   = _text_index if not owner else [r for r in _text_index if r.get("owner") == owner]
 
     scored = [(s, r) for r in recs if (s := _score_rec(r, q_l, tokens)) > 0]
-    scored.sort(key=lambda x: (-x[0], x[1]["byArtist"].lower(), x[1]["title"].lower()))
+    scored.sort(key=lambda x: (-x[0], x[1]["_sort"]))
 
-    return [{
-        "id":         r["id"],
-        "byArtist":   r["byArtist"],
-        "title":      r["title"],
-        "isrcCode":   r["isrcCode"],
-        "durationMs": r["durationMs"],
-        "genres":     r["genres"], "moods": r["moods"],
-        "themes":     r["themes"], "contexts": r["contexts"],
-    } for _, r in scored[:limit]]
+    # Mirror the /search + /browse hit shape ({id, fields, ...}) so the renderer
+    # normalizes every result path identically.
+    return [{"id": r["id"], "fields": r["fields"], "owner": r.get("owner")}
+            for _, r in scored[:limit]]
 
 
 def _attach_embeddings(results: list[dict]) -> list[dict]:
@@ -689,40 +780,56 @@ def _flatten_fields(fields: dict) -> dict:
     for k, v in fields.items():
         if isinstance(v, dict) and v.get("@type") == "handle":
             out[k] = v.get("uri", "")
+        elif isinstance(v, dict):
+            # Preserve structured objects (e.g. a bbox / geo anchor) so the
+            # spatial role survives — only handle wrappers are unwrapped above.
+            out[k] = v
         elif isinstance(v, (str, int, float, bool, list)) or v is None:
             out[k] = v
     return out
 
-TAG_FIELDS   = {"genres", "moods", "themes", "contexts"}
-TRACK_FIELDS = {"title", "byArtist"}
+# Legacy tag set, only used when --searchable-fields is given explicitly.
+TAG_FIELDS = {"genres", "moods", "themes", "contexts"}
+
+def _is_auto_searchable() -> bool:
+    return cfg.searchable_fields.strip().lower() == "auto"
 
 def _build_searchable_text(fields: dict) -> str:
-    searchable = get_searchable_fields()
+    # Explicit allowlist (legacy behavior) — split tags vs the rest by name.
+    if not _is_auto_searchable():
+        searchable = get_searchable_fields()
+        tag_terms, other_terms = [], []
+        for key in searchable:
+            val = fields.get(key)
+            bucket = tag_terms if key in TAG_FIELDS else other_terms
+            if isinstance(val, list):
+                bucket.extend(str(v) for v in val if v)
+            elif val:
+                bucket.append(str(val))
+        parts = []
+        if tag_terms:
+            tag_text = " ".join(tag_terms)
+            parts.append(tag_text); parts.append(tag_text)
+        parts.extend(other_terms)
+        return " ".join(parts) or "record"
 
-    tag_terms: list[str] = []
-    for key in TAG_FIELDS & searchable:
-        val = fields.get(key)
-        if isinstance(val, list):
-            tag_terms.extend(str(v) for v in val if v)
-        elif val:
-            tag_terms.append(str(val))
-
-    track_terms: list[str] = []
-    for key in (searchable - TAG_FIELDS):
-        val = fields.get(key)
-        if isinstance(val, list):
-            track_terms.extend(str(v) for v in val if v)
-        elif val:
-            track_terms.append(str(val))
+    # Auto mode — derive the searchable document from inferred roles. Tags are
+    # double-weighted (they're the strongest semantic facet); identity hashes are
+    # deliberately excluded as embedding noise.
+    tags     = _role_tags(fields)
+    title    = _role_title(fields)
+    subtitle = _role_subtitle(fields)
+    text_terms = [str(fields[t]) for t in (_rm().get("text", []) or []) if fields.get(t)]
 
     parts: list[str] = []
-    if tag_terms:
-        tag_text = " ".join(tag_terms)
-        parts.append(tag_text)
-        parts.append(tag_text)
-    parts.extend(track_terms)
+    if tags:
+        tag_text = " ".join(tags)
+        parts.append(tag_text); parts.append(tag_text)
+    if title:    parts.append(title)
+    if subtitle: parts.append(subtitle)
+    parts.extend(text_terms)
 
-    return " ".join(parts) or "music"
+    return " ".join(parts).strip() or title or subtitle or "record"
 
 def join_records(entries_by_schema: dict[str, list[dict]], primary: str) -> list[dict]:
     primary_entries = entries_by_schema.get(primary, [])
@@ -757,21 +864,32 @@ def join_records(entries_by_schema: dict[str, list[dict]], primary: str) -> list
     debug_secondary = secondary_fields
     print(f"  [join] secondary index: {len(secondary_fields)} keys")
 
-    joined  = []
-    matched = 0
+    # Pass 1 — merge each primary record with its joined secondary fields.
+    merged: list[dict] = []
     for item in primary_entries:
         track_id = _track_id(item["entry"])
         if not track_id:
             continue
-
         core_fields = _flatten_fields(item["entry"].get("fields", {}))
         tag_fields  = secondary_fields.get(track_id, {})
         fields      = {**core_fields, **tag_fields}
-
         fields["trackId"] = track_id
-        doc = _build_searchable_text(fields)
+        merged.append({"track_id": track_id, "fields": fields,
+                       "meta": item["meta"], "has_tags": bool(tag_fields)})
 
-        if tag_fields:
+    # Infer the semantic role map once for the whole dataset, then cache it so
+    # embedding, search, the map and /schema all share one interpretation.
+    global role_map_global
+    role_map_global = infer_roles([m["fields"] for m in merged])
+    print(f"  [roles] inferred: {role_map_global.get('labels')}")
+
+    # Pass 2 — build documents/payloads using the role-aware searchable text.
+    joined  = []
+    matched = 0
+    for m in merged:
+        track_id, fields, item = m["track_id"], m["fields"], {"meta": m["meta"]}
+        doc = _build_searchable_text(fields)
+        if m["has_tags"]:
             matched += 1
 
         joined.append({
@@ -783,7 +901,7 @@ def join_records(entries_by_schema: dict[str, list[dict]], primary: str) -> list
                 "owner":          item["meta"]["owner"],
                 "manifestCid":    item["meta"]["manifestCid"],
                 "blockTimestamp": item["meta"]["blockTimestamp"],
-                **{f"has_{n}": str(n == primary or bool(tag_fields))
+                **{f"has_{n}": str(n == primary or m["has_tags"])
                    for n in entries_by_schema},
             },
         })
@@ -1046,6 +1164,38 @@ async def embed(body: EmbedRequest):
         return {"embedding": vectors[0].tolist()}
     return {"error": "provide 'text' or 'texts'"}
 
+def _schema_payload_sync() -> dict:
+    rm = _ensure_role_map()
+    # Build facet vocabularies for the tag-role fields so the UI can render
+    # filters without scanning the whole catalog client-side.
+    tag_fields = rm.get("tags", []) or []
+    vocab: dict[str, set] = {f: set() for f in tag_fields}
+    if tag_fields:
+        try:
+            total = collection.count()
+            BATCH = 5_000
+            for offset in range(0, min(total, 50_000), BATCH):
+                res = collection.get(include=["metadatas"], limit=BATCH, offset=offset)
+                for meta in (res.get("metadatas") or []):
+                    try:
+                        payload = json.loads((meta or {}).get("payload", "{}"))
+                    except json.JSONDecodeError:
+                        continue
+                    for f in tag_fields:
+                        v = payload.get(f)
+                        if isinstance(v, list):
+                            vocab[f].update(str(x) for x in v if x)
+        except Exception as e:
+            print(f"[schema] facet scan failed: {e}")
+    facets = {f: sorted(vals) for f, vals in vocab.items()}
+    return {"roles": rm, "labels": rm.get("labels", {}), "facets": facets,
+            "primary_tag": tag_fields[0] if tag_fields else None}
+
+@app.get("/schema")
+async def schema():
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, _schema_payload_sync)
+
 @app.get("/catalog/map")
 async def catalog_map():
     global _map_cache, _map_computing
@@ -1127,6 +1277,7 @@ async def health():
         "status":          "ok",
         "count":           collection.count(),
         "schemas":         schemas,
+        "roles":           role_map_global,
         "map_cached":      _map_cache is not None,
         "map_computing":   _map_computing,
         "text_indexed":    _text_index is not None,

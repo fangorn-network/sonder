@@ -10,21 +10,26 @@ from typing import Iterator, Dict, Any
 # ===========================================================================
 # 1. CONFIGURATION
 # ===========================================================================
-REQUIRE_TAXONOMY  = True
-MIN_TAG_VOTES     = 1         # minimum cumulative community votes to accept a tag
+REQUIRE_TAXONOMY   = True
+MIN_TAG_VOTES      = 1
 TARGET_TRACK_COUNT = 1000000
-TARGET_VOLUME     = 1
-OUTPUT_DIR        = "./stage_volumes"
+TARGET_VOLUME      = 1
+OUTPUT_DIR         = "./stage_volumes"
 
-NETWORK_CHUNK_SIZE  = 1 * 1024 * 1024   # 1 MB write chunks during download
-MB_BASE_DUMP_URL    = "https://data.metabrainz.org/pub/musicbrainz/data/json-dumps/"
-DOWNLOAD_TIMEOUT    = (10, 60)           # (connect_timeout, read_timeout) seconds
+NETWORK_CHUNK_SIZE = 2 * 1024 * 1024    # 2 MB download chunks
+DOWNLOAD_TIMEOUT   = (15, 120)           # (connect, read) seconds
+
+# ---------------------------------------------------------------------------
+# Set this to the release.tar.xz URL from the dated directory listing.
+# e.g. https://data.metabrainz.org/pub/musicbrainz/data/json-dumps/20260603-001002/release.tar.xz
+# ---------------------------------------------------------------------------
+DUMP_URL = "https://data.metabrainz.org/pub/musicbrainz/data/json-dumps/20260603-001002/release.tar.xz"
 
 # ===========================================================================
 # 2. PATHS
 # ===========================================================================
 CACHE_DIR         = os.path.join(OUTPUT_DIR, "cache")
-LOCAL_XZ_PATH     = os.path.join(CACHE_DIR, "recording.tar.xz")
+LOCAL_XZ_PATH     = os.path.join(CACHE_DIR, "release.tar.xz")
 CORE_FILE_PATH    = os.path.join(OUTPUT_DIR, f"volume_{TARGET_VOLUME}_core.json")
 TAXO_FILE_PATH    = os.path.join(OUTPUT_DIR, f"volume_{TARGET_VOLUME}_taxonomy.json")
 SOURCES_FILE_PATH = os.path.join(OUTPUT_DIR, f"volume_{TARGET_VOLUME}_sources.json")
@@ -34,61 +39,54 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 os.makedirs(CACHE_DIR,  exist_ok=True)
 
 # ===========================================================================
-# 3. URL DISCOVERY
-# ===========================================================================
-def resolve_latest_dump_url() -> str:
-    print("🔍 Scanning MetaBrainz index for recording dump...")
-    headers = {"User-Agent": "Fangorn-Pipeline/1.0"}
-    try:
-        r = requests.get(MB_BASE_DUMP_URL, headers=headers, timeout=DOWNLOAD_TIMEOUT)
-        r.raise_for_status()
-        dirs = sorted(re.findall(r'href="([0-9]{8}-[0-9]{6})/?"', r.text), reverse=True)
-        for d in dirs:
-            url = f"{MB_BASE_DUMP_URL}{d}/recording.tar.xz"
-            if requests.head(url, headers=headers, timeout=DOWNLOAD_TIMEOUT).status_code == 200:
-                print(f"🎯 Found: {url}")
-                return url
-    except Exception as e:
-        print(f"⚠️  Discovery error: {e}")
-    fallback = f"{MB_BASE_DUMP_URL}latest/recording.tar.xz"
-    print(f"ℹ️  Using fallback: {fallback}")
-    return fallback
-
-# ===========================================================================
-# 4. RESUMABLE DOWNLOADER
-#    Uses HTTP Range requests to resume a partial download.
-#    The recording dump is 3-5 GB; a one-shot stream reliably times out
-#    mid-transfer. This downloads to disk first, then processes locally —
-#    zero timeout risk during extraction, and safe to Ctrl-C and restart.
+# 3. RESUMABLE DOWNLOADER
+#    Downloads to disk first. Safe to Ctrl-C and restart — picks up from
+#    the last byte using HTTP Range requests.
 # ===========================================================================
 def download_with_resume(url: str, dest: str) -> None:
     headers = {"User-Agent": "Fangorn-Pipeline/1.0"}
     existing = os.path.getsize(dest) if os.path.exists(dest) else 0
 
-    # Ask server for total size
-    head = requests.head(url, headers=headers, timeout=DOWNLOAD_TIMEOUT)
-    total = int(head.headers.get("Content-Length", 0))
+    head = requests.head(url, headers=headers, timeout=DOWNLOAD_TIMEOUT, allow_redirects=True)
+    if head.status_code != 200:
+        raise RuntimeError(f"HEAD {url} → HTTP {head.status_code}")
 
-    if existing and existing == total:
-        print(f"✅ Already fully downloaded ({total / 1e9:.2f} GB): {dest}")
+    total = int(head.headers.get("Content-Length", 0))
+    accepts_ranges = head.headers.get("Accept-Ranges", "none").lower() == "bytes"
+
+    if total and existing == total:
+        print(f"✅ Already downloaded ({total/1e9:.2f} GB): {dest}")
         return
 
-    if existing:
-        print(f"⏩ Resuming download from byte {existing:,} / {total:,}")
-        headers["Range"] = f"bytes={existing}-"
+    if existing and total and existing > total:
+        print(f"⚠️  Local file larger than remote — deleting and restarting")
+        os.remove(dest)
+        existing = 0
+
+    if existing and accepts_ranges:
+        pct = existing / total * 100 if total else 0
+        print(f"⏩ Resuming from {existing/1e9:.2f} GB / {total/1e9:.2f} GB ({pct:.1f}%)")
+        req_headers = {**headers, "Range": f"bytes={existing}-"}
         mode = "ab"
     else:
-        print(f"📥 Starting download ({total / 1e9:.2f} GB) → {dest}")
+        if existing and not accepts_ranges:
+            print("⚠️  Server doesn't support Range — restarting from zero")
+            os.remove(dest)
+            existing = 0
+        size_str = f"{total/1e9:.2f} GB" if total else "unknown size"
+        print(f"📥 Downloading {size_str} → {dest}")
+        req_headers = headers
         mode = "wb"
 
-    with requests.get(url, headers=headers, stream=True, timeout=DOWNLOAD_TIMEOUT) as r:
-        # 206 = Partial Content (resume OK), 200 = server ignored Range (restart)
-        if r.status_code == 200 and existing:
-            print("⚠️  Server doesn't support Range — restarting from zero")
+    with requests.get(url, headers=req_headers, stream=True, timeout=DOWNLOAD_TIMEOUT) as r:
+        if r.status_code not in (200, 206):
+            raise RuntimeError(f"GET → HTTP {r.status_code}")
+        if r.status_code == 200 and mode == "ab":
+            # Server ignored Range header
+            print("⚠️  Server sent 200 instead of 206 — restarting")
+            os.remove(dest)
             existing = 0
             mode = "wb"
-        elif r.status_code not in (200, 206):
-            raise RuntimeError(f"HTTP {r.status_code} downloading {url}")
 
         written = existing
         with open(dest, mode) as f:
@@ -96,39 +94,85 @@ def download_with_resume(url: str, dest: str) -> None:
                 if chunk:
                     f.write(chunk)
                     written += len(chunk)
-                    pct = (written / total * 100) if total else 0
-                    print(
-                        f"   📡 {written/1e9:.2f} / {total/1e9:.2f} GB  ({pct:.1f}%)",
-                        end="\r", flush=True,
-                    )
+                    if total:
+                        pct = written / total * 100
+                        filled = int(pct / 2)
+                        bar = "█" * filled + "░" * (50 - filled)
+                        print(f"   [{bar}] {pct:5.1f}%  {written/1e9:.3f}/{total/1e9:.2f} GB",
+                              end="\r", flush=True)
+                    else:
+                        print(f"   📡 {written/1e9:.3f} GB...", end="\r", flush=True)
 
-    print(f"\n✅ Download complete: {written/1e9:.2f} GB")
+    final = os.path.getsize(dest)
+    if total and final != total:
+        raise RuntimeError(
+            f"Incomplete: {final:,} / {total:,} bytes. Re-run to resume."
+        )
+    print(f"\n✅ Download complete: {final/1e9:.2f} GB")
 
 # ===========================================================================
-# 5. TAR LINE ITERATOR  (reads from local file — no stream timeouts)
+# 4. BUFFERED STREAM WRAPPER
+#    Used to pipe the local XZ file into lzma without loading it all into RAM.
+#    lzma.open() calls read(n) with specific sizes — must honor exactly.
 # ===========================================================================
-def _iter_recording_lines(xz_path: str) -> Iterator[bytes]:
-    print(f"📂 Opening local archive: {xz_path}")
-    with lzma.open(xz_path, format=lzma.FORMAT_AUTO) as xz_stream:
-        with tarfile.open(fileobj=xz_stream, mode="r|") as tar:
-            for member in tar:
-                if member.name in ("mbdump/recording", "recording"):
-                    print(f"   🎯 Member found: '{member.name}' — streaming lines...")
-                    f = tar.extractfile(member)
-                    if f is None:
-                        raise RuntimeError(f"extractfile returned None for {member.name}")
-                    lines_yielded = 0
-                    for raw_line in f:
-                        raw_line = raw_line.strip()
-                        if raw_line:
-                            lines_yielded += 1
-                            yield raw_line
-                    print(f"\n   ✅ Exhausted member: {lines_yielded:,} raw lines read")
-                    return
-            raise RuntimeError(
-                "mbdump/recording not found in tar. "
-                "Members present: " + str([m.name for m in tar])
-            )
+class BufferedFileWrapper:
+    """Thin wrapper that reports progress while lzma reads the local file."""
+    def __init__(self, path: str):
+        self._f = open(path, "rb")
+        self._size = os.path.getsize(path)
+        self._pos = 0
+        self._last_report = 0
+
+    def read(self, size=-1):
+        data = self._f.read(size)
+        self._pos += len(data)
+        if self._pos - self._last_report >= 500 * 1024 * 1024:
+            pct = self._pos / self._size * 100
+            print(f"   🗜️  Decompressing: {self._pos/1e9:.2f}/{self._size/1e9:.2f} GB ({pct:.0f}%)",
+                  flush=True)
+            self._last_report = self._pos
+        return data
+
+    def readable(self):  return True
+    def writable(self):  return False
+    def seekable(self):  return False
+    def close(self):     self._f.close()
+    def __enter__(self): return self
+    def __exit__(self, *a): self.close()
+
+# ===========================================================================
+# 5. RELEASE LINE ITERATOR
+# ===========================================================================
+def _iter_release_lines(xz_path: str) -> Iterator[bytes]:
+    file_size = os.path.getsize(xz_path)
+    print(f"📂 Opening: {xz_path}  ({file_size/1e9:.2f} GB)")
+
+    if file_size < 1_000_000_000:
+        raise RuntimeError(
+            f"Local file is only {file_size/1e6:.0f} MB — expected ~23 GB for release.tar.xz.\n"
+            f"Check DUMP_URL and delete {xz_path} to re-download."
+        )
+
+    with BufferedFileWrapper(xz_path) as raw:
+        with lzma.open(raw, format=lzma.FORMAT_AUTO) as xz_stream:
+            with tarfile.open(fileobj=xz_stream, mode="r|") as tar:
+                for member in tar:
+                    if member.name in ("mbdump/release", "release"):
+                        print(f"   🎯 Member: '{member.name}' — streaming lines...")
+                        f = tar.extractfile(member)
+                        if f is None:
+                            raise RuntimeError(f"extractfile returned None for {member.name}")
+                        n = 0
+                        for raw_line in f:
+                            raw_line = raw_line.strip()
+                            if raw_line:
+                                n += 1
+                                if n % 1_000_000 == 0:
+                                    print(f"   📄 {n/1e6:.0f}M lines...", flush=True)
+                                yield raw_line
+                        print(f"\n   ✅ {n:,} raw release lines read")
+                        return
+                raise RuntimeError("mbdump/release not found in archive.")
 
 # ===========================================================================
 # 6. HELPERS
@@ -167,93 +211,112 @@ def _pick_best_release(releases: list) -> dict:
     return sorted(releases, key=sort_key)[0]
 
 
-def _collect_tags(rec: dict) -> list:
+def _collect_tags(obj: dict) -> list:
     seen = {}
     for field in ("genres", "tags"):
-        for tag_obj in (rec.get(field) or []):
+        for tag_obj in (obj.get(field) or []):
             if not isinstance(tag_obj, dict):
                 continue
             name = tag_obj.get("name", "").strip()
             if not name:
                 continue
-            count = tag_obj.get("count", 1)
-            seen[name] = seen.get(name, 0) + count
+            seen[name] = seen.get(name, 0) + tag_obj.get("count", 1)
     filtered = [(n, c) for n, c in seen.items() if c >= MIN_TAG_VOTES]
     filtered.sort(key=lambda x: -x[1])
     return [n.title() for n, _ in filtered]
 
 # ===========================================================================
-# 7. MAIN DATA STREAM
+# 7. MAIN DATA STREAM  (release dump: release → media → tracks → recording)
 # ===========================================================================
 def fetch_raw_data_stream() -> Iterator[Dict[str, Any]]:
-    raw_total = 0
-    skipped_no_title  = 0
-    skipped_no_artist = 0
-    skipped_no_tags   = 0
-    parse_errors      = 0
+    counts = dict(releases=0, tracks=0, no_artist=0, no_tags=0, parse_err=0)
 
-    for raw_line in _iter_recording_lines(LOCAL_XZ_PATH):
-        raw_total += 1
-
+    for raw_line in _iter_release_lines(LOCAL_XZ_PATH):
         try:
-            rec = json.loads(raw_line)
+            rel = json.loads(raw_line)
         except Exception:
-            parse_errors += 1
+            counts["parse_err"] += 1
             continue
 
-        title = rec.get("title", "").strip()
-        if not title:
-            skipped_no_title += 1
-            continue
-
-        artist = _parse_artist_credit(rec.get("artist-credit") or [])
-        if not artist:
-            skipped_no_artist += 1
-            continue
-
-        genres = _collect_tags(rec)
-        if REQUIRE_TAXONOMY and not genres:
-            skipped_no_tags += 1
-            continue
-
-        isrcs     = rec.get("isrcs") or []
-        isrc      = isrcs[0] if isrcs else None
-
-        spotify_id = None
-        for rel in (rec.get("relations") or []):
-            if isinstance(rel, dict):
-                sid = _extract_spotify_id((rel.get("url") or {}).get("resource", ""))
-                if sid:
-                    spotify_id = sid
-                    break
-
-        best  = _pick_best_release(rec.get("releases") or [])
-        album = best.get("title", "") or None
-        date  = (best.get("date") or "")
-        year  = date[:4] if len(date) >= 4 else None
-        length = rec.get("length")
-
-        # Periodic diagnostics so you can see the filter breakdown live
-        if raw_total % 100_000 == 0:
+        counts["releases"] += 1
+        if counts["releases"] % 500_000 == 0:
             print(
-                f"\n   📊 {raw_total:,} inspected | "
-                f"no_title={skipped_no_title:,} no_artist={skipped_no_artist:,} "
-                f"no_tags={skipped_no_tags:,} parse_err={parse_errors:,}",
+                f"\n   📊 {counts['releases']:,} releases | "
+                f"{counts['tracks']:,} tracks seen | "
+                f"no_artist={counts['no_artist']:,} no_tags={counts['no_tags']:,}",
                 flush=True,
             )
 
-        yield {
-            "title":      title,
-            "artist":     artist,
-            "isrc":       isrc,
-            "album":      album,
-            "year":       year,
-            "duration":   str(length) if length else None,
-            "genres":     genres[:5],
-            "spotify_id": spotify_id,
-            "_mbid":      rec.get("id"),
-            "_raw_index_checkpoint": raw_total,
-        }
+        album_title = rel.get("title", "").strip()
+        date_str    = rel.get("date", "") or ""
+        year        = date_str[:4] if len(date_str) >= 4 else None
+
+        # Tag fallback chain: release → release-group → artist-credit[0].artist
+        release_tags = _collect_tags(rel)
+        rg_tags      = _collect_tags(rel.get("release-group") or {})
+        ac           = rel.get("artist-credit") or []
+        artist_tags  = _collect_tags((ac[0].get("artist") or {}) if ac and isinstance(ac[0], dict) else {})
+        album_tags   = release_tags or rg_tags or artist_tags
+
+        for medium in (rel.get("media") or []):  # KEY FIX: was "mediums", dump uses "media"
+            if not isinstance(medium, dict):
+                continue
+            for track in (medium.get("tracks") or []):
+                if not isinstance(track, dict):
+                    continue
+                rec = track.get("recording")
+                if not rec or not isinstance(rec, dict):
+                    continue
+
+                title = rec.get("title", "").strip()
+                if not title:
+                    continue
+
+                counts["tracks"] += 1
+
+                artist = _parse_artist_credit(
+                    rec.get("artist-credit") or rel.get("artist-credit") or []
+                )
+                if not artist:
+                    counts["no_artist"] += 1
+                    continue
+
+                # Recording tags first, fall back to release/album tags
+                track_tags = _collect_tags(rec)
+                genres = track_tags if track_tags else album_tags
+
+                if REQUIRE_TAXONOMY and not genres:
+                    counts["no_tags"] += 1
+                    continue
+
+                isrcs = rec.get("isrcs") or []
+                isrc  = isrcs[0] if isrcs else None
+
+                spotify_id = None
+                combined = (rel.get("relations") or []) + (rec.get("relations") or [])
+                for relation in combined:
+                    if isinstance(relation, dict):
+                        sid = _extract_spotify_id(
+                            (relation.get("url") or {}).get("resource", "")
+                        )
+                        if sid:
+                            spotify_id = sid
+                            break
+
+                length = rec.get("length")
+
+                yield {
+                    "title":      title,
+                    "artist":     artist,
+                    "isrc":       isrc,
+                    "album":      album_title,
+                    "year":       year,
+                    "duration":   str(length) if length else None,
+                    "genres":     genres[:5],
+                    "spotify_id": spotify_id,
+                    "_mbid":      rec.get("id"),
+                    "_raw_index_checkpoint": counts["releases"],
+                }
 
 # ===========================================================================
 # 8. STATE MANAGEMENT
@@ -270,20 +333,21 @@ def load_pipeline_state() -> dict:
 
 def save_pipeline_state(index: int, written: int, complete: bool = False):
     with open(LEDGER_PATH, "w") as f:
-        json.dump({"last_processed_index": index, "total_written_tracks": written, "complete": complete}, f)
+        json.dump({
+            "last_processed_index": index,
+            "total_written_tracks": written,
+            "complete": complete,
+        }, f)
 
 # ===========================================================================
 # 9. PIPELINE ENGINE
 # ===========================================================================
 def run_bounded_pipeline():
-    # Step 1: ensure the file is fully on disk
-    url = resolve_latest_dump_url()
-    download_with_resume(url, LOCAL_XZ_PATH)
+    download_with_resume(DUMP_URL, LOCAL_XZ_PATH)
 
-    # Step 2: check state
     state = load_pipeline_state()
     if state["complete"]:
-        print(f"🎉 Volume {TARGET_VOLUME} already complete ({state['total_written_tracks']:,} tracks).")
+        print(f"🎉 Already complete ({state['total_written_tracks']:,} tracks).")
         return
 
     if os.path.exists(CORE_FILE_PATH) and state["total_written_tracks"] == 0:
@@ -316,32 +380,18 @@ def run_bounded_pipeline():
                 continue
             seen_ids.add(tid)
 
-            core = {
-                "name": tid,
-                "fields": {
-                    "schemaVersion": 1,
-                    "trackId":       tid,
-                    "isrcCode":      item["isrc"],
-                    "title":         item["title"],
-                    "byArtist":      item["artist"],
-                    "albumName":     item["album"],
-                    "datePublished": item["year"],
-                    "durationMs":    int(item["duration"]) if item.get("duration") and item["duration"].isdigit() else None,
-                    "contributors":  [],
-                    "_mbid":         item["_mbid"],
-                }
-            }
-            taxo = {
-                "name": tid,
-                "fields": {
-                    "schemaVersion": 1,
-                    "trackId":  tid,
-                    "genres":   item["genres"],
-                    "moods":    [],
-                    "themes":   [],
-                    "contexts": [],
-                }
-            }
+            core = {"name": tid, "fields": {
+                "schemaVersion": 1,   "trackId": tid,
+                "isrcCode":  item["isrc"],   "title":     item["title"],
+                "byArtist":  item["artist"], "albumName": item["album"],
+                "datePublished": item["year"],
+                "durationMs": int(item["duration"]) if item.get("duration") and item["duration"].isdigit() else None,
+                "contributors": [], "_mbid": item["_mbid"],
+            }}
+            taxo = {"name": tid, "fields": {
+                "schemaVersion": 1, "trackId": tid,
+                "genres": item["genres"], "moods": [], "themes": [], "contexts": [],
+            }}
 
             sep = "" if is_first_core else ",\n"
             f_core.write(f"{sep}  {json.dumps(core, ensure_ascii=False)}")
@@ -358,7 +408,8 @@ def run_bounded_pipeline():
 
             written_count += 1
             print(
-                f" 🚀 {written_count:>7,} | {item['artist'][:22]:<22} — {item['title'][:22]:<22} | {item['genres']}",
+                f" 🚀 {written_count:>7,} | {item['artist'][:22]:<22} — "
+                f"{item['title'][:22]:<22} | {item['genres']}",
                 flush=True,
             )
 

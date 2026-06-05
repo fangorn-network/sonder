@@ -23,7 +23,6 @@ import { useAgentContext } from './context/useAgentContext'
 import { useSpotify } from './hooks/useSpotifyContext'
 import { usePlaybackRouter } from './hooks/usePlaybackRouter'
 import { useAutoplay } from './hooks/useAutoplay'
-import { useMediaSearch } from './hooks/useMediaSearch'
 import { TrackWikiView, type View, type SearchMode, viewLabel } from './views/TrackWikiView'
 import { SoundTownView } from './views/SoundTownView'
 import type { KernelSnapshot } from './types/kernel'
@@ -138,10 +137,16 @@ function Main() {
     tracks, loading,
     allGenres, allMoods, allContexts, allThemes,
     chromaReady, seeding, retryConnect,
-    applyKernelQuery,
+    applyKernelQuery, roleMap,
   } = useChroma({ genreFilter: 'all', moodFilter: 'all', contextFilter: 'all' })
 
-  const { tracks: ytTracks, search: ytSearch, clear: ytClear } = useMediaSearch()
+  // Playback capability. Ideally gated on a `media` role (a playable handle),
+  // but for now we also enable it whenever records are track-like — i.e. the
+  // identity field is `trackId` — so the music catalog keeps its preview/Spotify
+  // playback even with only the invariant/taxonomy schemas loaded (no
+  // AudioSource → no media role). Non-track datasets (e.g. OSM) stay player-less.
+  const canPlay = !!roleMap?.media || roleMap?.identity === 'trackId' || !roleMap
+
   const { sendMessage } = useFangornAgent()
 
   const contextHints = useMemo(() => ({
@@ -236,9 +241,6 @@ function Main() {
   const handleSignalRef = useRef(handleSignal)
   handleSignalRef.current = handleSignal
 
-  const ytTracksRef = useRef(ytTracks)
-  useEffect(() => { ytTracksRef.current = ytTracks }, [ytTracks])
-
   // ── Playback router ───────────────────────────────────────────────────────
 
   const { play, markNaturalEnd, state: playbackState } = usePlaybackRouter(spotify, {
@@ -262,31 +264,17 @@ function Main() {
   }, [agentContext.context])
 
   // ── Wiki play adapter (TrackNeighborData → playback router) ───────────────
-
-  const pendingWikiPlayRef = useRef<{ artist: string; title: string } | null>(null)
-
-  useEffect(() => {
-    if (!pendingWikiPlayRef.current || ytTracks.length === 0) return
-    const pending = pendingWikiPlayRef.current
-    const first = ytTracks.find(t => t.youtubeVideoId)
-    if (first) {
-      play({
-        id: first.youtubeVideoId ?? first.id,
-        trackId: first.youtubeVideoId ?? first.id,
-        owner: '', manifestCid: '',
-        title: first.title ?? pending.title,
-        artist: first.artist ?? pending.artist,
-        year: null, durationMs: null,
-        youtubeVideoId: first.youtubeVideoId,
-      })
-    }
-    pendingWikiPlayRef.current = null
-    ytClear()
-  }, [ytTracks, play, ytClear])
+  // Play the exact track the user picked. The Spotify adapter resolves by
+  // title + artist, so we pass those through verbatim — no fuzzy YouTube/
+  // SoundCloud pre-search (which could surface an unrelated podcast/cover and
+  // hand Spotify the wrong query).
 
   const handleWikiPlay = useCallback((track: TrackNeighborData) => {
-    pendingWikiPlayRef.current = { artist: track.artist, title: track.title }
-    ytSearch(`${track.artist} ${track.title}`)
+    play({
+      id: track.id, trackId: track.id, owner: '', manifestCid: '',
+      title: track.title, artist: track.artist, year: null,
+      durationMs: track.durationMs ?? null,
+    })
     handleSignalRef.current({
       type: 'play', weight: 1.0,
       track: {
@@ -297,7 +285,7 @@ function Main() {
         themes: track.themes, contexts: track.contexts,
       },
     })
-  }, [ytSearch])
+  }, [play])
 
   // ── Startup prefetch ──────────────────────────────────────────────────────
 
@@ -439,8 +427,8 @@ function Main() {
               ⚙
             </button>
 
-            {/* Now-playing dot */}
-            <NowPlayingDot onOpen={() => setNowPlayingOpen(true)} />
+            {/* Now-playing dot — only when the dataset is playable */}
+            {canPlay && <NowPlayingDot onOpen={() => setNowPlayingOpen(true)} />}
 
             {/* Wallet */}
             <div style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
@@ -462,7 +450,7 @@ function Main() {
                 onGoTo={wikiGoTo}
                 onSearchBoxChange={setWikiSearchBox}
                 kernelState={kernel.state.t > 0 ? { mu: kernel.state.mu, velocity: kernel.state.v, sigma: kernel.state.sigma } : undefined}
-                onPlayTrack={handleWikiPlay}
+                onPlayTrack={canPlay ? handleWikiPlay : undefined}
                 kernelTopGenres={kernelTopGenres}
                 allGenres={allGenres}
                 kernelEntropy={kernel.state.t > 0 ? kernel.state.entropy : undefined}
@@ -497,8 +485,10 @@ function Main() {
                   setShowGalaxy(false)
                 }}
                 onPlayTrack={track => {
-                  ytSearch(`${track.artist} ${track.title}`)
-                  pendingWikiPlayRef.current = { artist: track.artist, title: track.title }
+                  play({
+                    id: track.id, trackId: track.id, owner: '', manifestCid: '',
+                    title: track.title, artist: track.artist, year: null, durationMs: null,
+                  })
                 }}
                 onBack={() => setShowGalaxy(false)}
               />
@@ -506,11 +496,13 @@ function Main() {
             document.body,
           )}
 
-          {/* ── Now-playing strip (24px) ─────────────────────────────────── */}
-          <NowPlayingStrip
-            onNavigate={wikiNavigate}
-            onExpand={() => setNowPlayingOpen(true)}
-          />
+          {/* ── Now-playing strip (24px) — playable datasets only ────────── */}
+          {canPlay && (
+            <NowPlayingStrip
+              onNavigate={wikiNavigate}
+              onExpand={() => setNowPlayingOpen(true)}
+            />
+          )}
 
           {/* ── NowPlaying full-screen sheet (portal) ────────────────────── */}
           {nowPlayingOpen && createPortal(

@@ -52,6 +52,8 @@ import {
     type TrackNeighborData,
     type ProjectedPoint,
 } from '../kernel/neighborhoodAnalysis'
+import { toRecordVM, type RecordVM } from '../domain/recordVM'
+import { getCachedSchema, fetchSchema, roleLabel } from '../domain/roles'
 
 // Open a URL in the OS default browser via the preload bridge
 function openExternal(url: string) {
@@ -315,6 +317,7 @@ async function apiEmbed(text: string): Promise<Float32Array> {
 }
 
 async function apiSearchVector(embedding: Float32Array, n: number): Promise<RawChromaHit[]> {
+    await fetchSchema(BASE_URL)   // ensure the role map is loaded before projecting hits
     const res = await fetch(`${BASE_URL}/search/vector`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ embedding: Array.from(embedding), n_results: n }),
@@ -325,6 +328,7 @@ async function apiSearchVector(embedding: Float32Array, n: number): Promise<RawC
 
 /** Lexical search. Returns whether it fell back to semantic so the UI can say so. */
 async function apiSearchText(q: string, limit: number): Promise<{ hits: TextHit[]; degraded: boolean }> {
+    await fetchSchema(BASE_URL)   // ensure the role map is loaded before projecting hits
     try {
         const res = await fetch(`${BASE_URL}/search/text`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -332,7 +336,7 @@ async function apiSearchText(q: string, limit: number): Promise<{ hits: TextHit[
         })
         if (!res.ok) throw new Error(String(res.status))
         const json = await res.json()
-        return { hits: (json.results ?? []) as TextHit[], degraded: false }
+        return { hits: (json.results ?? []).map((h: any) => vmToTextHit(toRecordVM(h, roles()))), degraded: false }
     } catch {
         // Graceful degradation: lexical endpoint missing -> semantic nearest-neighbour.
         const emb = await apiEmbed(q)
@@ -341,13 +345,51 @@ async function apiSearchText(q: string, limit: number): Promise<{ hits: TextHit[
     }
 }
 
-function chromaToTextHit(h: RawChromaHit): TextHit {
-    const m = h.fields ?? {}
+// ── Role-driven adapters: every hit is projected through the inferred RoleMap,
+// so the article renders for any dataset (title/subtitle/tags resolved by role).
+// The first tag field (richest, e.g. genres) drives the legacy genre slot; the
+// remaining music-specific slots stay populated for the music schema and are
+// simply empty elsewhere.
+
+const roles = () => getCachedSchema()?.roles ?? null
+// Entity word for the active dataset, derived from the identity field's label:
+// "Track" for music (trackId), "Changeset" for OSM (changeset_id), etc.
+const entityLabel = () => roleLabel(roles(), 'identity')
+
+function vmToTextHit(vm: RecordVM): TextHit {
+    const isrc = typeof vm.raw.isrcCode === 'string' ? vm.raw.isrcCode : undefined
     return {
-        id: h.id, byArtist: m.byArtist, title: m.title, isrcCode: m.isrcCode,
-        durationMs: m.durationMs, genres: m.genres, moods: m.moods, themes: m.themes,
-        contexts: m.contexts, embedding: h.embedding,
+        id: vm.id,
+        byArtist: vm.subtitle || undefined,
+        title: vm.title || undefined,
+        isrcCode: isrc,
+        durationMs: Object.values(vm.measures)[0],
+        genres: vm.tagsByField['genres'] ?? vm.tags,
+        moods: vm.tagsByField['moods'] ?? [],
+        themes: vm.tagsByField['themes'] ?? [],
+        contexts: vm.tagsByField['contexts'] ?? [],
+        embedding: vm.embedding,
     }
+}
+
+function vmToNeighbor(vm: RecordVM, distance: number): TrackNeighborData {
+    return {
+        id: vm.id,
+        artist: vm.subtitle || 'Unknown',
+        title: vm.title || vm.id,
+        isrc: typeof vm.raw.isrcCode === 'string' ? vm.raw.isrcCode : undefined,
+        durationMs: Object.values(vm.measures)[0] ?? 0,
+        genres: vm.tagsByField['genres'] ?? vm.tags,
+        moods: vm.tagsByField['moods'] ?? [],
+        themes: vm.tagsByField['themes'] ?? [],
+        contexts: vm.tagsByField['contexts'] ?? [],
+        embedding: new Float32Array(vm.embedding ?? []),
+        distance,
+    }
+}
+
+function chromaToTextHit(h: RawChromaHit): TextHit {
+    return vmToTextHit(toRecordVM(h as any, roles()))
 }
 
 function textHitToNeighbor(h: TextHit, distance = 0): TrackNeighborData {
@@ -360,13 +402,7 @@ function textHitToNeighbor(h: TextHit, distance = 0): TrackNeighborData {
 }
 
 function chromaToNeighbor(hit: RawChromaHit, dist: number): TrackNeighborData {
-    const m = hit.fields ?? {}
-    return {
-        id: hit.id, artist: m.byArtist ?? 'Unknown', title: m.title ?? hit.id,
-        isrc: m.isrcCode, durationMs: m.durationMs ?? 0,
-        genres: m.genres ?? [], moods: m.moods ?? [], themes: m.themes ?? [], contexts: m.contexts ?? [],
-        embedding: new Float32Array(hit.embedding), distance: dist,
-    }
+    return vmToNeighbor(toRecordVM(hit as any, roles()), dist)
 }
 
 // ── Kernel attitude (compact signal only) ────────────────────────────────────
@@ -971,7 +1007,7 @@ function TrackArticle({ view, kernelState, onNavigate, onPlayTrack }: {
                 {/* ── Reading column ─────────────────────────────────────────── */}
                 <article style={{ flex: 1, maxWidth: READING_MAX, minWidth: 0 }}>
                     {/* Title block */}
-                    <div style={{ fontFamily: MONO, fontSize: 9, color: FG4, letterSpacing: '0.2em', textTransform: 'uppercase', marginBottom: 6 }}>Track</div>
+                    <div style={{ fontFamily: MONO, fontSize: 9, color: FG4, letterSpacing: '0.2em', textTransform: 'uppercase', marginBottom: 6 }}>{entityLabel()}</div>
                     <h1 style={{ fontFamily: DISP, fontSize: 56, color: FG, letterSpacing: '0.01em', lineHeight: 0.98, margin: '0 0 8px' }}>{focal.title}</h1>
                     <div style={{ fontFamily: SANS, fontSize: 16, color: FG2, marginBottom: 18 }}>
                         by <WikiLink onClick={() => onNavigate({ kind: 'artist', name: focal.artist })} color={LINK} weight={600}>{focal.artist}</WikiLink>
@@ -1419,7 +1455,7 @@ function Home({ onNavigate, kernelTopGenres, allGenres, kernelEntropy }: {
 
                 {/* Tagline */}
                 <p style={{ fontFamily: MONO, fontSize: 10, color: FG4, letterSpacing: '0.18em', textTransform: 'uppercase', marginBottom: 20 }}>
-                    a music encyclopedia
+                    a {entityLabel().toLowerCase()} encyclopedia
                 </p>
 
                 {/* ── Prominent search ─────────────────────────────────────── */}

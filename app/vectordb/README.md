@@ -46,6 +46,33 @@ export LD_LIBRARY_PATH=/home/driemworks/fangorn/fangorn-music/app/vectordb/venv/
 python -c "import onnxruntime as ort; print(ort.InferenceSession(None, providers=['CUDAExecutionProvider']).get_providers())"
 ```
 
+``` sh
+python embeddings.py \
+  -s test.sond3r.track.invariants.3=0xc4103f242a1e99bda3d6c484aa4e8155fc7e2df8fa6f59e0362a592b91570143 \
+  -s test.sond3r.track.taxonomy.2=0x382fdaf1fb03f43ee0e5bcb0517fe0d2df3a3e9d27dddedf371c67e4812b6720  \
+  --primary test.sond3r.track.invariants.3 \
+  --graph-api-key PrivateKey \
+  --ipfs-gateway https://green-reasonable-heron-957.mypinata.cloud/ipfs
+```
+
+### Embeddings
+
+Run the qdrant server, required for building embeddings
+``` sh
+docker run -d -p 6333:6333 -p 6334:6334 \
+  -v "$(pwd)/qdrant_storage:/qdrant/storage:z" \
+  --name qdrant-core \
+  qdrant/qdrant
+```
+
+``` sh
+# 1. Point the system linker to your venv's nvidia libraries
+export LD_LIBRARY_PATH=/home/driemworks/fangorn/fangorn-music/app/vectordb/venv/lib/python3.12/site-packages/nvidia/cudnn/lib:/home/driemworks/fangorn/fangorn-music/app/vectordb/venv/lib/python3.12/site-packages/nvidia/cublas/lib:$LD_LIBRARY_PATH
+
+# 2. Test to see if ONNX can now initialize a clean GPU session without complaining
+python -c "import onnxruntime as ort; print(ort.InferenceSession(None, providers=['CUDAExecutionProvider']).get_providers())"
+```
+
 ## Configuration
 
 All config is via environment variables.

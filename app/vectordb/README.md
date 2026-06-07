@@ -20,19 +20,11 @@ Responses return `{ id, fields: {...}, ...meta }` — the client reads `hit.fiel
 ## Quickstart
 
 ``` sh
-python server.py \
-  -s test.sond3r.track.invariants.3=0xc4103f242a1e99bda3d6c484aa4e8155fc7e2df8fa6f59e0362a592b91570143 \
-  -s test.sond3r.track.taxonomy.2=0x382fdaf1fb03f43ee0e5bcb0517fe0d2df3a3e9d27dddedf371c67e4812b6720 \
-  --primary test.sond3r.track.invariants.3 \
-  --reset
-```
-
-``` sh
-python embeddings.py \
+python3 embeddings.py \
   -s test.sond3r.track.invariants.3=0xc4103f242a1e99bda3d6c484aa4e8155fc7e2df8fa6f59e0362a592b91570143 \
   -s test.sond3r.track.taxonomy.2=0x382fdaf1fb03f43ee0e5bcb0517fe0d2df3a3e9d27dddedf371c67e4812b6720  \
   --primary test.sond3r.track.invariants.3 \
-  --graph-api-key b66e8b18ae3fe2c5a91929098b290d69 \
+  --graph-api-key PrivateKey \
   --ipfs-gateway https://green-reasonable-heron-957.mypinata.cloud/ipfs
 ```
 
@@ -40,10 +32,10 @@ python embeddings.py \
 
 Run the qdrant server, required for building embeddings
 ``` sh
-docker run -d -p 6333:6333 -p 6334:6334 \
-  -v "$(pwd)/qdrant_storage:/qdrant/storage:z" \
-  --name qdrant-core \
-  qdrant/qdrant
+      docker run -d -p 6333:6333 -p 6334:6334 \
+        -v "$(pwd)/qdrant_storage:/qdrant/storage:z" \
+        --name qdrant-core \
+        qdrant/qdrant
 ```
 
 ``` sh

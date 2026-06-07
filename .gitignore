@@ -28,9 +28,11 @@ music-data/data
 music-data/ia-data
 deploy.sh
 
+cuda**
+db/
 .env
-**/.venv
-**/venv
+**/.venv**
+**/venv**
 **/db/*
 **/.yarn/*
 !**/.yarn/releases

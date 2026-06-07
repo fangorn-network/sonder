@@ -133,9 +133,23 @@ async def main():
     
     # Init Clients
     qdrant = QdrantClient(host=args.qdrant_host, port=args.qdrant_port, grpc_port=args.qdrant_grpc_port, prefer_grpc=True)
+    # Find this initialization in your script:
+    # Deep optimization for the ONNX BFC Memory Arena
     embed_engine = TextEmbedding(
         model_name=args.embedding_model,
-        providers=["CUDAExecutionProvider"]
+        max_length=512,
+        providers=[
+            ("CUDAExecutionProvider", {
+                "device_id": 0,
+                "arena_extend_strategy": "kSameAsRequested", 
+                "gpu_mem_limit": 3   * 1024 * 1024 * 1024,     
+                "cudnn_conv_algo_search": "DEFAULT",
+                
+                # CHANGE THESE TWO LINE CONFIGURATIONS:
+                "do_copy_in_default_stream": "True",
+                "has_user_compute_stream": "False" # Forces predictable synchronous scheduling
+            })
+        ]
     )
     dim = MODEL_DIM_MAP.get(args.embedding_model, 768)
 
@@ -169,8 +183,15 @@ async def main():
         for p in publishes: cids_meta[p["manifestCid"]] = p
         for u in updates: cids_meta[u["manifestCid"]] = u
 
-        new_cids = [c for c, m in cids_meta.items() if manifest_checkpoints.get(c, -1) < int(m["blockTimestamp"])]
-        
+        # # Unnest the actual dictionary if it wrapped in the "manifests" key
+        # if isinstance(manifest_checkpoints, dict) and "manifests" in manifest_checkpoints:
+        #     manifest_checkpoints = manifest_checkpoints["manifests"]
+
+        # # Your fixed line 172:
+        # new_cids = [c for c, m in cids_meta.items() if int(manifest_checkpoints.get(c, -1)) < int(m["blockTimestamp"])]
+        # new_cids = [c for c, m in cids_meta.items() if int(manifest_checkpoints.get(c, -1)) < int(m["blockTimestamp"])]
+        new_cids = list(cids_meta.keys())
+
         print(f"[Builder] [2/4] Syncing manifests from IPFS Gateway...")
         manifests = await fetch_all_ipfs(new_cids, args.ipfs_gateway, args.ipfs_timeout, args.concurrency, desc="Manifest Files")
 
@@ -244,21 +265,40 @@ async def main():
         texts, points = [], []
         for item in chunk:
             fields = item["fields"]
-            if args.searchable_fields == "auto":
+            if args.searchable_fields == "auto":    
                 tags = " ".join(fields.get(t, "") if isinstance(fields.get(t), str) else "" for t in role_map.get("tags", []))
                 text_str = f"Title: {fields.get(role_map.get('title',''), '')}. Tags: {tags}"
             else:
                 text_str = " ".join(str(fields[k]) for k in args.searchable_fields.split(",") if fields.get(k))
-
+            
+            # handle any unusually long strings
+            if len(text_str) > 1000:
+                text_str = text_str[:1000]
             texts.append(f"search_document: {text_str}")
             points.append(item)
 
         # Generate vectors for this chunk
         vectors = []
+        # Breaks the 5k batches down to reset generator hooks
+        SUB_CHUNK_SIZE = 1000 
+        
         with tqdm(total=len(texts), desc="  ↳ GPU Vectors Generated", unit=" doc") as pbar:
-            for vec in embed_engine.embed(texts, batch_size=256):
-                vectors.append(vec.tolist())
-                pbar.update(1)
+            for sub_idx in range(0, len(texts), SUB_CHUNK_SIZE):
+                sub_texts = texts[sub_idx : sub_idx + SUB_CHUNK_SIZE]
+                
+                # Consume the generator completely into a temporary pool
+                for vec in embed_engine.embed(sub_texts, batch_size=32):    
+                    vectors.append(vec.tolist())
+                    pbar.update(1)
+                
+                # Explicit micro-flush mid-batch
+                import gc
+                gc.collect()
+                
+                # --- ADD A TINY THERMAL/POWER BREAK HERE ---
+                import time
+                time.sleep(0.1) # 100ms pause to let the GPU stabilize
+                # -------------------------------------------
 
         # Package current chunk for Qdrant
         print(f"[Builder] Packaging vector collections into storage structures...")
@@ -273,11 +313,18 @@ async def main():
         # Upload chunk
         print(f"[Builder] Shifting vectors to Qdrant Core Engine storage...")
         qdrant.upload_points(collection_name=args.collection, points=qdrant_payload, batch_size=1000)
+        
 
         # IMMEDIATELY write progress for this chunk to the database checkpoint
         for p in points:
             checkpoint["processed_track_ids"].append(p["track_id"])
-        checkpoint["manifests"] = manifest_checkpoints
+
+        # Add this here to update manifest tracking safely:
+        for p in points:
+            m_cid = p["meta"]["manifestCid"]
+            manifest_checkpoints[m_cid] = p["meta"]["blockTimestamp"]
+
+        checkpoint["manifests"] = manifest_checkpoints  
 
         # Make sure directory exists before saving
         checkpoint_dir = os.path.dirname(args.checkpoint_file)
@@ -288,6 +335,12 @@ async def main():
             json.dump(checkpoint, f)
             
         print(f"[Builder] Batch {i // SAVE_BATCH_SIZE + 1} safely committed to checkpoint file.")
+        del texts
+        del points
+        del vectors
+        del qdrant_payload
+        import gc
+        gc.collect()
 
     print("\n[Builder] All tasks complete! Vector space database generation successfully updated.")
 

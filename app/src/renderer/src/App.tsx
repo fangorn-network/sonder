@@ -25,6 +25,8 @@ import { usePlaybackRouter } from './hooks/usePlaybackRouter'
 import { useAutoplay } from './hooks/useAutoplay'
 import { TrackWikiView, type View, type SearchMode, viewLabel } from './views/TrackWikiView'
 import { SoundTownView } from './views/SoundTownView'
+import { KernelStrip, type KernelStripProps } from './components/KernelStrip'
+import { DEFAULTS } from './kernel/constants'
 import type { KernelSnapshot } from './types/kernel'
 import type { TrackNeighborData } from './kernel/neighborhoodAnalysis'
 
@@ -139,6 +141,18 @@ function Main() {
     chromaReady, seeding, retryConnect,
     applyKernelQuery, roleMap,
   } = useChroma({ genreFilter: 'all', moodFilter: 'all', contextFilter: 'all' })
+
+  // Kernel readout props, derived once from live kernel state. Shared by the
+  // KernelStrip mounted above the wiki and the one inside the game view.
+  const kernelStrip: KernelStripProps = useMemo(() => ({
+    momentum:          Array.from(kernel.state.v ?? []),
+    attractorDistance: kernel.state.sigma,
+    entropyScore:      kernel.state.entropy,
+    alpha:             DEFAULTS.alpha,
+    gamma:             DEFAULTS.gamma_base,
+    mutedCount:        kernel.state.muted?.size ?? 0,
+    sessionLength:     kernel.state.t,
+  }), [kernel.state])
 
   // Playback capability. Ideally gated on a `media` role (a playable handle),
   // but for now we also enable it whenever records are track-like — i.e. the
@@ -441,20 +455,25 @@ function Main() {
 
             {/* Wiki — primary surface */}
             <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-              <TrackWikiView
-                view={wikiView}
-                stack={wikiStack}
-                searchBox={wikiSearchBox}
-                onNavigate={wikiNavigate}
-                onBack={wikiBack}
-                onGoTo={wikiGoTo}
-                onSearchBoxChange={setWikiSearchBox}
-                kernelState={kernel.state.t > 0 ? { mu: kernel.state.mu, velocity: kernel.state.v, sigma: kernel.state.sigma } : undefined}
-                onPlayTrack={canPlay ? handleWikiPlay : undefined}
-                kernelTopGenres={kernelTopGenres}
-                allGenres={allGenres}
-                kernelEntropy={kernel.state.t > 0 ? kernel.state.entropy : undefined}
-              />
+              <KernelStrip {...kernelStrip} theme="light" />
+              <div style={{ flex: 1, minHeight: 0 }}>
+                <TrackWikiView
+                  view={wikiView}
+                  stack={wikiStack}
+                  searchBox={wikiSearchBox}
+                  onNavigate={wikiNavigate}
+                  onBack={wikiBack}
+                  onGoTo={wikiGoTo}
+                  onSearchBoxChange={setWikiSearchBox}
+                  kernelState={kernel.state.t > 0 ? { mu: kernel.state.mu, velocity: kernel.state.v, sigma: kernel.state.sigma } : undefined}
+                  onPlayTrack={canPlay ? handleWikiPlay : undefined}
+                  kernelTopGenres={kernelTopGenres}
+                  allGenres={allGenres}
+                  kernelEntropy={kernel.state.t > 0 ? kernel.state.entropy : undefined}
+                  kernelSessionLength={kernel.state.t}
+                  kernelMutedCount={kernelStrip.mutedCount}
+                />
+              </div>
             </div>
 
             {/* Settings drawer — slides in from right */}
@@ -480,6 +499,7 @@ function Main() {
           {showGalaxy && createPortal(
             <div style={{ position: 'fixed', inset: 0, zIndex: 60, background: '#0c0906' }}>
               <SoundTownView
+                kernel={kernelStrip}
                 onTrackSelect={track => {
                   wikiNavigate({ kind: 'track', artist: track.artist, title: track.title })
                   setShowGalaxy(false)

@@ -584,6 +584,66 @@ function fmtDuration(ms: number | null | undefined): string | null {
     return `${Math.floor(ms / 60000)}:${String(Math.floor((ms % 60000) / 1000)).padStart(2, '0')}`
 }
 
+// ── Kernel concept badge (the small "K" / "C" square) ─────────────────────────
+
+function KcBadge({ letter, color }: { letter: string; color: string }) {
+    return (
+        <span style={{
+            flexShrink: 0, width: 18, height: 18,
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            fontFamily: MONO, fontSize: 10, fontWeight: 600, color,
+            background: `${color}14`, border: `1px solid ${color}40`,
+        }}>{letter}</span>
+    )
+}
+
+// ── Mini kernel map (80x80 sidebar canvas) ────────────────────────────────────
+// Cosmetic. Recent embedding positions are not accessible here without
+// refactoring, so neighbour dots use deterministic placeholder positions hashed
+// from the track id. The focal track is a teal dot; the attractor pulses amber.
+
+function MiniKernelMap({ trackId }: { trackId: string }) {
+    const canvasRef = useRef<HTMLCanvasElement>(null)
+    useEffect(() => {
+        const cv = canvasRef.current
+        if (!cv) return
+        const ctx = cv.getContext('2d')
+        if (!ctx) return
+        const dpr = window.devicePixelRatio || 1
+        const S = 80
+        cv.width = Math.round(S * dpr); cv.height = Math.round(S * dpr)
+
+        // deterministic placeholder dots from the id hash
+        let h = 0
+        for (let i = 0; i < trackId.length; i++) h = (h * 31 + trackId.charCodeAt(i)) >>> 0
+        const rand = () => { h = (h * 1664525 + 1013904223) >>> 0; return h / 0xffffffff }
+        const n = 8 + Math.floor(rand() * 5)   // 8–12
+        const dots = Array.from({ length: n }, () => ({ x: 8 + rand() * (S - 16), y: 8 + rand() * (S - 16) }))
+        const attractor = { x: 8 + rand() * (S - 16), y: 8 + rand() * (S - 16) }
+
+        let raf = 0
+        const draw = (ts: number) => {
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+            ctx.clearRect(0, 0, S, S)
+            ctx.fillStyle = '#0a0b10'; ctx.fillRect(0, 0, S, S)
+            // neighbour dots
+            ctx.fillStyle = 'rgba(255,255,255,0.22)'
+            for (const d of dots) { ctx.beginPath(); ctx.arc(d.x, d.y, 1.5, 0, 6.28); ctx.fill() }
+            // attractor — pulsing amber (pulse > 2s)
+            const pulse = 0.5 + 0.5 * Math.sin(ts * 0.0022)
+            ctx.globalAlpha = 0.4 + pulse * 0.6
+            ctx.fillStyle = AMBER; ctx.beginPath(); ctx.arc(attractor.x, attractor.y, 2.5 + pulse * 1.5, 0, 6.28); ctx.fill()
+            ctx.globalAlpha = 1
+            // focal — teal, slightly larger, centred
+            ctx.fillStyle = TEAL; ctx.beginPath(); ctx.arc(S / 2, S / 2, 3.5, 0, 6.28); ctx.fill()
+            raf = requestAnimationFrame(draw)
+        }
+        raf = requestAnimationFrame(draw)
+        return () => cancelAnimationFrame(raf)
+    }, [trackId])
+    return <canvas ref={canvasRef} style={{ display: 'block', width: 80, height: 80, border: `1px solid ${BORDER2}` }} aria-label="Kernel map" />
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Search results — the new "see what's available, then refine" experience
 // ─────────────────────────────────────────────────────────────────────────────
@@ -938,11 +998,14 @@ async function resolveTrackArticle(artist: string, title: string, embOverride?: 
     return { focal, neighbors }
 }
 
-function TrackArticle({ view, kernelState, onNavigate, onPlayTrack }: {
+function TrackArticle({ view, kernelState, onNavigate, onPlayTrack, sessionLength, mutedCount, onConceptExplore }: {
     view: Extract<View, { kind: 'track' }>
     kernelState?: KernelState
     onNavigate: (v: View) => void
     onPlayTrack?: (t: TrackNeighborData, previewUrl?: string) => void
+    sessionLength?: number
+    mutedCount?: number
+    onConceptExplore?: (conceptKey: string) => void
 }) {
     const [data, setData] = useState<TrackArticleData | null>(null)
     const [loading, setLoading] = useState(true)
@@ -992,6 +1055,22 @@ function TrackArticle({ view, kernelState, onNavigate, onPlayTrack }: {
     }
 
     const semanticLink = (term: string) => onNavigate({ kind: 'results', query: term, mode: 'semantic' })
+    const explore = onConceptExplore ?? (() => {})
+
+    // C cards: declarative sentences derived from current kernel state. Dominant
+    // genre comes from this track's primary tag (session history is not available
+    // here without refactoring). Capped at two.
+    const dominantGenre = focal.genres[0]
+    const cCards: { key: string; text: string }[] = []
+    if (attitude && attitude.alignment > 0.7 && (sessionLength ?? 0) > 4 && dominantGenre) {
+        cCards.push({ key: dominantGenre, text: `You've been leaning toward ${dominantGenre} over your last ${sessionLength} plays. This one sits right at the edge of that.` })
+    }
+    if ((mutedCount ?? 0) > 3) {
+        cCards.push({ key: 'muted', text: `${mutedCount} similar artists are muted for now. This one still made it through.` })
+    }
+    if (cCards.length === 0) {
+        cCards.push({ key: 'candidate', text: `This one is close to what you've been playing lately, so it turned up as a suggestion.` })
+    }
 
     return (
         <div style={{ flex: 1, overflowY: 'auto', background: BG }}>
@@ -1048,13 +1127,47 @@ function TrackArticle({ view, kernelState, onNavigate, onPlayTrack }: {
                         <div style={{ borderLeft: `3px solid ${attitude.color}`, background: GLASS, padding: '12px 16px', marginBottom: 28 }}>
                             <span style={{ fontFamily: DISP, fontSize: 18, color: attitude.color, letterSpacing: '0.03em', marginRight: 10 }}>{ZONE_TITLE[attitude.zone]}.</span>
                             <span style={{ fontFamily: SANS, fontSize: 14, color: FG2, lineHeight: 1.6 }}>
-                                Relative to your taste, this track is {attitude.label}.
+                                Compared with what you've been playing, this track is {attitude.label}.
                             </span>
-                            <div style={{ fontFamily: MONO, fontSize: 9, color: FG4, marginTop: 6 }}>
-                                {attitude.distNorm.toFixed(2)}σ from centre · alignment {attitude.alignment > 0 ? '+' : ''}{attitude.alignment.toFixed(2)}
-                            </div>
                         </div>
                     )}
+
+                    {/* Kernel concept cards — a reframe of values already on the page */}
+                    <section style={{ marginBottom: 28, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        {/* K card */}
+                        <div style={{ display: 'flex', gap: 12, padding: '12px 14px', border: `1px solid ${BORDER2}`, background: GLASS }}>
+                            <KcBadge letter="K" color={TEAL} />
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontFamily: MONO, fontSize: 8, letterSpacing: '0.18em', textTransform: 'uppercase', color: FG4, marginBottom: 6 }}>How this fits</div>
+                                {focal.genres.length > 0 && (
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 8 }}>
+                                        {focal.genres.slice(0, 4).map(g => <TagLink key={g} text={g} color={genreColor(g)} onClick={() => semanticLink(g)} />)}
+                                    </div>
+                                )}
+                                {attitude && (
+                                    <div style={{ fontFamily: SANS, fontSize: 13, color: FG2, lineHeight: 1.6 }}>
+                                        {attitude.alignment > 0.3
+                                            ? 'Headed the same way your recent listening has been going.'
+                                            : attitude.alignment < -0.2
+                                            ? 'A turn away from where your listening has been.'
+                                            : 'Just off to the side of your recent listening.'}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* C cards */}
+                        {cCards.map(c => (
+                            <div key={c.key} style={{ display: 'flex', gap: 12, padding: '12px 14px', border: `1px solid ${BORDER2}`, background: GLASS }}>
+                                <KcBadge letter="C" color={CYAN} />
+                                <div style={{ flex: 1, minWidth: 0, fontFamily: SANS, fontSize: 13, color: FG2, lineHeight: 1.6 }}>{c.text}</div>
+                                <button onClick={() => explore(c.key)}
+                                    style={{ alignSelf: 'flex-start', background: 'none', border: 'none', color: LINK, fontFamily: MONO, fontSize: 10, letterSpacing: '0.04em', cursor: 'pointer', padding: 0, flexShrink: 0 }}>
+                                    Explore
+                                </button>
+                            </div>
+                        ))}
+                    </section>
 
                     {/* About */}
                     {wiki?.extract && (
@@ -1179,6 +1292,12 @@ function TrackArticle({ view, kernelState, onNavigate, onPlayTrack }: {
                             {focal.genres[0] && <WikiLink onClick={() => semanticLink(focal.genres[0])} color={genreColor(focal.genres[0])} size={12}>More {focal.genres[0]} →</WikiLink>}
                             {mbTrack?.label && <WikiLink onClick={() => onNavigate({ kind: 'results', query: mbTrack.label!, mode: 'lexical' })} color={FG2} size={12}>{mbTrack.label} catalog →</WikiLink>}
                         </div>
+                    </div>
+
+                    {/* mini kernel map */}
+                    <div style={{ marginTop: 14, border: `1px solid ${BORDER2}`, background: BG1, padding: '12px 14px' }}>
+                        <SectionLabel style={{ marginBottom: 8 }}>Kernel map</SectionLabel>
+                        <MiniKernelMap trackId={focal.id} />
                     </div>
                 </aside>
             </div>
@@ -1542,9 +1661,13 @@ interface Props extends WikiNavState {
     kernelTopGenres?: string[]
     allGenres?: string[]
     kernelEntropy?: number
+    kernelSessionLength?: number
+    kernelMutedCount?: number
+    /** Optional hook for the C card "Explore" link. Defaults to a no-op. */
+    onConceptExplore?: (conceptKey: string) => void
 }
 
-export function TrackWikiView({ view, stack: _stack, searchBox: _searchBox, onNavigate, onBack: _onBack, onGoTo: _onGoTo, onSearchBoxChange: _onSearchBoxChange, kernelState, onPlayTrack, kernelTopGenres, allGenres, kernelEntropy }: Props) {
+export function TrackWikiView({ view, stack: _stack, searchBox: _searchBox, onNavigate, onBack: _onBack, onGoTo: _onGoTo, onSearchBoxChange: _onSearchBoxChange, kernelState, onPlayTrack, kernelTopGenres, allGenres, kernelEntropy, kernelSessionLength, kernelMutedCount, onConceptExplore }: Props) {
     return (
         <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: BG, color: FG, fontFamily: SANS, overflow: 'hidden' }}>
             {view.kind === 'home' && <Home onNavigate={onNavigate} kernelTopGenres={kernelTopGenres} allGenres={allGenres} kernelEntropy={kernelEntropy} />}
@@ -1557,7 +1680,7 @@ export function TrackWikiView({ view, stack: _stack, searchBox: _searchBox, onNa
                 />
             )}
             {view.kind === 'track' && (
-                <TrackArticle key={`${view.artist}|${view.title}`} view={view} kernelState={kernelState} onNavigate={onNavigate} onPlayTrack={onPlayTrack} />
+                <TrackArticle key={`${view.artist}|${view.title}`} view={view} kernelState={kernelState} onNavigate={onNavigate} onPlayTrack={onPlayTrack} sessionLength={kernelSessionLength} mutedCount={kernelMutedCount} onConceptExplore={onConceptExplore} />
             )}
             {view.kind === 'artist' && (
                 <ArtistArticle key={view.name} view={view} onNavigate={onNavigate} />

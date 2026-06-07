@@ -16,7 +16,8 @@
  * verbs, seeded placement + the artifact live in soundtown/world.ts.
  */
 
-import { useRef, useEffect, useState, useCallback } from 'react'
+import { useRef, useEffect, useState, useCallback, useMemo } from 'react'
+import { KernelStrip, type KernelStripProps } from '../components/KernelStrip'
 import { SoundTownAudio, type SpiritAudio } from './soundtown/audio'
 import {
     buildWorld, reachableZones, resolveMine, resolveFish, VERB_FLAVOR,
@@ -33,6 +34,21 @@ const SANS = '"Geist","Inter",sans-serif'
 const MONO = '"Fragment Mono","DM Mono",monospace'
 const BIO = ['#4fe0d0', '#9d6bff', '#ffb347', '#ff6f9c', '#6fd98a', '#62b6ff', '#c0a0ff']
 function bioColor(g: string | null | undefined): string { return BIO[hashStr((g ?? 'x').toLowerCase()) % BIO.length] }
+
+// Deterministic 2D projection of the high-dimensional momentum vector (even dims
+// → x, odd → y), normalised to a unit direction. Cosmetic — used by the kernel
+// overlays only.
+function projectMomentum(v: number[] | undefined): { x: number; y: number; mag: number } {
+    if (!v || v.length === 0) return { x: 0, y: 0, mag: 0 }
+    let x = 0, y = 0
+    for (let i = 0; i < v.length; i++) (i % 2 === 0 ? (x += v[i]) : (y += v[i]))
+    const mag = Math.hypot(x, y)
+    if (mag < 1e-9) return { x: 0, y: 0, mag: 0 }
+    return { x: x / mag, y: y / mag, mag }
+}
+
+// Kernel-overlay palette (existing SoundTown hues).
+const K_TEAL = '#4fe0d0', K_AMBER = LANTERN, K_BLUE = '#62b6ff'
 
 const BASE_URL = (import.meta as any).env?.VITE_CHROMA_URL ?? 'http://localhost:8080'
 const ITUNES_CORS = 'https://itunes.apple.com'
@@ -96,6 +112,8 @@ export interface SoundTownProps {
     onTrackSelect?: (t: { id: string; title: string; artist: string; genres: string[] }) => void
     onPlayTrack?: (t: { id: string; title: string; artist: string; genres: string[] }) => void
     onBack?: () => void
+    /** Live kernel readout values, surfaced as the top strip + the overlays. */
+    kernel?: KernelStripProps
 }
 
 // ── iTunes preview (cached + in-flight guard for prefetch) ────────────────────
@@ -150,7 +168,7 @@ function placeSpirits(zoneKey: string, pool: CatalogTrack[]): Spirit[] {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-export function SoundTownView({ onTrackSelect, onPlayTrack, onBack }: SoundTownProps) {
+export function SoundTownView({ onTrackSelect, onPlayTrack, onBack, kernel }: SoundTownProps) {
     const wrapRef = useRef<HTMLDivElement>(null)
     const canvasRef = useRef<HTMLCanvasElement>(null)
     const bakeRef = useRef<HTMLCanvasElement | null>(null)
@@ -197,6 +215,8 @@ export function SoundTownView({ onTrackSelect, onPlayTrack, onBack }: SoundTownP
     blockedRef.current = !!(enc || npcDialog || sign || songlineOpen || mapOpen)
 
     useEffect(() => { setSonglineCount(readSongline().length) }, [])
+    // Most-recent songline entries for the trail strip (capped at 12).
+    const trail = useMemo(() => readSongline().slice(-12), [songlineCount])
     const flash = useCallback((m: string) => { setToast(m); window.setTimeout(() => setToast(t => (t === m ? null : t)), 1700) }, [])
 
     // ── Fetch catalog → build world → enter the biggest genre ───────────────────
@@ -506,15 +526,97 @@ export function SoundTownView({ onTrackSelect, onPlayTrack, onBack }: SoundTownP
         <div ref={wrapRef} style={{ position: 'absolute', inset: 0, background: VOID, overflow: 'hidden', userSelect: 'none' }}>
             <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: '100%', imageRendering: 'pixelated' }} />
 
+            {/* Kernel readout — always visible at the top of the view */}
+            {kernel && (
+                <div style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 8 }}>
+                    <KernelStrip {...kernel} theme="dark" />
+                </div>
+            )}
+
+            {/* ── Kernel overlays (cosmetic; pointer-events none) ─────────────── */}
+            {kernel && (() => {
+                const m = projectMomentum(kernel.momentum)
+                const norm = Math.min(1, kernel.attractorDistance / 2)
+                const fieldR = 80 + (1 - norm) * 80
+                const entropyPct = Math.max(0, Math.min(1, kernel.entropyScore)) * 100
+                return (
+                    <>
+                        <style>{`@keyframes townBeaconPulse { 0%,100% { box-shadow: 0 0 4px 0 currentColor } 50% { box-shadow: 0 0 13px 3px currentColor } }`}</style>
+
+                        {/* Kernel field — centred on the player (≈ screen centre under camera-follow) */}
+                        <div style={{
+                            position: 'absolute', left: '50%', top: '50%',
+                            width: fieldR * 2, height: fieldR * 2, transform: 'translate(-50%,-50%)',
+                            borderRadius: '50%', pointerEvents: 'none', zIndex: 3,
+                            background: 'radial-gradient(circle, rgba(59,139,212,0.08) 0%, transparent 70%)',
+                        }} />
+
+                        {/* Attractor beacons — along the momentum direction from the player */}
+                        {m.mag > 1e-6 && [0, 1, 2].map(i => {
+                            const dist = 90 + i * 70
+                            const col = i === 0 ? K_TEAL : K_AMBER
+                            return (
+                                <div key={i} style={{
+                                    position: 'absolute',
+                                    left: `calc(50% + ${m.x * dist}px)`, top: `calc(50% + ${m.y * dist}px)`,
+                                    width: 10, height: 10, marginLeft: -5, marginTop: -5, borderRadius: '50%',
+                                    background: col, color: col, pointerEvents: 'none', zIndex: 3,
+                                    animation: `townBeaconPulse ${2.4 + i * 0.4}s ease-in-out infinite`,
+                                }} />
+                            )
+                        })}
+
+                        {/* Right-edge HUD — starts below the top chrome so it never covers it */}
+                        <div style={{
+                            position: 'absolute', top: 100, bottom: 0, right: 0, width: 64,
+                            background: 'rgba(0,0,0,0.6)', borderLeft: '0.5px solid rgba(255,255,255,0.04)',
+                            pointerEvents: 'none', zIndex: 4,
+                            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, padding: '14px 0',
+                            fontFamily: MONO,
+                        }}>
+                            {/* Momentum compass */}
+                            <svg width={40} height={40} aria-hidden="true">
+                                <circle cx={20} cy={20} r={18} fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth={0.5} />
+                                <line x1={20} y1={20} x2={20 + m.x * 16} y2={20 + m.y * 16} stroke={K_TEAL} strokeWidth={1.5} />
+                                <circle cx={20} cy={20} r={1.5} fill={K_TEAL} />
+                            </svg>
+                            {/* Entropy bar */}
+                            <div style={{ width: 36, height: 12, border: '0.5px solid rgba(255,255,255,0.12)' }}>
+                                <div style={{ width: `${entropyPct}%`, height: '100%', background: K_BLUE }} />
+                            </div>
+                            {/* Muted count */}
+                            <HudReadout label="Muted" value={String(kernel.mutedCount)} />
+                            {/* Plays this session */}
+                            <HudReadout label="Plays" value={String(kernel.sessionLength)} />
+                        </div>
+                    </>
+                )
+            })()}
+
             {/* Orientation contract */}
-            <div style={{ position: 'absolute', top: 14, left: 14, pointerEvents: 'none' }}>
+            <div style={{ position: 'absolute', top: kernel ? 62 : 14, left: 14, pointerEvents: 'none' }}>
                 <div style={{ background: 'rgba(10,11,16,0.75)', color: accent, border: `1px solid ${accent}55`, padding: '5px 12px', borderRadius: 7, fontFamily: SANS, fontWeight: 700, fontSize: 14, letterSpacing: 0.4, textShadow: `0 0 12px ${accent}99` }}>
                     {townName ? `${townName.toUpperCase()}` : 'loading…'}
                 </div>
             </div>
-            <div style={{ position: 'absolute', top: 16, right: 14, display: 'flex', gap: 8 }}>
+            <div style={{ position: 'absolute', top: kernel ? 64 : 16, right: 14, display: 'flex', gap: 8 }}>
                 <button onClick={() => setMapOpen(true)} style={pillBtn(accent)}>🗺 map</button>
-                <button onClick={() => { setSonglineCount(readSongline().length); setSonglineOpen(true) }} style={pillBtn(accent)}>🎒 {songlineCount}</button>
+                <button onClick={() => { setSonglineCount(readSongline().length); setSonglineOpen(true) }} style={{ ...pillBtn(accent), display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    <span>🎒</span>
+                    {trail.length > 0 && (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 1 }}>
+                            {trail.map((e, i) => (
+                                <span key={`${e.id}-${i}`} style={{
+                                    width: 4, height: 9,
+                                    background: e.genres?.[0]
+                                        ? bioColor(e.genres[0])
+                                        : `rgba(79,224,208,${(0.3 + 0.7 * ((i + 1) / trail.length)).toFixed(2)})`,
+                                }} />
+                            ))}
+                        </span>
+                    )}
+                    <span>{songlineCount}</span>
+                </button>
                 <button onClick={toggleMute} style={pillBtn('#2a3040')}>{muted ? '🔇' : '🔊'}</button>
                 {onBack && <button onClick={() => { audioRef.current?.silenceAll(); onBack() }} style={pillBtn('#2a3040')}>✕</button>}
             </div>
@@ -687,6 +789,14 @@ function Center({ children }: { children: React.ReactNode }) {
 }
 function DialogueBox({ accent, children }: { accent: string; children: React.ReactNode }) {
     return <div style={{ position: 'absolute', bottom: 48, left: '50%', transform: 'translateX(-50%)', width: 'min(560px, 92%)', background: PANEL, border: `4px solid ${TEXT}`, padding: 16, boxShadow: `0 0 0 2px #05060a, 0 12px 40px rgba(0,0,0,0.7), inset 0 0 24px ${accent}11`, zIndex: 6 }}>{children}</div>
+}
+function HudReadout({ label, value }: { label: string; value: string }) {
+    return (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+            <span style={{ fontFamily: MONO, fontSize: 7, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.32)' }}>{label}</span>
+            <span style={{ fontFamily: MONO, fontSize: 12, fontWeight: 500, color: 'rgba(232,238,242,0.9)' }}>{value}</span>
+        </div>
+    )
 }
 function pillBtn(bg: string): React.CSSProperties {
     return { background: 'rgba(10,11,16,0.8)', color: bg.startsWith('#2') ? TEXT : bg, border: `1px solid ${bg}66`, borderRadius: 16, padding: '6px 12px', fontFamily: SANS, fontSize: 12, fontWeight: 600, cursor: 'pointer' }

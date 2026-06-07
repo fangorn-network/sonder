@@ -41,3 +41,5 @@ deploy.sh
 **/stage_volumes/
 **/volume*.json
 **/volume*.jsonl
+
+**/qdrant*

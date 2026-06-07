@@ -21,10 +21,37 @@ Responses return `{ id, fields: {...}, ...meta }` — the client reads `hit.fiel
 
 ``` sh
 python server.py \
-  -s test.sond3r.track.invariants.2=0xe3c81df02f63c4e1a39d7e451de1826da385b146152d516cc4951da49c779527 \
-  -s test.sond3r.track.taxonomy.1=0xccf6667bef466ee1aafe8a4dbc62f8c174a00fdefb5f99416d97a3f1b8d132f0 \
-  --primary test.sond3r.track.invariants.2 \
+  -s test.sond3r.track.invariants.3=0xc4103f242a1e99bda3d6c484aa4e8155fc7e2df8fa6f59e0362a592b91570143 \
+  -s test.sond3r.track.taxonomy.2=0x382fdaf1fb03f43ee0e5bcb0517fe0d2df3a3e9d27dddedf371c67e4812b6720 \
+  --primary test.sond3r.track.invariants.3 \
   --reset
+```
+
+``` sh
+python embeddings.py \
+  -s test.sond3r.track.invariants.3=0xc4103f242a1e99bda3d6c484aa4e8155fc7e2df8fa6f59e0362a592b91570143 \
+  -s test.sond3r.track.taxonomy.2=0x382fdaf1fb03f43ee0e5bcb0517fe0d2df3a3e9d27dddedf371c67e4812b6720  \
+  --primary test.sond3r.track.invariants.3 \
+  --graph-api-key b66e8b18ae3fe2c5a91929098b290d69 \
+  --ipfs-gateway https://green-reasonable-heron-957.mypinata.cloud/ipfs
+```
+
+### Embeddings
+
+Run the qdrant server, required for building embeddings
+``` sh
+docker run -d -p 6333:6333 -p 6334:6334 \
+  -v "$(pwd)/qdrant_storage:/qdrant/storage:z" \
+  --name qdrant-core \
+  qdrant/qdrant
+```
+
+``` sh
+# 1. Point the system linker to your venv's nvidia libraries
+export LD_LIBRARY_PATH=/home/driemworks/fangorn/fangorn-music/app/vectordb/venv/lib/python3.12/site-packages/nvidia/cudnn/lib:/home/driemworks/fangorn/fangorn-music/app/vectordb/venv/lib/python3.12/site-packages/nvidia/cublas/lib:$LD_LIBRARY_PATH
+
+# 2. Test to see if ONNX can now initialize a clean GPU session without complaining
+python -c "import onnxruntime as ort; print(ort.InferenceSession(None, providers=['CUDAExecutionProvider']).get_providers())"
 ```
 
 ## Configuration

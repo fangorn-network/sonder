@@ -45,3 +45,5 @@ db/
 **/volume*.jsonl
 
 **/qdrant*
+bundle.json
+**/bundle.ndjson

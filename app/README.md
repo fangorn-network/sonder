@@ -53,8 +53,24 @@ See [troubleshooting](#troubleshooting) for common issues encountered when build
 $ yarn dev
 ``` 
 
-### Chroma DB
-Chroma DB uses python which requires a binary to be built. 
+### Qdrant
+
+SOND3R runs a qdrant instance as a side car. To install the image, run the following:
+
+Do not run this from root unless you change the name of the tmp dir (else do not delete it!)
+``` sh
+mkdir /tmp
+mkdir -p ~/fangorn/sonder/app/resources/qdrant
+cd /tmp
+curl -L -o qdrant.tar.gz https://github.com/qdrant/qdrant/releases/latest/download/qdrant-x86_64-unknown-linux-gnu.tar.gz
+tar xzf qdrant.tar.gz
+mv qdrant ~/fangorn/sonder/app/resources/qdrant/qdrant
+chmod +x ~/fangorn/sonder/app/resources/qdrant/qdrant
+rm -rf ./tmp
+
+# confirm it is available
+~/fangorn/sonder/app/resources/qdrant/qdrant --version
+```
 
 #### Linux
 Navigate to `vectordb` and activate your venv

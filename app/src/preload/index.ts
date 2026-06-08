@@ -6,6 +6,7 @@ import type { FangornAgentResponse } from "@fangorn-network/agent";
 
 // Custom APIs for renderer
 const api = {
+
   spotifyAuth: (): Promise<{
     access_token: string
     refresh_token: string
@@ -51,7 +52,41 @@ if (process.contextIsolated) {
       },
     })
 
+    // ── SOND3R backend boot lifecycle ────────────────────────────────
+    // First run downloads + recovers the catalog snapshot; the renderer
+    // shows a boot screen driven by these events and gates its first
+    // query on 'backend:ready'.
+    contextBridge.exposeInMainWorld('sond3r', {
+      // one-time download progress: { received, total } in bytes
+      onSnapshotProgress: (cb: (d: { received: number; total: number }) => void) => {
+        ipcRenderer.removeAllListeners('snapshot:progress')
+        ipcRenderer.on('snapshot:progress', (_e, d) => cb(d))
+      },
+      // coarse stage: 'downloading' | 'decompressing' | 'recovering'
+      onSnapshotStatus: (cb: (s: string) => void) => {
+        ipcRenderer.removeAllListeners('snapshot:status')
+        ipcRenderer.on('snapshot:status', (_e, s: string) => cb(s))
+      },
+      // backend fully up: Qdrant + collection + query server all ready
+      onBackendReady: (cb: () => void) => {
+        ipcRenderer.removeAllListeners('backend:ready')
+        ipcRenderer.on('backend:ready', () => cb())
+      },
+      // backend failed somewhere in the boot chain
+      onBackendError: (cb: (msg: string) => void) => {
+        ipcRenderer.removeAllListeners('backend:error')
+        ipcRenderer.on('backend:error', (_e, msg: string) => cb(msg))
+      },
+      // cleanup for the useEffect return, mirrors your Spotify pattern
+      offBootEvents: () => {
+        ipcRenderer.removeAllListeners('snapshot:progress')
+        ipcRenderer.removeAllListeners('snapshot:status')
+        ipcRenderer.removeAllListeners('backend:ready')
+        ipcRenderer.removeAllListeners('backend:error')
+      },
 
+      isBackendReady: () => ipcRenderer.invoke('backend:is-ready'),
+    })
 
   } catch (error) {
     console.error(error)

@@ -1,12 +1,8 @@
 aiohttp
 chromadb
 fastapi
-fastembed-gpu
-nvidia-cudnn-cu12
+fastembed
 requests
-sentence-transformers
-torch
-tqdm
 umap-learn
 uvicorn[standard]
 qdrant-client

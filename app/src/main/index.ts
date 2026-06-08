@@ -3,8 +3,12 @@ import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { spawn } from 'child_process'
 import path from 'path'
-import fs, { createWriteStream } from 'fs'
+import fs, { createWriteStream, createReadStream } from 'fs'
 import http from 'http'
+import zlib from 'zlib'
+import crypto from 'crypto'
+import { Transform } from 'stream'
+import { pipeline } from 'stream/promises'
 import mime from 'mime-types'
 import dotenv from 'dotenv'
 import { AgentProviderManager } from './agent/agent-provider-manager'
@@ -87,9 +91,6 @@ function getYtDlpBin(): string {
   const ext = process.platform === 'win32' ? '.exe' : ''
   const updatable = path.join(app.getPath('userData'), `yt-dlp${ext}`)
   if (fs.existsSync(updatable)) return updatable
-  // Packaged: electron-builder flattens resources/bin/${os}/ → bin (see
-  // electron-builder.yml). Dev: the binary lives in a per-platform subdir,
-  // which is where scripts/setup_ytdlp.sh downloads it.
   if (app.isPackaged) return path.join(process.resourcesPath, 'bin', `yt-dlp${ext}`)
   const dir = process.platform === 'win32' ? 'win' : 'linux'
   return path.join(app.getAppPath(), 'resources', 'bin', dir, `yt-dlp${ext}`)
@@ -230,8 +231,15 @@ function resolveYt(query: string): Promise<YtResolveResult> {
   })
 }
 
-// ─── Python backend ───────────────────────────────────────────────────────────
+// ─── Qdrant sidecar + query server ─────────────────────────────────────────────
+// The catalog is built offline (embeddings.py) and published as a GZIPPED QDRANT
+// SNAPSHOT pinned to IPFS. On first run the app downloads the .gz by CID,
+// decompresses it to a .snapshot, recovers it into the local Qdrant sidecar, and
+// caches the result in qdrant_storage. Every later run finds the collection
+// already present and skips the network entirely. Nothing leaves the machine
+// after the one-time fetch; both processes bind to localhost only.
 
+let qdrantProc: ReturnType<typeof spawn> | null = null
 let pyProcess: ReturnType<typeof spawn> | null = null
 let rendererServer: http.Server | null = null
 
@@ -241,49 +249,146 @@ if (app.isPackaged) {
   dotenv.config({ path: path.resolve(process.cwd(), '.env') })
 }
 
-function startPython() {
-  const root = is.dev ? app.getAppPath() : process.resourcesPath
+const SNAPSHOT_GATEWAY =
+  (import.meta as any).env?.VITE_PINATA_GATEWAY ?? 'https://gateway.pinata.cloud/ipfs'
 
+// For now a pinned constant. Later: read the latest sond3r.embeddings.snapshot
+// record off Fangorn and return its cid + checksum, so a new catalog ships
+// without an app update. Keep this the single source of truth for the artifact.
+async function resolveSnapshot(): Promise<{ cid: string; sha256: string }> {
+  return {
+    cid: 'bafybeih6bj6iakbm5nodxriddi4q7xhiw77ok53d67q7omkuvrvi7ta3mm',
+    // sha256 of the DECOMPRESSED .snapshot ('' skips verification while testing)
+    sha256: '99ebbd07cc80fb4cb755ad8c250ee99d0ec5ae59efe6460741cdc95053df9691',
+  }
+}
+
+function qdrantBin(): string {
+  const ext = process.platform === 'win32' ? '.exe' : ''
+  return app.isPackaged
+    ? path.join(process.resourcesPath, 'qdrant', `qdrant${ext}`)
+    : path.join(app.getAppPath(), 'resources', 'qdrant', `qdrant${ext}`)
+}
+
+function startQdrant() {
+  const storage = path.join(app.getPath('userData'), 'qdrant_storage')
+  fs.mkdirSync(storage, { recursive: true })
+
+  qdrantProc = spawn(qdrantBin(), [], {
+    env: {
+      ...process.env,
+      QDRANT__STORAGE__STORAGE_PATH: storage,
+      QDRANT__SERVICE__HTTP_PORT: '6333',
+      QDRANT__SERVICE__GRPC_PORT: '6334',
+      QDRANT__SERVICE__HOST: '127.0.0.1',   // localhost only, never exposed
+      QDRANT__TELEMETRY_DISABLED: 'true',   // no phone-home; matches the ethos
+    },
+  })
+  qdrantProc.stdout?.on('data', (d) => console.log('[qdrant]', d.toString().trimEnd()))
+  qdrantProc.stderr?.on('data', (d) => console.error('[qdrant]', d.toString().trimEnd()))
+  qdrantProc.on('error', (err) => console.error('[qdrant] failed to start:', err))
+  qdrantProc.on('exit', (code) => console.log('[qdrant] exited with code', code))
+}
+
+async function waitForReady(url: string, timeoutMs = 60000): Promise<void> {
+  const start = Date.now()
+  while (Date.now() - start < timeoutMs) {
+    try {
+      const r = await net.fetch(url)
+      if (r.ok) return
+    } catch { /* not up yet */ }
+    await new Promise((r) => setTimeout(r, 300))
+  }
+  throw new Error(`timed out waiting for ${url}`)
+}
+
+// Download the gzipped snapshot from IPFS, streaming progress to the window.
+async function downloadGz(cid: string, dest: string, win: BrowserWindow): Promise<void> {
+  const res = await net.fetch(`${SNAPSHOT_GATEWAY}/${cid}`)
+  if (!res.ok || !res.body) throw new Error(`snapshot download failed: ${res.status}`)
+
+  const total = Number(res.headers.get('content-length')) || 0
+  const out = createWriteStream(dest)   // truncates any partial prior download
+  let received = 0
+
+  const reader = (res.body as ReadableStream<Uint8Array>).getReader()
+  for (; ;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    received += value.length
+    out.write(Buffer.from(value))
+    win.webContents.send('snapshot:progress', { received, total })
+  }
+  out.end()
+  await new Promise<void>((r) => out.on('finish', () => r()))
+}
+
+// Decompress .gz → .snapshot, hashing the output so we can verify the artifact.
+async function gunzipVerify(gzPath: string, outPath: string, sha256: string): Promise<void> {
+  const hash = crypto.createHash('sha256')
+  const tap = new Transform({
+    transform(chunk: Buffer, _enc, cb) { hash.update(chunk); cb(null, chunk) },
+  })
+  await pipeline(createReadStream(gzPath), zlib.createGunzip(), tap, createWriteStream(outPath))
+  if (sha256 && hash.digest('hex') !== sha256) {
+    fs.unlinkSync(outPath)
+    throw new Error('snapshot checksum mismatch after decompression')
+  }
+}
+
+// First run: fetch + decompress + recover. Later runs: collection exists → skip.
+async function ensureCollection(win: BrowserWindow): Promise<void> {
+  const exists = await net.fetch('http://127.0.0.1:6333/collections/fangorn')
+    .then((r) => r.ok).catch(() => false)
+  if (exists) return   // cached from a previous run
+
+  const { cid, sha256 } = await resolveSnapshot()
+  const userData = app.getPath('userData')
+  const gzPath = path.join(userData, 'fangorn.snapshot.gz')
+  const snapPath = path.join(userData, 'fangorn.snapshot')
+
+  win.webContents.send('snapshot:status', 'downloading')
+  await downloadGz(cid, gzPath, win)
+
+  win.webContents.send('snapshot:status', 'decompressing')
+  await gunzipVerify(gzPath, snapPath, sha256)
+  try { fs.unlinkSync(gzPath) } catch { }
+
+  win.webContents.send('snapshot:status', 'recovering')
+  const res = await net.fetch('http://127.0.0.1:6333/collections/fangorn/snapshots/recover', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ location: `file://${snapPath}` }),
+  })
+  if (!res.ok) throw new Error(`recover failed: ${res.status} ${await res.text()}`)
+
+  // Collection now lives in qdrant_storage; the loose .snapshot is redundant.
+  try { fs.unlinkSync(snapPath) } catch { }
+}
+
+function startQueryServer() {
+  const root = is.dev ? app.getAppPath() : process.resourcesPath
   const serverName = process.platform === 'win32' ? 'server.exe' : 'server'
 
-  const apiKey = (import.meta as any).env.VITE_GRAPH_API_KEY ?? "";
-  const userDataPath = app.getPath('userData')
+  // Read-only: proxies Qdrant and embeds text queries with nomic. No schema args,
+  // no chroma path, no checkpoint, no graph key — that all moved to the builder.
   const [bin, args, cwd]: [string, string[], string] = app.isPackaged
     ? [
       path.join(root, serverName),
-      [
-        '--graph-api-key', apiKey,
-        '--chroma-path', path.join(userDataPath, 'chroma_db'),
-        '--checkpoint-file', path.join(userDataPath, 'ingest_checkpoint.json'),
-        '-s', 'test.sond3r.track.invariants.2=0xe3c81df02f63c4e1a39d7e451de1826da385b146152d516cc4951da49c779527',
-        '-s', 'test.sond3r.track.taxonomy.1=0xccf6667bef466ee1aafe8a4dbc62f8c174a00fdefb5f99416d97a3f1b8d132f0',
-        '--primary', 'test.sond3r.track.invariants.2',
-      ],
+      ['--collection', 'fangorn', '--dim', '256'],
       root,
     ]
     : [
       path.join(root, 'vectordb/venv/bin/python'),
       [
         path.join(root, 'vectordb/server.py'),
-        '--graph-api-key', apiKey,
-        '--chroma-path', path.join(root, 'vectordb/db/sond3r'),
-        '--checkpoint-file', path.join(root, 'vectordb/db/ingest_checkpoint.json'),
-        '-s', 'test.sond3r.track.invariants.2=0xe3c81df02f63c4e1a39d7e451de1826da385b146152d516cc4951da49c779527',
-        '-s', 'test.sond3r.track.taxonomy.1=0xccf6667bef466ee1aafe8a4dbc62f8c174a00fdefb5f99416d97a3f1b8d132f0',
-        '--primary', 'test.sond3r.track.invariants.2',
+        '--collection', 'fangorn',
+        '--dim', '256',
       ],
       path.join(root, 'vectordb'),
     ]
 
-  // FIX 2: Align the environment variable with your actual choice
-  const targetChromaPath = app.isPackaged
-    ? path.join(userDataPath, 'chroma_db')
-    : path.join(root, 'vectordb/db/sond3r');
-
-  pyProcess = spawn(bin, args, {
-    cwd,
-    env: { ...process.env, CHROMA_PATH: targetChromaPath },
-  })
+  pyProcess = spawn(bin, args, { cwd, env: { ...process.env } })
 
   pyProcess.stdout?.on('data', (d) => console.log('[py]', d.toString().trimEnd()))
   pyProcess.stderr?.on('data', (d) => console.error('[py]', d.toString().trimEnd()))
@@ -364,7 +469,6 @@ function createWindow(): BrowserWindow {
 // ─── IPC handlers ─────────────────────────────────────────────────────────────
 
 function registerIpcHandlers() {
-  // Open a URL in the OS default browser — used by any renderer link
   ipcMain.handle('shell:open-external', (_event, url: string) => {
     if (typeof url === 'string' && (url.startsWith('https://') || url.startsWith('http://'))) {
       shell.openExternal(url)
@@ -404,8 +508,6 @@ function registerIpcHandlers() {
     console.log('[rpc]', method, res.status, text.slice(0, 200))
     return text
   })
-
-  // ── yt-dlp ──────────────────────────────────────────────────────────────────
 
   ipcMain.handle('yt:resolve', async (_event, query: string): Promise<YtResolveResult> => {
     return resolveYt(query)
@@ -454,6 +556,10 @@ function registerIpcHandlers() {
         resolve(results)
       })
     })
+  })
+
+  ipcMain.handle('backend:is-ready', async () => {
+    return net.fetch('http://127.0.0.1:8080/health').then(r => r.ok).catch(() => false)
   })
 }
 
@@ -515,21 +621,10 @@ async function bootstrap() {
 }
 
 // ─── GPU acceleration (WSL2 / Linux) ─────────────────────────────────────────
-// WSLg exposes the GPU (e.g. RTX via /dev/dxg) but Chromium blocklists Mesa and
-// falls back to SOFTWARE WebGL, which is why 3D/canvas were unusably slow.
-// These switches tell Electron to use the GPU via ANGLE-over-EGL (Mesa d3d12).
-// They only help once WSL provides /dev/dri/renderD128 — if it's missing, run
-// `wsl --update` then `wsl --shutdown` on the Windows host. Set SOND3R_DISABLE_GPU=1
-// to revert to software (e.g. if the window renders blank).
 if (process.platform === 'linux' && process.env.SOND3R_DISABLE_GPU !== '1') {
-  // Safe, non-breaking: let Chromium use the GPU if one becomes available;
-  // these are no-ops on a pure software stack (they won't blank the window).
   app.commandLine.appendSwitch('ignore-gpu-blocklist')
   app.commandLine.appendSwitch('enable-gpu-rasterization')
   app.commandLine.appendSwitch('enable-zero-copy')
-  // Forcing ANGLE-over-EGL (Mesa d3d12) is the strongest lever once /dev/dri
-  // exists, but it can white-screen on a broken GL stack — opt in once the GPU
-  // is confirmed: run with SOND3R_GPU_ANGLE=1.
   if (process.env.SOND3R_GPU_ANGLE === '1') {
     app.commandLine.appendSwitch('use-gl', 'angle')
     app.commandLine.appendSwitch('use-angle', 'gl')
@@ -538,24 +633,24 @@ if (process.platform === 'linux' && process.env.SOND3R_DISABLE_GPU !== '1') {
 
 // ─── Protocol + single-instance lock (must be before whenReady) ──────────────
 
-// sond3r:// is the OAuth redirect URI registered in the Spotify dashboard.
-// On macOS it arrives via open-url; on Windows/Linux via second-instance argv.
 if (!app.isDefaultProtocolClient('sond3r')) {
   app.setAsDefaultProtocolClient('sond3r')
 }
 
-// Ensures only one app instance handles the protocol callback on Win/Linux.
 const gotLock = app.requestSingleInstanceLock()
 if (!gotLock) {
   app.quit()
 }
 
 // ─── App lifecycle ────────────────────────────────────────────────────────────
+// Order matters: the WINDOW comes up first so the first-run download has a UI to
+// report into. The data backend (Qdrant + snapshot fetch + query server) is
+// brought up afterwards, behind a boot screen the renderer renders.
 
 app.whenReady().then(async () => {
   electronApp.setAppUserModelId('com.electron')
 
-  startPython()
+  startQdrant()
   startYtStreamProxy()
   updateYtDlp()
 
@@ -586,18 +681,31 @@ app.whenReady().then(async () => {
   registerIpcHandlers()
   await bootstrap()
 
-  // createWindow() now returns the BrowserWindow so we can hand it to
-  // registerSpotifyAuth, which needs it to send IPC events back to the renderer.
   const mainWindow = createWindow()
 
   registerSpotifyAuth(mainWindow)   // spotify-auth:* IPC handlers (PKCE OAuth)
   registerPlaybackIpc()             // playback:* IPC handlers (source-agnostic; Spotify default)
 
-  // Windows / Linux: protocol URI arrives as argv of the second instance
+  // Wait until the renderer is mounted so it can actually receive boot events.
+  await new Promise<void>((r) => mainWindow.webContents.once('did-finish-load', () => r()))
+
+  // Backend comes up behind the window: Qdrant ready → collection present
+  // (download + decompress + recover on first run, skip if cached) → query server.
+  try {
+    await waitForReady('http://127.0.0.1:6333/readyz')
+    await ensureCollection(mainWindow)
+    startQueryServer()
+    await waitForReady('http://127.0.0.1:8080/health')
+    console.log('[boot] data backend ready')
+    mainWindow.webContents.send('backend:ready')
+  } catch (err) {
+    console.error('[boot] backend failed to come up:', err)
+    mainWindow.webContents.send('backend:error', String(err))
+  }
+
   app.on('second-instance', (_e, argv) => {
     const url = argv.find((a: string) => a.startsWith('sond3r://'))
     if (url) handleSpotifyCallback(url)
-    // Also focus the existing window
     if (mainWindow.isMinimized()) mainWindow.restore()
     mainWindow.focus()
   })
@@ -615,11 +723,14 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', async () => {
-  if (pyProcess && !pyProcess.killed) {
-    if (process.platform === 'win32') {
-      spawn('taskkill', ['/PID', String(pyProcess.pid), '/F', '/T'])
-    } else {
-      pyProcess.kill()
+  // Kill both child processes; /T on Windows takes their trees with them.
+  for (const proc of [pyProcess, qdrantProc]) {
+    if (proc && !proc.killed) {
+      if (process.platform === 'win32') {
+        spawn('taskkill', ['/PID', String(proc.pid), '/F', '/T'])
+      } else {
+        proc.kill()
+      }
     }
   }
   if (rendererServer) {

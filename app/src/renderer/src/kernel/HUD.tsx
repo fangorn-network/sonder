@@ -25,29 +25,33 @@ import type { KernelState } from '../kernel/types'
 // ─── design tokens ────────────────────────────────────────────────────────────
 
 const T = {
-  bg:       '#0a0b11',
-  bgHover:  '#0f1018',
-  border:   'rgba(255,255,255,0.06)',
-  borderHi: 'rgba(255,255,255,0.12)',
-  text:     'rgba(200,200,224,0.9)',
-  textMid:  'rgba(120,120,160,0.8)',
-  textLo:   'rgba(58,58,88,0.9)',
-  teal:     '#00e5c8',
-  magenta:  '#e040fb',
-  amber:    '#ffa726',
-  blue:     '#4480f0',
-  mono:     "'DM Mono', 'Courier New', monospace",
-  sans:     "'DM Sans', system-ui, sans-serif",
+  bg:        '#f0ece5',          // BG1 — matches the app shell surface
+  bgHover:   '#e8e3da',          // BG2
+  border:    'rgba(0,0,0,0.12)', // BORDER
+  borderHi:  'rgba(0,0,0,0.24)',
+  text:      '#1a1714',          // FG
+  textMid:   '#4a4440',          // FG2
+  textLo:    '#766e66',          // FG3
+  textFaint: '#a09890',          // FG4
+  accent:    '#b83030',          // ACCENT
+  trackOff:  'rgba(0,0,0,0.10)',
+  shadow:    '0 6px 24px rgba(0,0,0,0.12)',
+  mono:      'var(--font-mono,"Fragment Mono","DM Mono",monospace)',
+  sans:      'var(--font-body,"Geist","Inter",sans-serif)',
+  // Vibe colors mirror the Settings drawer's readout so the two never disagree.
+  wander:    '#5a3d9e',
+  calibrate: '#9a6820',
+  lockedIn:  '#207860',
 } as const
 
 // ─── vibe mapping ─────────────────────────────────────────────────────────────
 
 const vibeOf = (entropy: number) =>
   entropy > 0.65
-    ? { color: T.magenta, label: 'WANDERING',   desc: 'pushing past familiar territory — discovery mode' }
+    ? { color: T.wander,    label: 'WANDERING',   desc: 'pushing past familiar territory — discovery mode' }
     : entropy > 0.33
-    ? { color: T.amber,   label: 'CALIBRATING', desc: 'finding your sound — kernel is sharpening' }
-    : { color: T.blue,    label: 'LOCKED IN',   desc: 'taste model converged — deep in your groove' }
+    ? { color: T.calibrate, label: 'CALIBRATING', desc: 'finding your sound — kernel is sharpening' }
+    : { color: T.lockedIn,  label: 'LOCKED IN',   desc: 'taste model converged — deep in your groove' }
 
 // ─── global slider CSS (injected once) ────────────────────────────────────────
 
@@ -73,9 +77,9 @@ function injectStyles() {
       height: 2px;
       background: linear-gradient(
         to right,
-        var(--fill, #00e5c8) 0%,
-        var(--fill, #00e5c8) var(--pct, 50%),
-        rgba(255,255,255,0.08) var(--pct, 50%)
+        var(--fill, #b83030) 0%,
+        var(--fill, #b83030) var(--pct, 50%),
+        rgba(0,0,0,0.10) var(--pct, 50%)
       );
     }
     .snd-range::-webkit-slider-thumb {
@@ -83,24 +87,24 @@ function injectStyles() {
       width: 10px;
       height: 10px;
       border-radius: 0;
-      background: var(--fill, #00e5c8);
+      background: var(--fill, #b83030);
       margin-top: -4px;
       cursor: ew-resize;
     }
     .snd-range::-moz-range-track {
       height: 2px;
-      background: rgba(255,255,255,0.08);
+      background: rgba(0,0,0,0.10);
       border-radius: 0;
     }
     .snd-range::-moz-range-progress {
       height: 2px;
-      background: var(--fill, #00e5c8);
+      background: var(--fill, #b83030);
     }
     .snd-range::-moz-range-thumb {
       width: 10px;
       height: 10px;
       border-radius: 0;
-      background: var(--fill, #00e5c8);
+      background: var(--fill, #b83030);
       border: none;
       cursor: ew-resize;
     }
@@ -243,6 +247,7 @@ export function KernelDebugHUD({
         background:   T.bg,
         border:       `1px solid ${T.border}`,
         borderBottom: 'none',
+        boxShadow:    T.shadow,
       }}>
 
         {/* Header */}
@@ -258,7 +263,7 @@ export function KernelDebugHUD({
               {timestep} {timestep === 1 ? 'track' : 'tracks'}
               {nSkips > 0 && ` · ${nSkips} passed`}
             </div>
-            <div style={{ fontFamily: T.sans, fontSize: 9, color: T.textLo, marginTop: 2 }}>
+            <div style={{ fontFamily: T.sans, fontSize: 9, color: T.textFaint, marginTop: 2 }}>
               this session
             </div>
           </div>
@@ -311,7 +316,7 @@ export function KernelDebugHUD({
             leftLabel="gradual"
             rightLabel="reactive"
             value={momentum}
-            color={T.teal}
+            color={T.accent}
             onChange={handleMomentum}
           />
         </div>
@@ -357,6 +362,7 @@ export function KernelDebugHUD({
             borderTop:   open ? 'none' : `1px solid ${open || hovered ? T.borderHi : T.border}`,
             cursor:      'pointer',
             userSelect:  'none',
+            boxShadow:   T.shadow,
             transition:  'background 0.15s ease, border-color 0.15s ease',
           }}
         >
@@ -375,7 +381,7 @@ export function KernelDebugHUD({
             {[0, 1, 2, 3].map(i => (
               <div
                 key={i}
-                style={{ width: 3, height: 9, background: i < segs ? vibe.color : 'rgba(255,255,255,0.07)' }}
+                style={{ width: 3, height: 9, background: i < segs ? vibe.color : T.trackOff }}
               />
             ))}
           </div>
@@ -383,7 +389,7 @@ export function KernelDebugHUD({
           <span style={{ flex: 1 }} />
 
           <span style={{
-            color:      T.textLo,
+            color:      T.textFaint,
             fontSize:   7,
             display:    'inline-block',
             transition: 'transform 0.2s ease',

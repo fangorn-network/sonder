@@ -25,6 +25,8 @@ import { usePlaybackRouter } from './hooks/usePlaybackRouter'
 import { useAutoplay } from './hooks/useAutoplay'
 import { TrackWikiView, type View, type SearchMode, viewLabel } from './views/TrackWikiView'
 import { SoundTownView } from './views/SoundTownView'
+import { LocalMusicView } from './views/LocalMusicView'
+import { LocalMusicProvider } from './providers/LocalMusicProvider'
 import { KernelStrip, type KernelStripProps } from './components/KernelStrip'
 import { DEFAULTS } from './kernel/constants'
 import type { KernelSnapshot } from './types/kernel'
@@ -132,6 +134,7 @@ function Main() {
   const [showSettings, setShowSettings] = useState(false)
   const [nowPlayingOpen, setNowPlayingOpen] = useState(false)
   const [showGalaxy, setShowGalaxy] = useState(false)
+  const [showLocal, setShowLocal] = useState(false)
 
   // ── Kernel / chroma ───────────────────────────────────────────────────────
 
@@ -355,6 +358,7 @@ function Main() {
 
   return (
     <SpotifyProvider value={{ ...spotify }}>
+      <LocalMusicProvider>
       <PlayerProvider tracks={tracks}>
         <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#050309', overflow: 'hidden', fontFamily: SANS }}>
 
@@ -363,7 +367,15 @@ function Main() {
             height: 40, flexShrink: 0, background: BG1,
             borderBottom: `1px solid ${BORDER}`,
             display: 'flex', alignItems: 'center', gap: 8,
-            padding: '0 14px', zIndex: 50,
+            // Reserve the OS window-controls-overlay rect (titlebar-area-* env vars)
+            // so the header's right-side cluster never sits under the native
+            // min/max/close buttons. Wherever the controls live, the draggable
+            // titlebar area excludes them: pad left up to its start and right past
+            // its end. Falls back to a flat 14px when no overlay is present.
+            paddingTop: 0, paddingBottom: 0,
+            paddingLeft: 'calc(env(titlebar-area-x, 0px) + 14px)',
+            paddingRight: 'calc(100vw - env(titlebar-area-width, 100vw) - env(titlebar-area-x, 0px) + 14px)',
+            zIndex: 50,
             WebkitAppRegion: 'drag',
           } as React.CSSProperties}>
 
@@ -432,6 +444,14 @@ function Main() {
                 </button>
               </div>
             )}
+
+            {/* Local music */}
+            <button
+              onClick={() => setShowLocal(true)}
+              style={{ background: showLocal ? `${ACCENT}18` : 'none', border: `1px solid ${showLocal ? ACCENT + '44' : BORDER2}`, color: showLocal ? ACCENT : FG4, fontFamily: MONO, fontSize: 12, lineHeight: 1, padding: '3px 8px', cursor: 'pointer', flexShrink: 0, WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+              title="Local music">
+              ♪
+            </button>
 
             {/* Settings icon */}
             <button
@@ -516,6 +536,14 @@ function Main() {
             document.body,
           )}
 
+          {/* ── Local music overlay ───────────────────────────────────────── */}
+          {showLocal && createPortal(
+            <div style={{ position: 'fixed', inset: 0, zIndex: 70 }}>
+              <LocalMusicView onClose={() => setShowLocal(false)} />
+            </div>,
+            document.body,
+          )}
+
           {/* ── Now-playing strip (24px) — playable datasets only ────────── */}
           {canPlay && (
             <NowPlayingStrip
@@ -545,6 +573,7 @@ function Main() {
           <KernelDebugHUD state={kernel.state} />
         </div>
       </PlayerProvider >
+      </LocalMusicProvider>
     </SpotifyProvider >
   )
 }

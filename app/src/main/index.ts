@@ -19,6 +19,7 @@ import { existsSync } from 'fs'
 import { ToolboxConfigManager } from './agent/toolbox-config-manager'
 import { registerSpotifyAuth, handleSpotifyCallback } from './spotify/SpotifyAuth'
 import { registerPlaybackIpc } from './playback/ipc'
+import { registerLocalMusicIpc } from './local/ipc'
 
 // ─── Stream cache ─────────────────────────────────────────────────────────────
 interface StreamEntry {
@@ -446,7 +447,10 @@ function createWindow(): BrowserWindow {
     fullscreen: false, fullscreenable: true,
     show: false, darkTheme: true, movable: true, resizable: true,
     title: 'SOND3R', frame: false, titleBarStyle: 'hidden',
-    titleBarOverlay: { color: 'black', symbolColor: '#ffffff', height: 40 },
+    // Native window-controls overlay tinted to match the light editorial header
+    // (App.tsx BG1 background / FG symbols) so min/max/close read as part of the
+    // app instead of black boxes. Height matches the 40px header.
+    titleBarOverlay: { color: '#f0ece5', symbolColor: '#1a1714', height: 40 },
     backgroundColor: '#1a1a1a', autoHideMenuBar: true,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -691,6 +695,7 @@ app.whenReady().then(async () => {
 
   registerSpotifyAuth(mainWindow)   // spotify-auth:* IPC handlers (PKCE OAuth)
   registerPlaybackIpc()             // playback:* IPC handlers (source-agnostic; Spotify default)
+  registerLocalMusicIpc()           // local:* IPC handlers (on-disk music + localhost file server)
 
   // Wait until the renderer is mounted so it can actually receive boot events.
   await new Promise<void>((r) => mainWindow.webContents.once('did-finish-load', () => r()))

@@ -30,6 +30,10 @@ extraResources:
   - from: "resources/bin/${os}/"
     to: "bin"
     filter: ["yt-dlp*"]
+  - from: resources/qdrant
+    to: qdrant
+  - from: resources/bin
+    to: bin
 win:
   executableName: SOND3R
   target:

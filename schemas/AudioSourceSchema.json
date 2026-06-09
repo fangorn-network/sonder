@@ -4,7 +4,8 @@
     },
     "audio": {
         "@type": " handle",
-        "": ""
+        "contentIdentifier": "r2://adfadf",
+        "gateway": "https://quickbeam......"
     },
     "platformId": {
         "@type": "string"

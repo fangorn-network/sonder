@@ -1,20 +1,72 @@
 import { useEffect, useState, useRef, ReactNode } from 'react'
 
 // ── Boot sequence ─────────────────────────────────────────────────────────────
-const STEPS = ['initializing renderer', 'loading index', 'connecting to network', 'ready']
-const DELAYS = [700, 1000, 800]
+// Driven by the real backend boot lifecycle (main → preload `window.sond3r`):
+// first run fetches a ~1.5GB catalog snapshot from IPFS, decompresses it, and
+// recovers it into the local Qdrant instance. We surface download progress as a
+// determinate bar and the decompress/recover stages as an indeterminate one.
 
-function useBootSequence() {
-  const [step, setStep] = useState(0)
-  const done = step >= STEPS.length - 1
+type BootStage = 'init' | 'downloading' | 'decompressing' | 'recovering' | 'ready' | 'error'
+
+const STAGE_LABEL: Record<BootStage, string> = {
+  init:         'initializing',
+  downloading:  'fetching catalog from ipfs',
+  decompressing:'decompressing snapshot',
+  recovering:   'loading into vector store',
+  ready:        'ready',
+  error:        'connection failed',
+}
+
+function fmtBytes(n: number): string {
+  if (n >= 1e9) return (n / 1e9).toFixed(2) + ' GB'
+  if (n >= 1e6) return (n / 1e6).toFixed(1) + ' MB'
+  if (n >= 1e3) return (n / 1e3).toFixed(0) + ' KB'
+  return `${n} B`
+}
+
+interface BootState {
+  stage: BootStage
+  pct: number | null          // download %, null when total is unknown / not downloading
+  received: number
+  total: number
+  error: string | null
+  done: boolean
+}
+
+function useBootSequence(): BootState {
+  const [stage, setStage] = useState<BootStage>('init')
+  const [progress, setProgress] = useState<{ received: number; total: number }>({ received: 0, total: 0 })
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (done) return
-    const timer = setTimeout(() => setStep(s => s + 1), DELAYS[step] ?? 700)
-    return () => clearTimeout(timer)
-  }, [step, done])
+    const s = window.sond3r
+    // No bridge (e.g. a plain browser dev session) → nothing to wait on.
+    if (!s) { setStage('ready'); return }
 
-  return { status: STEPS[Math.min(step, STEPS.length - 1)], done }
+    s.onSnapshotProgress((d) => { setStage('downloading'); setProgress(d) })
+    s.onSnapshotStatus((status) => {
+      if (status === 'downloading' || status === 'decompressing' || status === 'recovering') {
+        setStage(status as BootStage)
+      }
+    })
+    s.onBackendReady(() => setStage('ready'))
+    s.onBackendError((msg) => { setStage('error'); setError(msg) })
+
+    // Cached fast path: the backend may already be up (and `backend:ready` may
+    // have fired) before our listeners attached. Reconcile once on mount.
+    s.isBackendReady()
+      .then((ready) => { if (ready) setStage((cur) => (cur === 'init' ? 'ready' : cur)) })
+      .catch(() => { })
+
+    return () => s.offBootEvents()
+  }, [])
+
+  const { received, total } = progress
+  const pct = stage === 'downloading' && total > 0
+    ? Math.min(100, Math.round((received / total) * 100))
+    : null
+
+  return { stage, pct, received, total, error, done: stage === 'ready' }
 }
 
 // ── Sharp City Background ─────────────────────────────────────────────────────
@@ -157,10 +209,19 @@ interface StartupViewProps {
 
 export function StartupView({ onReady, children }: StartupViewProps) {
   const [exiting, setExiting] = useState(false)
-  const { status, done } = useBootSequence()
+  const { stage, pct, received, total, error, done } = useBootSequence()
+
+  // Let the user through once the catalog is ready, or if the boot failed (so a
+  // backend hiccup never hard-locks the splash — the app surfaces its own retry).
+  const revealed = done || stage === 'error'
+
+  // The bar is visible while the backend is coming up; indeterminate when we
+  // don't have a byte count (decompress/recover, or a download with no length).
+  const showBar = stage === 'downloading' || stage === 'decompressing' || stage === 'recovering'
+  const indeterminate = pct === null
 
   const handleExit = () => {
-    if (!done || exiting) return
+    if (!revealed || exiting) return
     setExiting(true)
     setTimeout(onReady, 900)
   }
@@ -185,11 +246,44 @@ export function StartupView({ onReady, children }: StartupViewProps) {
           SOND3R
         </div>
 
-        <div style={{ fontFamily: '"DM Mono", monospace', fontSize: '10px', letterSpacing: '0.18em', color: 'rgba(228,226,236,0.3)', textTransform: 'uppercase' }}>
-          {status}<span style={{ animation: 'blink 1s step-end infinite' }}>_</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          {/* Spinner — immediate feedback during the whole boot (incl. the init
+              gap before the first progress event), hidden once ready/failed. */}
+          {!revealed && (
+            <div style={{
+              width: '12px', height: '12px', borderRadius: '50%',
+              border: '2px solid rgba(255,185,80,0.18)',
+              borderTopColor: 'rgba(255,185,80,0.9)',
+              animation: 'sonderBootSpin 0.7s linear infinite',
+            }} />
+          )}
+          <div style={{ fontFamily: '"DM Mono", monospace', fontSize: '10px', letterSpacing: '0.18em', color: stage === 'error' ? 'rgba(255,120,120,0.65)' : 'rgba(228,226,236,0.3)', textTransform: 'uppercase' }}>
+            {STAGE_LABEL[stage]}<span style={{ animation: 'blink 1s step-end infinite' }}>_</span>
+          </div>
         </div>
 
-        <div onClick={handleExit} style={{ marginTop: '4px', opacity: done ? 1 : 0, transform: done ? 'translateY(0)' : 'translateY(8px)', transition: 'all 0.6s ease', pointerEvents: done ? 'auto' : 'none', cursor: 'pointer' }}>
+        {/* ── Boot progress bar ──────────────────────────────────────────── */}
+        <div style={{ width: 'min(420px, 60vw)', opacity: showBar ? 1 : 0, transition: 'opacity 0.4s ease' }}>
+          <div style={{ position: 'relative', height: '3px', background: 'rgba(255,255,255,0.08)', borderRadius: '2px', overflow: 'hidden' }}>
+            {indeterminate ? (
+              <div style={{ position: 'absolute', top: 0, bottom: 0, width: '35%', background: 'rgba(255,185,80,0.9)', borderRadius: '2px', animation: 'sonderBootSlide 1.2s ease-in-out infinite' }} />
+            ) : (
+              <div style={{ position: 'absolute', top: 0, left: 0, bottom: 0, width: `${pct}%`, background: 'rgba(255,185,80,0.9)', borderRadius: '2px', transition: 'width 0.2s linear' }} />
+            )}
+          </div>
+          <div style={{ marginTop: '6px', display: 'flex', justifyContent: 'space-between', fontFamily: '"DM Mono", monospace', fontSize: '9px', letterSpacing: '0.14em', color: 'rgba(228,226,236,0.35)', textTransform: 'uppercase' }}>
+            <span>{pct !== null ? `${pct}%` : 'working'}</span>
+            <span>{stage === 'downloading' && total > 0 ? `${fmtBytes(received)} / ${fmtBytes(total)}` : ''}</span>
+          </div>
+        </div>
+
+        {stage === 'error' && error && (
+          <div style={{ maxWidth: 'min(420px, 60vw)', fontFamily: '"DM Mono", monospace', fontSize: '9px', letterSpacing: '0.06em', color: 'rgba(255,120,120,0.5)', textAlign: 'center', lineHeight: 1.5 }}>
+            {error}
+          </div>
+        )}
+
+        <div onClick={handleExit} style={{ marginTop: '4px', opacity: revealed ? 1 : 0, transform: revealed ? 'translateY(0)' : 'translateY(8px)', transition: 'all 0.6s ease', pointerEvents: revealed ? 'auto' : 'none', cursor: 'pointer' }}>
           {children ?? (
             <div style={{ padding: '10px 36px', fontFamily: '"DM Mono", monospace', fontSize: '11px', letterSpacing: '0.16em', color: 'rgba(255,185,80,0.9)', background: 'rgba(255,185,80,0.05)', border: '1px solid rgba(255,185,80,0.2)', borderRadius: '4px' }}>
               ENTER
@@ -207,6 +301,8 @@ export function StartupView({ onReady, children }: StartupViewProps) {
       <style>{`
         @keyframes sonderPulse { 0%,100% { opacity: .8; } 50% { opacity: 1; } }
         @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
+        @keyframes sonderBootSlide { 0% { left: -35%; } 100% { left: 100%; } }
+        @keyframes sonderBootSpin { to { transform: rotate(360deg); } }
       `}</style>
     </div>
   )

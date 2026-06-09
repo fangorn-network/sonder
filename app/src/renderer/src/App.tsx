@@ -188,7 +188,7 @@ function Main() {
     return () => document.removeEventListener('visibilitychange', handler)
   }, [])
 
-  useChromaSync({ enabled: visible })
+  // useChromaSync({ enabled: visible })
 
   // ── Taste profile ─────────────────────────────────────────────────────────
 

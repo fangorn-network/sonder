@@ -26,6 +26,7 @@ VITE_USE_AGENT=true
 VITE_GRAPH_API_KEY=
 VITE_SPOTIFY_CLIENT_ID=
 VITE_SPOTIFY_CLIENT_SECRET=
+VITE_PINATA_GATEWAY=
 ```
 
 You will need to fetch a spotify client/secret and an api key for the Graph.
@@ -53,26 +54,29 @@ See [troubleshooting](#troubleshooting) for common issues encountered when build
 $ yarn dev
 ``` 
 
-### Qdrant
+#### Prerequisites
+
+##### Qdrant
 
 SOND3R runs a qdrant instance as a side car. To install the image, run the following:
 
 Do not run this from root unless you change the name of the tmp dir (else do not delete it!)
 ``` sh
-mkdir /tmp
+mkdir ~/fangorn/sonder/tmp
 mkdir -p ~/fangorn/sonder/app/resources/qdrant
-cd /tmp
+cd ~/fangorn/sonder/tmp
 curl -L -o qdrant.tar.gz https://github.com/qdrant/qdrant/releases/latest/download/qdrant-x86_64-unknown-linux-gnu.tar.gz
 tar xzf qdrant.tar.gz
 mv qdrant ~/fangorn/sonder/app/resources/qdrant/qdrant
 chmod +x ~/fangorn/sonder/app/resources/qdrant/qdrant
-rm -rf ./tmp
+cd ~/fangorn/sonder && rm -rf ~/fangorn/sonder/tmp
 
 # confirm it is available
 ~/fangorn/sonder/app/resources/qdrant/qdrant --version
 ```
 
-#### Linux
+##### Install Python deps
+
 Navigate to `vectordb` and activate your venv
 
 ```bash
@@ -86,7 +90,7 @@ If needed, install `pyinstaller`
 pip install pyinstaller
 ```
 
-Then build your binary
+For releases, yoau must then build the binary
 ```bash
 pyinstaller --onefile --name server \
   --distpath dist/linux \
@@ -96,7 +100,7 @@ pyinstaller --onefile --name server \
 
 #### Windows
 
-Windows operates slightly differently. We recommend that you use [conda]() for a hassle-free build experience.
+Windows operates slightly differently. We recommend that you use [conda](https://docs.conda.io/projects/conda/en/stable/user-guide/install/windows.html) for a hassle-free build experience.
 
 ```sh
 conda create -n vectordb-build python=3.1 -y

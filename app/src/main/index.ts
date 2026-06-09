@@ -249,8 +249,8 @@ if (app.isPackaged) {
   dotenv.config({ path: path.resolve(process.cwd(), '.env') })
 }
 
-const SNAPSHOT_GATEWAY =
-  (import.meta as any).env?.VITE_PINATA_GATEWAY ?? 'https://gateway.pinata.cloud/ipfs'
+const SNAPSHOT_GATEWAY = "https://green-reasonable-heron-957.mypinata.cloud/ipfs"
+// (import.meta as any).env?.VITE_PINATA_GATEWAY ?? 'https://gateway.pinata.cloud/ipfs'
 
 // For now a pinned constant. Later: read the latest sond3r.embeddings.snapshot
 // record off Fangorn and return its cid + checksum, so a new catalog ships
@@ -272,12 +272,15 @@ function qdrantBin(): string {
 
 function startQdrant() {
   const storage = path.join(app.getPath('userData'), 'qdrant_storage')
+  const snapshotsDir = path.join(app.getPath('userData'), 'qdrant_snapshots')
   fs.mkdirSync(storage, { recursive: true })
+  fs.mkdirSync(snapshotsDir, { recursive: true })
 
   qdrantProc = spawn(qdrantBin(), [], {
     env: {
       ...process.env,
       QDRANT__STORAGE__STORAGE_PATH: storage,
+      QDRANT__STORAGE__SNAPSHOTS_PATH: snapshotsDir,
       QDRANT__SERVICE__HTTP_PORT: '6333',
       QDRANT__SERVICE__GRPC_PORT: '6334',
       QDRANT__SERVICE__HOST: '127.0.0.1',   // localhost only, never exposed
@@ -304,14 +307,14 @@ async function waitForReady(url: string, timeoutMs = 60000): Promise<void> {
 
 // Download the gzipped snapshot from IPFS, streaming progress to the window.
 async function downloadGz(cid: string, dest: string, win: BrowserWindow): Promise<void> {
-  const res = await net.fetch(`${SNAPSHOT_GATEWAY}/${cid}`)
+  const res = await fetch(`${SNAPSHOT_GATEWAY}/${cid}`)   // global Node fetch
   if (!res.ok || !res.body) throw new Error(`snapshot download failed: ${res.status}`)
 
   const total = Number(res.headers.get('content-length')) || 0
-  const out = createWriteStream(dest)   // truncates any partial prior download
+  const out = createWriteStream(dest)
   let received = 0
 
-  const reader = (res.body as ReadableStream<Uint8Array>).getReader()
+  const reader = (res.body as any).getReader()
   for (; ;) {
     const { done, value } = await reader.read()
     if (done) break
@@ -340,12 +343,16 @@ async function gunzipVerify(gzPath: string, outPath: string, sha256: string): Pr
 async function ensureCollection(win: BrowserWindow): Promise<void> {
   const exists = await net.fetch('http://127.0.0.1:6333/collections/fangorn')
     .then((r) => r.ok).catch(() => false)
-  if (exists) return   // cached from a previous run
+  if (exists) return
 
   const { cid, sha256 } = await resolveSnapshot()
   const userData = app.getPath('userData')
   const gzPath = path.join(userData, 'fangorn.snapshot.gz')
-  const snapPath = path.join(userData, 'fangorn.snapshot')
+
+  // must live inside Qdrant's snapshots dir or recover 403s
+  const snapDir = path.join(userData, 'qdrant_snapshots', 'fangorn')
+  fs.mkdirSync(snapDir, { recursive: true })
+  const snapPath = path.join(snapDir, 'fangorn.snapshot')
 
   win.webContents.send('snapshot:status', 'downloading')
   await downloadGz(cid, gzPath, win)
@@ -362,7 +369,6 @@ async function ensureCollection(win: BrowserWindow): Promise<void> {
   })
   if (!res.ok) throw new Error(`recover failed: ${res.status} ${await res.text()}`)
 
-  // Collection now lives in qdrant_storage; the loose .snapshot is redundant.
   try { fs.unlinkSync(snapPath) } catch { }
 }
 

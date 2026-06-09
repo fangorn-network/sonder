@@ -258,9 +258,9 @@ const SNAPSHOT_GATEWAY = "https://green-reasonable-heron-957.mypinata.cloud/ipfs
 // without an app update. Keep this the single source of truth for the artifact.
 async function resolveSnapshot(): Promise<{ cid: string; sha256: string }> {
   return {
-    cid: 'bafybeih6bj6iakbm5nodxriddi4q7xhiw77ok53d67q7omkuvrvi7ta3mm',
+    cid: 'bafybeifn2ddof4aasmvg2mf3ufc67tkxphf2w5jqucmkev4newmf7okg3u',
     // sha256 of the DECOMPRESSED .snapshot ('' skips verification while testing)
-    sha256: '99ebbd07cc80fb4cb755ad8c250ee99d0ec5ae59efe6460741cdc95053df9691',
+    sha256: '957de00bfc8df0ab1388b7556889ef924c7a7136164389ce0db2d312b8f083dd',
   }
 }
 
@@ -379,10 +379,12 @@ function startQueryServer() {
 
   // Read-only: proxies Qdrant and embeds text queries with nomic. No schema args,
   // no chroma path, no checkpoint, no graph key — that all moved to the builder.
+  // The vector dim is read from the recovered snapshot's collection (and query
+  // embeddings are Matryoshka-truncated to match), so nothing is hardcoded here.
   const [bin, args, cwd]: [string, string[], string] = app.isPackaged
     ? [
       path.join(root, serverName),
-      ['--collection', 'fangorn', '--dim', '256'],
+      ['--collection', 'fangorn'],
       root,
     ]
     : [
@@ -390,7 +392,6 @@ function startQueryServer() {
       [
         path.join(root, 'vectordb/server.py'),
         '--collection', 'fangorn',
-        '--dim', '256',
       ],
       path.join(root, 'vectordb'),
     ]

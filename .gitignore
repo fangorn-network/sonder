@@ -40,5 +40,6 @@ db/
 !**/.yarn/plugins
 !**/.yarn/sdks
 !**/.yarn/versions
+**/resources/
 **/qdrant_storage
 .qdrant-initialized

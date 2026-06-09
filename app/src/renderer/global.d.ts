@@ -1,4 +1,4 @@
-import {FangornAgentApi} from "../preload"
+import {FangornAgentApi, LocalMusicApi} from "../preload"
 
 // src/renderer/src/env.d.ts or global.d.ts
 declare global {
@@ -8,5 +8,6 @@ declare global {
       spotifyRefresh: (token: string) => Promise<{ access_token: string; expires_in: number; refresh_token?: string }>
     }
     agentAPI: FangornAgentApi;
-  } 
+    localMusic: LocalMusicApi;
+  }
 }

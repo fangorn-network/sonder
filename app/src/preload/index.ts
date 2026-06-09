@@ -3,6 +3,26 @@ import { electronAPI } from '@electron-toolkit/preload'
 import type { AgentProviderConfig, ProviderStatus } from "../main/agent/agent-provider-manager";
 import type { OllamaStatus } from "../main/agent/ollama-manager";
 import type { FangornAgentResponse } from "@fangorn-network/agent";
+import type { LocalTrack } from "../main/local/types";
+
+// ── Local on-disk music ────────────────────────────────────────────────
+export interface LocalMusicApi {
+  /** OS-standard music folder (~/Music, %USERPROFILE%\Music, …). */
+  defaultDir(): Promise<string>
+  /** Last folder the user picked, or the default if none. */
+  getDir(): Promise<string>
+  /** Native folder picker. Returns the chosen path, or null if cancelled. */
+  pickDir(): Promise<string | null>
+  /** Recursively scan `dir` (defaults to the saved/default dir) for audio files. */
+  scan(dir?: string): Promise<LocalTrack[]>
+}
+
+const localMusic: LocalMusicApi = {
+  defaultDir: () => ipcRenderer.invoke('local:default-dir'),
+  getDir: () => ipcRenderer.invoke('local:get-dir'),
+  pickDir: () => ipcRenderer.invoke('local:pick-dir'),
+  scan: (dir?: string) => ipcRenderer.invoke('local:scan', dir),
+}
 
 // Custom APIs for renderer
 const api = {
@@ -88,6 +108,11 @@ if (process.contextIsolated) {
       isBackendReady: () => ipcRenderer.invoke('backend:is-ready'),
     })
 
+    // ── Local on-disk music ──────────────────────────────────────────
+    // Pick a folder, scan it, and play files in-app via <audio>. Standalone
+    // from the catalog player — see main/local/* and LocalMusicProvider.
+    contextBridge.exposeInMainWorld('localMusic', localMusic)
+
   } catch (error) {
     console.error(error)
   }
@@ -96,6 +121,8 @@ if (process.contextIsolated) {
   window.electron = electronAPI
   // @ts-ignore (define in dts)
   window.api = api
+  // @ts-ignore (define in dts)
+  window.localMusic = localMusic
 }
 
 

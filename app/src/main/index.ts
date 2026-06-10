@@ -266,9 +266,9 @@ async function resolveSnapshot(): Promise<{ cid: string; sha256: string }> {
 
 function qdrantBin(): string {
   const ext = process.platform === 'win32' ? '.exe' : ''
-  return app.isPackaged
-    ? path.join(process.resourcesPath, 'qdrant', `qdrant${ext}`)
-    : path.join(app.getAppPath(), 'resources', 'qdrant', `qdrant${ext}`)
+  if (app.isPackaged) return path.join(process.resourcesPath, 'qdrant', `qdrant${ext}`)
+  const dir = process.platform === 'win32' ? 'win' : process.platform === 'darwin' ? 'mac' : 'linux'
+  return path.join(app.getAppPath(), 'resources', 'qdrant', dir, `qdrant${ext}`)
 }
 
 function startQdrant() {

@@ -1,5 +1,4 @@
 aiohttp
-chromadb
 fastapi
 fastembed
 requests

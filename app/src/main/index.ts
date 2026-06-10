@@ -93,7 +93,7 @@ function getYtDlpBin(): string {
   const updatable = path.join(app.getPath('userData'), `yt-dlp${ext}`)
   if (fs.existsSync(updatable)) return updatable
   if (app.isPackaged) return path.join(process.resourcesPath, 'bin', `yt-dlp${ext}`)
-  const dir = process.platform === 'win32' ? 'win' : 'linux'
+  const dir = process.platform === 'win32' ? 'win' : process.platform === 'darwin' ? 'mac' : 'linux'
   return path.join(app.getAppPath(), 'resources', 'bin', dir, `yt-dlp${ext}`)
 }
 
@@ -629,6 +629,13 @@ async function bootstrap() {
   } else {
     console.log('[agent] No provider configured — setup wizard will appear.')
   }
+}
+
+// ─── Dev sandbox (Linux) ─────────────────────────────────────────────────────
+// In dev we run unsandboxed so onboarding needs no root `chown/chmod 4755` on
+// node_modules/electron/dist/chrome-sandbox. Packaged builds keep the sandbox.
+if (is.dev && process.platform === 'linux') {
+  app.commandLine.appendSwitch('no-sandbox')
 }
 
 // ─── GPU acceleration (WSL2 / Linux) ─────────────────────────────────────────

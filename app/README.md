@@ -8,114 +8,40 @@ An Electron application with React and TypeScript
 
 - [VSCode](https://code.visualstudio.com/) + [ESLint](https://marketplace.visualstudio.com/items?itemName=dbaeumer.vscode-eslint) + [Prettier](https://marketplace.visualstudio.com/items?itemName=esbenp.prettier-vscode)
 
-## Project Setup
+## Quick start
 
-### Prerequisites
-
-Setup environment variables
-
-``` sh
-touch .env
-```
-
-and paste:
-
-``` 
-VITE_ARBITRUM_SEPOLIA_RPC_URL=
-VITE_USE_AGENT=true
-VITE_GRAPH_API_KEY=
-VITE_SPOTIFY_CLIENT_ID=
-VITE_SPOTIFY_CLIENT_SECRET=
-VITE_PINATA_GATEWAY=
-```
-
-You will need to fetch a spotify client/secret and an api key for the Graph.
-
-### Install
-
-We recommend using a linux environment for an optimal developer exeperience.
-
-##### Linux
-```bash
-$ yarn install
-```
-
-#### Windows
-
-``` bash
-Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
-.\install_windows.ps1
-```
-See [troubleshooting](#troubleshooting) for common issues encountered when building on windows. 
-
-### Development
+Requirements: **Node 22** (Corepack enables Yarn 4), **Python 3.12+**, and `tar` on your PATH. `ffmpeg` is optional (audio extraction).
 
 ```bash
-$ yarn dev
-``` 
-
-#### Prerequisites
-
-##### Qdrant
-
-SOND3R runs a qdrant instance as a side car. To install the image, run the following:
-
-Do not run this from root unless you change the name of the tmp dir (else do not delete it!)
-``` sh
-mkdir ~/fangorn/sonder/tmp
-mkdir -p ~/fangorn/sonder/app/resources/qdrant
-cd ~/fangorn/sonder/tmp
-curl -L -o qdrant.tar.gz https://github.com/qdrant/qdrant/releases/latest/download/qdrant-x86_64-unknown-linux-gnu.tar.gz
-tar xzf qdrant.tar.gz
-mv qdrant ~/fangorn/sonder/app/resources/qdrant/qdrant
-chmod +x ~/fangorn/sonder/app/resources/qdrant/qdrant
-cd ~/fangorn/sonder && rm -rf ~/fangorn/sonder/tmp
-
-# confirm it is available
-~/fangorn/sonder/app/resources/qdrant/qdrant --version
+yarn install   # deps + native-module rebuild
+yarn dev       # first run auto-provisions the dev backend, then launches
 ```
 
-##### Install Python deps
+That's the whole flow. The first `yarn dev` runs a one-time setup (`scripts/setup.mjs`, also available as `yarn setup`) that provisions everything a fresh clone is missing, **per-OS**:
 
-Navigate to `vectordb` and activate your venv
+- **`.env`** — copied from `.env.example`. Fill in real values to enable auth / Firebase / Spotify / catalog features; the app still launches with blanks.
+- **yt-dlp** → `resources/bin/<os>/`.
+- **Qdrant** sidecar engine (pinned `v1.18.2`) → downloaded + extracted to `resources/qdrant/<os>/`.
+- **Python venv** → `vectordb/venv` created and `requirements.txt` installed (powers the vector-search query server). Don't need search? `SKIP_PY_SETUP=1 yarn dev`.
+
+Setup is idempotent (re-runs fetch only what's missing) and never blocks `yarn dev` — anything it can't provision degrades gracefully with a `⚠` warning.
+
+> **Linux:** dev runs Electron with `--no-sandbox`, so there's no root `chown/chmod 4755` step on `chrome-sandbox`. Packaged builds keep the Chromium sandbox.
+
+### Environment variables
+
+`.env` is generated for you from `.env.example` (the full list lives there). To actually exercise the integrations you'll need real credentials: a Spotify client/secret, a Graph API key, and Pinata/Firebase values.
+
+### The server binary (release builds only)
+
+`yarn dev` runs the Python server straight from `vectordb/venv`. **Packaged** builds instead bundle a PyInstaller binary at `vectordb/dist/<os>/server`. CI builds this automatically (see `.github/workflows/build.yml`); you only need it for a local `yarn build:*`:
 
 ```bash
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-```
-
-If needed, install `pyinstaller`
-```bash
-pip install pyinstaller
-```
-
-For releases, yoau must then build the binary
-```bash
-pyinstaller --onefile --name server \
-  --distpath dist/linux \
+cd vectordb && source venv/bin/activate && pip install pyinstaller
+pyinstaller --onefile --name server --distpath dist/<os> \
   $(pip list --format=freeze | cut -d= -f1 | xargs -I{} echo "--collect-submodules {}") \
   server.py
 ```
-
-#### Windows
-
-Windows operates slightly differently. We recommend that you use [conda](https://docs.conda.io/projects/conda/en/stable/user-guide/install/windows.html) for a hassle-free build experience.
-
-```sh
-conda create -n vectordb-build python=3.1 -y
-conda activate vectordb-build
-pip install -r requirements.txt
-pip install pyinstaller
-
-$certPath = (python -c "import certifi; print(certifi.where())").Trim()
-$pyiArgs = @("--onefile", "--name", "server", "--add-data", "$certPath;certifi")
-pip list --format=freeze | ForEach-Object { $_.Split('=')[0] } | ForEach-Object { $pyiArgs += "--collect-all"; $pyiArgs += $_ }
-$pyiArgs += "server.py"
-& pyinstaller @pyiArgs
-```
-
-Move the file to `vectordb/dist/win` for windows, `vectordb/dist/linux`, and so on
 
 ### Build
 

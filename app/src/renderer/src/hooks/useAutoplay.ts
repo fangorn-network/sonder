@@ -1,36 +1,18 @@
 import { useCallback, useRef, useState } from 'react'
-import type { Track, JoinedRecord } from '../types'
+import type { Track } from '../types'
 import { asTrack } from '../types'
+import { toRecordVM } from '../domain/recordVM'
+import { getCachedSchema } from '../domain/roles'
 import type { WeightedHit } from '../kernel/types'
 
 // The kernel's ChromaHit type says `metadata` but the actual server
 // response shape has `fields` — same as every other chroma result in the app.
-// Cast to any to read what's actually there.
+// Cast to any to read what's actually there, then project through roles.
 function hitToTrack(wh: WeightedHit): Track | null {
   const raw = wh as any
   if (!raw.fields) return null
-
-  const record: JoinedRecord = {
-    id:          raw.id,
-    trackId:     raw.trackId ?? raw.fields?.trackId ?? raw.id.replace(/^track:/, ''),
-    owner:       raw.owner       ?? '',
-    manifestCid: raw.manifestCid ?? '',
-    fields:      raw.fields,
-    embedding:   raw.embedding,
-    score:       wh.weight,
-    distance:    wh.distance,
-  }
-
-  const track = asTrack(record)
-  if (!track) return null
-
-  return {
-    ...track,
-    genres:   Array.isArray(raw.fields.genres)   ? raw.fields.genres   : [],
-    moods:    Array.isArray(raw.fields.moods)     ? raw.fields.moods    : [],
-    themes:   Array.isArray(raw.fields.themes)    ? raw.fields.themes   : [],
-    contexts: Array.isArray(raw.fields.contexts)  ? raw.fields.contexts : [],
-  }
+  const vm = toRecordVM({ ...raw, score: wh.weight, distance: wh.distance }, getCachedSchema()?.roles ?? null)
+  return asTrack(vm)
 }
 
 export function useAutoplay(

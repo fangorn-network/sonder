@@ -1,6 +1,7 @@
 aiohttp
-chromadb
 fastapi
+fastembed
 requests
 umap-learn
 uvicorn[standard]
+qdrant-client

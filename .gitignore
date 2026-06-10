@@ -25,12 +25,14 @@ dist-ssr
 **/node_modules
 
 music-data/data
-music-data/ia-data
+music-data/ia   -data
 deploy.sh
 
+cuda**
+db/
 .env
-**/.venv
-**/venv
+**/.venv**
+**/venv**   
 **/db/*
 **/.yarn/*
 !**/.yarn/releases
@@ -38,6 +40,6 @@ deploy.sh
 !**/.yarn/plugins
 !**/.yarn/sdks
 !**/.yarn/versions
-**/stage_volumes/
-**/volume*.json
-**/volume*.jsonl
+**/resources/
+**/qdrant_storage
+.qdrant-initialized

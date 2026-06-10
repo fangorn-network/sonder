@@ -1,17 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { BrowseView } from './views/BrowseView'
 import { AgentView } from './views/AgentView'
-import type { RecommendedTracks, Track, ViewName } from './types'
+import type { Track } from './types'
 import './App.css'
-import { PlayerBar } from './components/PlayerBar'
 import { NowPlaying } from './components/NowPlaying'
+import { NowPlayingStrip } from './components/NowPlayingStrip'
 import { createPortal } from 'react-dom'
 import { usePrivy } from '@privy-io/react-auth'
 import { PlayerProvider } from './providers/PlayerProvider'
-import { SpotifyAuthProvider, useSpotifyAuth } from './providers/SpotifyAuthProvider'
-import { SpotifyProvider } from './context/SpotifyContext'
+import { SpotifyAuthProvider } from './providers/SpotifyAuthProvider'
+import { SpotifyProvider, useSpotifyContext } from './context/SpotifyContext'
 import { useFangornAgent } from './hooks/useFangornAgent'
-import { agentResultToTracks } from './utils/agentToTrack'
 import { useChroma } from './hooks/useChroma'
 import { StartupView } from './views/StartupView'
 import { useSessionKernel } from './hooks/useSessionKernel'
@@ -25,22 +23,32 @@ import { useAgentContext } from './context/useAgentContext'
 import { useSpotify } from './hooks/useSpotifyContext'
 import { usePlaybackRouter } from './hooks/usePlaybackRouter'
 import { useAutoplay } from './hooks/useAutoplay'
-import { useMediaSearch } from './hooks/useMediaSearch'
-import { ArtistNeighborhoodView } from './views/ArtistNeighborhoodView'
-import { TrackWikiView } from './views/TrackWikiView'
-import { CatalogGalaxyView } from './views/CatalogGalaxyView'
-import { KernelView } from './views/kernel/KernelView'
+import { TrackWikiView, type View, type SearchMode, viewLabel } from './views/TrackWikiView'
+import { SoundTownView } from './views/SoundTownView'
+import { LocalMusicView } from './views/LocalMusicView'
+import { LocalMusicProvider } from './providers/LocalMusicProvider'
+import { KernelStrip, type KernelStripProps } from './components/KernelStrip'
+import { DEFAULTS } from './kernel/constants'
 import type { KernelSnapshot } from './types/kernel'
+import type { TrackNeighborData } from './kernel/neighborhoodAnalysis'
 
+// ── Design tokens (light editorial) ──────────────────────────────────────────
+const BG1    = '#f0ece5'
+const BG2    = '#e8e3da'
+const FG     = '#1a1714'
+const FG2    = '#4a4440'
+const FG3    = '#766e66'
+const FG4    = '#a09890'
+const ACCENT = '#b83030'
+const BORDER = 'rgba(0,0,0,0.12)'
+const BORDER2 = 'rgba(0,0,0,0.07)'
+const MONO   = 'var(--font-mono,"Fragment Mono","DM Mono",monospace)'
+const SANS   = 'var(--font-body,"Geist","Inter",sans-serif)'
+const DISP   = 'var(--font-display,"Bebas Neue",sans-serif)'
+const CHROMA_URL = 'http://localhost:8080'
 
 const SNAPSHOT_HISTORY_DEPTH = 5
-const SCROLL_THRESHOLD = 10
 const MB_USER_AGENT = 'SOND3R/1.0.0 (https://fangorn.network)'
-
-window.addEventListener('scroll', () => {
-  document.querySelector('.header')!
-    .classList.toggle('scrolled', window.scrollY > SCROLL_THRESHOLD)
-}, { passive: true })
 
 const onTrackEndedRef = { current: () => { } }
 
@@ -57,19 +65,18 @@ export default function App() {
   if (!booted) {
     return (
       <StartupView onReady={handleBooted}>
-        <ConnectButton
-          ready={ready}
-          authenticated={authenticated}
-          onLogin={login}
-          onEnter={handleBooted}
-        />
+        <ConnectButton ready={ready} authenticated={authenticated} onLogin={login} onEnter={handleBooted} />
       </StartupView>
     )
   }
 
   if (!ready) return <BootSplash />
 
-  return <Main />
+  return (
+    <SpotifyAuthProvider>
+      <Main />
+    </SpotifyAuthProvider>
+  )
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
@@ -82,36 +89,80 @@ function Main() {
   const kernel = useSessionKernel({ entropy })
 
   const [genreWeights, setGenreWeights] = useState<Record<string, number>>({})
-  const [showConnectors, setShowConnectors] = useState(false)
-  const [view, setView] = useState<ViewName>('Discover')
-  const [nowPlaying, setNowPlaying] = useState<null | 'player' | { track: Track; color: string }>(null)
 
-  const [analyzeQuery, setAnalyzeQuery] = useState<string | null>(null)
-  const [analyzeTab, setAnalyzeTab] = useState<AnalyzeTab>('wiki')
+  // ── Wiki navigation state (lifted from TrackWikiView) ─────────────────────
+  const [wikiView, setWikiView] = useState<View>({ kind: 'home' })
+  const [wikiStack, setWikiStack] = useState<View[]>([])
+  const [wikiSearchBox, setWikiSearchBox] = useState('')
 
-  const handleAnalyzeTrack = useCallback((track: Track) => {
-    const q = [track.artist, track.title].filter(Boolean).join(' – ')
-    setAnalyzeQuery(q)
-    setAnalyzeTab('wiki')
-    setView('Analyze')
-    setShowConnectors(false)
-    setNowPlaying(null)
+  const wikiNavigate = useCallback((next: View) => {
+    setWikiStack(s => [...s, wikiView])
+    setWikiView(next)
+    if (next.kind === 'results') setWikiSearchBox(next.query)
+  }, [wikiView])
+
+  const wikiBack = useCallback(() => {
+    setWikiStack(s => {
+      if (!s.length) return s
+      const prev = s[s.length - 1]
+      setWikiView(prev)
+      if (prev.kind === 'results') setWikiSearchBox(prev.query)
+      return s.slice(0, -1)
+    })
   }, [])
 
-  const handleAnalyzeQueryConsumed = useCallback(() => setAnalyzeQuery(null), [])
+  const wikiGoTo = useCallback((index: number) => {
+    setWikiStack(s => {
+      const full = [...s, wikiView]
+      const target = full[index]
+      if (target) {
+        setWikiView(target)
+        if (target.kind === 'results') setWikiSearchBox(target.query)
+      }
+      return full.slice(0, index)
+    })
+  }, [wikiView])
 
-  const [genreFilter, setGenreFilter] = useState('all')
-  const [moodFilter, setMoodFilter] = useState('all')
-  const [contextFilter, setContextFilter] = useState('all')
+  const wikiRunSearch = useCallback((q: string, mode: SearchMode = 'lexical') => {
+    const t = q.trim(); if (!t) return
+    wikiNavigate({ kind: 'results', query: t, mode })
+  }, [wikiNavigate])
+
+  const wikiCrumbs = useMemo(() => [...wikiStack, wikiView], [wikiStack, wikiView])
+
+  // ── UI state ──────────────────────────────────────────────────────────────
+  const [showSettings, setShowSettings] = useState(false)
+  const [nowPlayingOpen, setNowPlayingOpen] = useState(false)
+  const [showGalaxy, setShowGalaxy] = useState(false)
+  const [showLocal, setShowLocal] = useState(false)
+
+  // ── Kernel / chroma ───────────────────────────────────────────────────────
 
   const {
-    tracks, loading, loadingMore, error, hasMore, loadMore,
-    applyKernelQuery, search, setSearch,
+    tracks, loading,
     allGenres, allMoods, allContexts, allThemes,
     chromaReady, seeding, retryConnect,
-  } = useChroma({ genreFilter, moodFilter, contextFilter })
+    applyKernelQuery, roleMap,
+  } = useChroma({ genreFilter: 'all', moodFilter: 'all', contextFilter: 'all' })
 
-  const { tracks: ytTracks, loading: ytLoading, search: ytSearch, clear: ytClear } = useMediaSearch()
+  // Kernel readout props, derived once from live kernel state. Shared by the
+  // KernelStrip mounted above the wiki and the one inside the game view.
+  const kernelStrip: KernelStripProps = useMemo(() => ({
+    momentum:          Array.from(kernel.state.v ?? []),
+    attractorDistance: kernel.state.sigma,
+    entropyScore:      kernel.state.entropy,
+    alpha:             DEFAULTS.alpha,
+    gamma:             DEFAULTS.gamma_base,
+    mutedCount:        kernel.state.muted?.size ?? 0,
+    sessionLength:     kernel.state.t,
+  }), [kernel.state])
+
+  // Playback capability. Ideally gated on a `media` role (a playable handle),
+  // but for now we also enable it whenever records are track-like — i.e. the
+  // identity field is `trackId` — so the music catalog keeps its preview/Spotify
+  // playback even with only the invariant/taxonomy schemas loaded (no
+  // AudioSource → no media role). Non-track datasets (e.g. OSM) stay player-less.
+  const canPlay = !!roleMap?.media || roleMap?.identity === 'trackId' || !roleMap
 
   const { sendMessage } = useFangornAgent()
 
@@ -121,60 +172,8 @@ function Main() {
 
   const agentContext = useAgentContext(sendMessage, contextHints)
 
-  // ─── MusicBrainz fallback ───────────────────────────────────────────────────
+  // ── Signals ───────────────────────────────────────────────────────────────
 
-  const [fallbackTracks, setFallbackTracks] = useState<Track[]>([])
-  const [fallbackLoading, setFallbackLoading] = useState(false)
-
-  const handleSetSearch = useCallback((q: string) => {
-    setSearch(q)
-    if (!q.trim()) { setFallbackTracks([]); setFallbackLoading(false) }
-  }, [setSearch])
-
-  const handleFallbackClear = useCallback(() => {
-    setFallbackTracks([])
-    setFallbackLoading(false)
-  }, [])
-
-  const handleMusicBrainzSearch = useCallback(async (query: string) => {
-    if (!query.trim()) return
-    setFallbackLoading(true)
-    setFallbackTracks([])
-    try {
-      const fallbackQuery = `recording:"${query.trim()}"`
-      const url = `https://musicbrainz.org/ws/2/recording?query=${encodeURIComponent(fallbackQuery)}&limit=25&fmt=json`
-      const { body } = await (window as any).electron.ipcRenderer.invoke('fetch:proxy', {
-        url,
-        options: { headers: { 'User-Agent': MB_USER_AGENT } },
-      })
-      const data = JSON.parse(body)
-      const toTrack = (rec: any): Track => {
-        const artist = (rec['artist-credit'] ?? [])
-          .map((c: any) => c.name ?? c.artist?.name ?? '')
-          .filter(Boolean).join(', ') || 'Unknown Artist'
-        const yearInt = parseInt((rec.releases?.[0]?.date ?? '').split('-')[0], 10)
-        return {
-          id: rec.id, trackId: rec.id, owner: '', manifestCid: '',
-          title: rec.title, artist,
-          year: isNaN(yearInt) ? null : yearInt,
-          durationMs: rec.length ?? null,
-        }
-      }
-      setFallbackTracks((data.recordings ?? []).map(toTrack))
-    } catch (e) {
-      console.warn('[mb] search failed:', e)
-    } finally {
-      setFallbackLoading(false)
-    }
-  }, [])
-
-  // ─── Recommendations ────────────────────────────────────────────────────────
-
-  const [recommendedTracks, setRecommendedTracks] = useState<RecommendedTracks | null>(null)
-  const [recommendLoading, setRecommendLoading] = useState(false)
-
-  const filteredTracksRef = useRef<Track[]>([])
-  const playingIdRef = useRef<string | null>(null)
   const recentPlaysRef = useRef<string[]>([])
   const recentSkipsRef = useRef<string[]>([])
 
@@ -192,11 +191,10 @@ function Main() {
     return () => document.removeEventListener('visibilitychange', handler)
   }, [])
 
-  useChromaSync({ enabled: visible })
+  // useChromaSync({ enabled: visible })
 
+  // ── Taste profile ─────────────────────────────────────────────────────────
 
-  // taste profiles
-  // Track active profile across sessions
   const [activeProfileName, setActiveProfileName] = useState<string>(() => {
     const id = localStorage.getItem('sond3r:activeProfile')
     if (!id) return 'default'
@@ -206,7 +204,6 @@ function Main() {
     } catch { return 'default' }
   })
 
-  // On mount, restore the last active profile
   useEffect(() => {
     const id = localStorage.getItem('sond3r:activeProfile')
     if (!id) return
@@ -221,8 +218,6 @@ function Main() {
     } catch { /* ignore */ }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ─── Signals ────────────────────────────────────────────────────────────────
-
   const handleSignal = useCallback(async (signal: TasteSignal) => {
     const { type, track } = signal
     if (type !== 'play' && type !== 'skip') return
@@ -232,12 +227,9 @@ function Main() {
         ? new Float32Array((track as any).embedding)
         : await kernel.embedText(label)
       const meta = {
-        trackId: track.id,
-        artistId: track.artist,
-        genres: (track as any).genres ?? [],
-        moods: (track as any).moods ?? [],
-        themes: (track as any).themes ?? [],
-        contexts: (track as any).contexts ?? [],
+        trackId: track.id, artistId: track.artist,
+        genres: (track as any).genres ?? [], moods: (track as any).moods ?? [],
+        themes: (track as any).themes ?? [], contexts: (track as any).contexts ?? [],
         durationMs: track.durationMs ?? 0,
       }
       if (type === 'play') {
@@ -266,24 +258,13 @@ function Main() {
   const handleSignalRef = useRef(handleSignal)
   handleSignalRef.current = handleSignal
 
-  const ytTracksRef = useRef(ytTracks)
-  const fallbackTracksRef = useRef(fallbackTracks)
-  useEffect(() => { ytTracksRef.current = ytTracks }, [ytTracks])
-  useEffect(() => { fallbackTracksRef.current = fallbackTracks }, [fallbackTracks])
-
-  // ─── Playback router ─────────────────────────────────────────────────────────
+  // ── Playback router ───────────────────────────────────────────────────────
 
   const { play, markNaturalEnd, state: playbackState } = usePlaybackRouter(spotify, {
-    onSkip: useCallback((trackId: string) => {
-      const skipped =
-        filteredTracksRef.current.find(t => t.id === trackId) ??
-        ytTracksRef.current.find(t => t.id === trackId) ??
-        fallbackTracksRef.current.find(t => t.id === trackId)
-      if (skipped) handleSignalRef.current({ type: 'skip', track: skipped, weight: 1.0 })
+    onSkip: useCallback((_trackId: string) => {
+      // skip signals from wiki play wired up via handleWikiPlay below
     }, []),
   })
-
-  // ─── Autoplay ────────────────────────────────────────────────────────────────
 
   const { nextTrack, prefetchNext, playNext } = useAutoplay(kernel, play)
 
@@ -292,35 +273,53 @@ function Main() {
   }, [playbackState.trackId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    onTrackEndedRef.current = () => {
-      markNaturalEnd()
-      playNext()
-    }
+    onTrackEndedRef.current = () => { markNaturalEnd(); playNext() }
   }, [playNext, markNaturalEnd])
-  // ─── Agent context entropy ───────────────────────────────────────────────────
 
   useEffect(() => {
     setEntropy(agentContext.context?.kernelOverrides?.entropy ?? 0.2)
   }, [agentContext.context])
 
-  // ─── Startup prefetch ────────────────────────────────────────────────────────
+  // ── Wiki play adapter (TrackNeighborData → playback router) ───────────────
+  // Play the exact track the user picked. The Spotify adapter resolves by
+  // title + artist, so we pass those through verbatim — no fuzzy YouTube/
+  // SoundCloud pre-search (which could surface an unrelated podcast/cover and
+  // hand Spotify the wrong query).
+
+  const handleWikiPlay = useCallback((track: TrackNeighborData) => {
+    play({
+      id: track.id, trackId: track.id, owner: '', manifestCid: '',
+      title: track.title, artist: track.artist, year: null,
+      durationMs: track.durationMs ?? null,
+    })
+    handleSignalRef.current({
+      type: 'play', weight: 1.0,
+      track: {
+        id: track.id, trackId: track.id, owner: '', manifestCid: '',
+        title: track.title, artist: track.artist, year: null,
+        durationMs: track.durationMs ?? null,
+        genres: track.genres, moods: track.moods,
+        themes: track.themes, contexts: track.contexts,
+      },
+    })
+  }, [play])
+
+  // ── Startup prefetch ──────────────────────────────────────────────────────
 
   const startupFiredRef = useRef(false)
-
   const kernelTopGenres = Object.entries(genreWeights)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 6)
-    .map(([genre]) => genre)
+    .sort((a, b) => b[1] - a[1]).slice(0, 6).map(([g]) => g)
 
   useEffect(() => {
     if (!chromaReady || loading || startupFiredRef.current) return
     startupFiredRef.current = true
     const query = buildStartupQuery(kernelTopGenres)
-    console.log('[app] startup prefetch →', query)
     kernel.embedText(query)
       .then(vec => applyKernelQuery(Array.from(vec), true))
       .catch(e => console.warn('[app] startup embed failed:', e))
-  }, [chromaReady, loading, kernelTopGenres])
+    // Warm the UMAP projection cache so the galaxy view loads faster
+    fetch(`${CHROMA_URL}/catalog/map`).catch(() => {})
+  }, [chromaReady, loading, kernelTopGenres]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function buildStartupQuery(topGenres?: string[]): string {
     const slot = getTimeSlot()
@@ -330,54 +329,15 @@ function Main() {
   }
 
   interface TimeSlot { moods: string[]; genres: string[] }
-
   function getTimeSlot(): TimeSlot {
     const h = new Date().getHours()
-    if (h >= 5 && h < 11) return { moods: ['energetic', 'uplifting', 'focused', 'bright'], genres: ['indie pop', 'math rock', 'post-rock', 'funk', 'electronic'] }
+    if (h >= 5 && h < 11)  return { moods: ['energetic', 'uplifting', 'focused', 'bright'], genres: ['indie pop', 'math rock', 'post-rock', 'funk', 'electronic'] }
     if (h >= 11 && h < 14) return { moods: ['driving', 'confident', 'punchy'], genres: ['alternative', 'rock', 'electronic', 'hip hop'] }
     if (h >= 14 && h < 18) return { moods: ['focused', 'deep', 'hypnotic', 'complex'], genres: ['post-rock', 'math rock', 'prog', 'industrial', 'ambient'] }
     if (h >= 18 && h < 22) return { moods: ['chill', 'warm', 'melodic', 'emotional'], genres: ['shoegaze', 'dream pop', 'indie', 'post-hardcore', 'chillwave'] }
     return { moods: ['dark', 'introspective', 'atmospheric', 'melancholic'], genres: ['darkwave', 'ambient', 'post-punk', 'industrial', 'doom'] }
   }
-
   function pick<T>(arr: T[]): T { return arr[Math.floor(Math.random() * arr.length)] }
-
-  // ─── UI callbacks ────────────────────────────────────────────────────────────
-
-  const handleTrackClick = useCallback((track: Track, color: string) => {
-    setNowPlaying({ track, color })
-  }, [])
-
-  const handleFindSimilar = useCallback(async (query?: string) => {
-    setView('Discover')
-    try {
-      const result = await sendMessage(query?.trim() || 'I have dream pop fever')
-      const found = agentResultToTracks(result?.mcpResults)
-      setRecommendedTracks(
-        found.length > 0 ? { tracks: found, sourceId: '', sourceTitle: result?.agentMessage! } : null
-      )
-    } catch (e) {
-      console.error('Recommendation failed:', e)
-      setRecommendedTracks(null)
-    } finally {
-      setRecommendLoading(false)
-    }
-  }, [sendMessage])
-
-  const clearRecommendations = useCallback(() => setRecommendedTracks(null), [])
-
-  const [showScrollTop, setShowScrollTop] = useState(false)
-  useEffect(() => {
-    const onScroll = () => setShowScrollTop(window.scrollY > 400)
-    window.addEventListener('scroll', onScroll, { passive: true })
-    return () => window.removeEventListener('scroll', onScroll)
-  }, [])
-
-  const handleFilter = useCallback((type: 'genre' | 'mood' | 'context', value: string) => {
-    if (type === 'genre') setGenreFilter(value)
-    if (type === 'mood') setMoodFilter(value)
-    if (type === 'context') setContextFilter(value)
-  }, [])
 
   const handleLoadKernel = useCallback((snap: KernelSnapshot) => {
     if (snap.queryVector.length > 0) applyKernelQuery(snap.queryVector, true)
@@ -387,189 +347,329 @@ function Main() {
     localStorage.setItem('sond3r:activeProfile', snap.id)
   }, [applyKernelQuery])
 
-  const nowPlayingOpen = nowPlaying !== null
-  const NAV_TABS: ViewName[] = ['Discover', 'Analyze', 'Profile', 'Agent',]
+  const handleFindSimilar = useCallback(async (query?: string) => {
+    const q = query?.trim() || 'I have dream pop fever'
+    wikiNavigate({ kind: 'results', query: q, mode: 'semantic' })
+  }, [wikiNavigate])
 
-  const ANALYZE_TABS: { id: AnalyzeTab; label: string }[] = [
-    { id: 'wiki', label: 'Track Wiki' },
-    { id: 'neighborhood', label: 'Neighborhood' },
-    { id: 'galaxy', label: 'Galaxy' },
-  ]
+  // ─────────────────────────────────────────────────────────────────────────
+  // Render
+  // ─────────────────────────────────────────────────────────────────────────
 
   return (
     <SpotifyProvider value={{ ...spotify }}>
+      <LocalMusicProvider>
       <PlayerProvider tracks={tracks}>
-        <div className="app">
+        <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#050309', overflow: 'hidden', fontFamily: SANS }}>
 
-          <header className="header">
-            <div className="header-brand">
-              <span className="brand-name">SOND3R</span>
-              <span className="active-profile-pill">
-                <span className="active-profile-dot" />
-                {activeProfileName}
-              </span>
-              <nav style={{ display: 'flex', gap: '16px', marginLeft: '24px' }}>
-                {NAV_TABS.map(v => (
-                  <button
-                    key={v}
-                    onClick={() => { setView(v); setShowConnectors(false) }}
-                    className={`app-nav-tab ${view === v && !showConnectors ? 'active' : ''}`}
-                  >{v}</button>
-                ))}
+          {/* ── Shell header (40px) ───────────────────────────────────────── */}
+          <header style={{
+            height: 40, flexShrink: 0, background: BG1,
+            borderBottom: `1px solid ${BORDER}`,
+            display: 'flex', alignItems: 'center', gap: 8,
+            // Reserve the OS window-controls-overlay rect (titlebar-area-* env vars)
+            // so the header's right-side cluster never sits under the native
+            // min/max/close buttons. Wherever the controls live, the draggable
+            // titlebar area excludes them: pad left up to its start and right past
+            // its end. Falls back to a flat 14px when no overlay is present.
+            paddingTop: 0, paddingBottom: 0,
+            paddingLeft: 'calc(env(titlebar-area-x, 0px) + 14px)',
+            paddingRight: 'calc(100vw - env(titlebar-area-width, 100vw) - env(titlebar-area-x, 0px) + 14px)',
+            zIndex: 50,
+            WebkitAppRegion: 'drag',
+          } as React.CSSProperties}>
+
+            {/* SOND3R wordmark */}
+            <button
+              onClick={() => { setWikiView({ kind: 'home' }); setWikiStack([]); setWikiSearchBox('') }}
+              style={{ fontFamily: DISP, fontSize: 20, color: FG, letterSpacing: '0.08em', background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0, WebkitAppRegion: 'no-drag', lineHeight: 1 } as React.CSSProperties}>
+              SOND3R
+            </button>
+
+            {/* Separator */}
+            <span style={{ color: BORDER, fontSize: 14, flexShrink: 0 }}>|</span>
+
+            {/* Back button — only when there's history */}
+            {wikiStack.length > 0 && (
+              <button
+                onClick={wikiBack}
+                style={{ background: 'none', border: `1px solid ${BORDER2}`, color: FG3, fontFamily: MONO, fontSize: 11, padding: '2px 8px', cursor: 'pointer', flexShrink: 0, WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+                ←
+              </button>
+            )}
+
+            {/* Breadcrumb trail — inherits drag from header; buttons individually opt out */}
+            <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 5, overflow: 'hidden', whiteSpace: 'nowrap' }}>
+              {wikiCrumbs.slice(-5).map((c, i, arr) => {
+                const realIndex = wikiCrumbs.length - arr.length + i
+                const isLast = i === arr.length - 1
+                return (
+                  <span key={realIndex} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, minWidth: 0, flexShrink: isLast ? 1 : 0 }}>
+                    {i > 0 && <span style={{ color: FG4, fontSize: 9 }}>›</span>}
+                    {isLast
+                      ? <span style={{ fontFamily: MONO, fontSize: 10, color: FG2, letterSpacing: '0.04em', overflow: 'hidden', textOverflow: 'ellipsis' }}>{viewLabel(c)}</span>
+                      : <button onClick={() => wikiGoTo(realIndex)}
+                          style={{ background: 'none', border: 'none', color: FG4, fontFamily: MONO, fontSize: 10, cursor: 'pointer', padding: 0, letterSpacing: '0.04em', flexShrink: 0, WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+                          {viewLabel(c)}
+                        </button>}
+                  </span>
+                )
+              })}
+            </div>
+
+            {/* Search input — hidden on home (the home page has its own prominent search) */}
+            {wikiView.kind !== 'home' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 0, flexShrink: 0, WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+                <input
+                  value={wikiSearchBox}
+                  onChange={e => setWikiSearchBox(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') wikiRunSearch(wikiSearchBox) }}
+                  placeholder="artist, track, or vibe…"
+                  style={{
+                    width: 220, background: BG2, border: `1px solid ${BORDER2}`,
+                    borderRight: 'none', color: FG, fontSize: 11, padding: '5px 9px',
+                    outline: 'none', fontFamily: MONO, letterSpacing: '0.02em',
+                  }} />
                 <button
-                  onClick={() => setShowConnectors(true)}
-                  className={`app-nav-tab ${showConnectors ? 'active' : ''}`}
-                >Connectors</button>
-              </nav>
+                  onClick={() => wikiRunSearch(wikiSearchBox)}
+                  disabled={!wikiSearchBox.trim()}
+                  style={{
+                    background: wikiSearchBox.trim() ? ACCENT : 'transparent',
+                    border: `1px solid ${wikiSearchBox.trim() ? ACCENT : BORDER2}`,
+                    color: wikiSearchBox.trim() ? '#fff' : FG4,
+                    fontFamily: MONO, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase',
+                    padding: '6px 10px', cursor: wikiSearchBox.trim() ? 'pointer' : 'default',
+                  }}>
+                  ↵
+                </button>
+              </div>
+            )}
+
+            {/* Local music */}
+            <button
+              onClick={() => setShowLocal(true)}
+              style={{ background: showLocal ? `${ACCENT}18` : 'none', border: `1px solid ${showLocal ? ACCENT + '44' : BORDER2}`, color: showLocal ? ACCENT : FG4, fontFamily: MONO, fontSize: 12, lineHeight: 1, padding: '3px 8px', cursor: 'pointer', flexShrink: 0, WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+              title="Local music">
+              ♪
+            </button>
+
+            {/* Settings icon */}
+            <button
+              onClick={() => setShowSettings(s => !s)}
+              style={{ background: showSettings ? `${ACCENT}18` : 'none', border: `1px solid ${showSettings ? ACCENT + '44' : BORDER2}`, color: showSettings ? ACCENT : FG4, fontFamily: MONO, fontSize: 11, padding: '3px 8px', cursor: 'pointer', flexShrink: 0, WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+              title="Settings">
+              ⚙
+            </button>
+
+            {/* Now-playing dot — only when the dataset is playable */}
+            {canPlay && <NowPlayingDot onOpen={() => setNowPlayingOpen(true)} />}
+
+            {/* Wallet */}
+            <div style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
               <ConnectWallet />
             </div>
           </header>
 
-          <KernelDebugHUD state={kernel.state} />
+          {/* ── Content area ─────────────────────────────────────────────── */}
+          <div style={{ flex: 1, overflow: 'hidden', position: 'relative', display: 'flex' }}>
 
-          <main className="main">
-            {showConnectors && <ConnectorsView />}
+            {/* Wiki — primary surface */}
+            <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+              <KernelStrip {...kernelStrip} theme="light" />
+              <div style={{ flex: 1, minHeight: 0 }}>
+                <TrackWikiView
+                  view={wikiView}
+                  stack={wikiStack}
+                  searchBox={wikiSearchBox}
+                  onNavigate={wikiNavigate}
+                  onBack={wikiBack}
+                  onGoTo={wikiGoTo}
+                  onSearchBoxChange={setWikiSearchBox}
+                  kernelState={kernel.state.t > 0 ? { mu: kernel.state.mu, velocity: kernel.state.v, sigma: kernel.state.sigma } : undefined}
+                  onPlayTrack={canPlay ? handleWikiPlay : undefined}
+                  kernelTopGenres={kernelTopGenres}
+                  allGenres={allGenres}
+                  kernelEntropy={kernel.state.t > 0 ? kernel.state.entropy : undefined}
+                  kernelSessionLength={kernel.state.t}
+                  kernelMutedCount={kernelStrip.mutedCount}
+                />
+              </div>
+            </div>
 
-            {!showConnectors && view === 'Discover' && (
-              <BrowseView
-                tracks={tracks}
-                kernelTopGenres={kernelTopGenres}
-                loading={loading}
-                loadingMore={loadingMore}
-                error={error}
-                hasMore={hasMore}
-                loadMore={loadMore}
-                search={search}
-                setSearch={handleSetSearch}
-                chromaReady={chromaReady}
-                seeding={seeding}
-                retryConnect={retryConnect}
-                recommendedTracks={recommendedTracks}
-                recommendLoading={recommendLoading}
-                onClearRecommendations={clearRecommendations}
-                onCallAgent={handleFindSimilar}
-                onFilteredChange={f => { filteredTracksRef.current = f }}
-                onPlayingIdChange={id => { playingIdRef.current = id }}
-                onSignal={handleSignal}
-                onTrackClick={handleTrackClick}
-                genreFilter={genreFilter}
-                moodFilter={moodFilter}
-                contextFilter={contextFilter}
-                onGenreFilter={setGenreFilter}
-                onMoodFilter={setMoodFilter}
-                onContextFilter={setContextFilter}
-                allGenres={allGenres}
-                allMoods={allMoods}
-                allContexts={allContexts}
-                fallbackTracks={fallbackTracks}
-                fallbackLoading={fallbackLoading}
-                onFallbackSearch={handleMusicBrainzSearch}
-                onFallbackClear={handleFallbackClear}
-                ytTracks={ytTracks}
-                ytLoading={ytLoading}
-                onYtSearch={ytSearch}
-                onYtClear={ytClear}
-                playbackState={playbackState}
-                onPlay={play}
-              />
-            )}
-
-            {!showConnectors && view === 'Agent' && <AgentView />}
-
-            {!showConnectors && view === 'Profile' && (
-              <KernelView
-                currentQueryVector={kernel.getQueryVector()}
-                currentEntropy={entropy}
-                currentGenreWeights={genreWeights}
-                sessionHistory={sessionHistory}
-                onLoadKernel={handleLoadKernel}
-              />
-            )}
-
-
-
-            {!showConnectors && view === 'Analyze' && (
+            {/* Settings drawer — slides in from right */}
+            {showSettings && (
               <div style={{
-                display: 'flex', flexDirection: 'column',
-                height: 'calc(100vh - var(--header-h))',
-                margin: 'calc(-1 * var(--sp-5)) calc(-1 * var(--sp-5)) -120px',
+                width: 360, flexShrink: 0, background: BG1, borderLeft: `1px solid ${BORDER}`,
+                display: 'flex', flexDirection: 'column', overflowY: 'auto',
+                zIndex: 40,
               }}>
-
-                {/* ── Analyze sub-tabs ───────────────────────────────────── */}
-                <div style={{ display: 'flex', borderBottom: '3px solid var(--accent)', flexShrink: 0, background: 'var(--bg1)' }}>
-                  {ANALYZE_TABS.map(({ id, label }) => (
-                    <button
-                      key={id}
-                      onClick={() => setAnalyzeTab(id)}
-                      className={`app-nav-tab${analyzeTab === id ? ' active' : ''}`}
-                      style={{ padding: '12px 22px', borderRadius: 0 }}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-
-                {/* ── Sub-views — all mounted, CSS-switched so state survives tab changes ── */}
-                <div style={{ flex: 1, overflow: 'hidden', minHeight: 0, position: 'relative' }}>
-                  <div style={{ display: analyzeTab === 'wiki' ? 'flex' : 'none', flexDirection: 'column', height: '100%' }}>
-                    <TrackWikiView
-                      initialQuery={analyzeQuery ?? undefined}
-                    />
-                  </div>
-                  <div style={{ display: analyzeTab === 'neighborhood' ? 'flex' : 'none', flexDirection: 'column', height: '100%' }}>
-                    <ArtistNeighborhoodView
-                      initialQuery={analyzeQuery ?? undefined}
-                    />
-                  </div>
-                  <div style={{ display: analyzeTab === 'galaxy' ? 'flex' : 'none', flexDirection: 'column', height: '100%' }}>
-                    <CatalogGalaxyView
-                      onTrackSelect={track => {
-                        setAnalyzeQuery(`${track.artist} – ${track.title}`)
-                        setAnalyzeTab('wiki')
-                      }}
-                    />
-                  </div>
-                </div>
-
+                <SettingsDrawer
+                  kernelState={kernel.state}
+                  entropy={entropy}
+                  activeProfileName={activeProfileName}
+                  onLoadKernel={handleLoadKernel}
+                  onClose={() => setShowSettings(false)}
+                  onOpenGalaxy={() => { setShowGalaxy(true); setShowSettings(false) }}
+                />
               </div>
             )}
-          </main>
+          </div>
 
-          <PlayerBar
-            onTrackClick={handleTrackClick}
-            hidden={nowPlayingOpen}
-            playbackState={playbackState}
-            nextTrack={nextTrack}
-            onPlayNext={playNext}
-          />
+          {/* ── Galaxy overlay ────────────────────────────────────────────── */}
+          {showGalaxy && createPortal(
+            <div style={{ position: 'fixed', inset: 0, zIndex: 60, background: '#0c0906' }}>
+              <SoundTownView
+                kernel={kernelStrip}
+                onTrackSelect={track => {
+                  wikiNavigate({ kind: 'track', artist: track.artist, title: track.title })
+                  setShowGalaxy(false)
+                }}
+                onPlayTrack={track => {
+                  play({
+                    id: track.id, trackId: track.id, owner: '', manifestCid: '',
+                    title: track.title, artist: track.artist, year: null, durationMs: null,
+                  })
+                }}
+                onBack={() => setShowGalaxy(false)}
+              />
+            </div>,
+            document.body,
+          )}
 
+          {/* ── Local music overlay ───────────────────────────────────────── */}
+          {showLocal && createPortal(
+            <div style={{ position: 'fixed', inset: 0, zIndex: 70 }}>
+              <LocalMusicView onClose={() => setShowLocal(false)} />
+            </div>,
+            document.body,
+          )}
+
+          {/* ── Now-playing strip (24px) — playable datasets only ────────── */}
+          {canPlay && (
+            <NowPlayingStrip
+              onNavigate={wikiNavigate}
+              onExpand={() => setNowPlayingOpen(true)}
+            />
+          )}
+
+          {/* ── NowPlaying full-screen sheet (portal) ────────────────────── */}
           {nowPlayingOpen && createPortal(
             <NowPlaying
               playbackState={playbackState}
               onPlay={play}
-              onCollapse={() => setNowPlaying(null)}
-              track={nowPlaying !== 'player' ? nowPlaying.track : undefined}
-              trackColor={nowPlaying !== 'player' ? nowPlaying.color : undefined}
-              onFilter={(type, value) => { handleFilter(type, value); setNowPlaying(null) }}
+              onCollapse={() => setNowPlayingOpen(false)}
+              onFilter={() => { }}
               onCallAgent={handleFindSimilar}
-              onTrackSelect={(track, color) => setNowPlaying({ track, color: color ?? '' })}
-              onAnalyze={handleAnalyzeTrack}
+              onTrackSelect={() => { }}
+              onAnalyze={(track: Track) => {
+                wikiNavigate({ kind: 'track', artist: track.artist, title: track.title })
+                setNowPlayingOpen(false)
+              }}
             />,
-            document.body
+            document.body,
           )}
 
-          {showScrollTop && createPortal(
-            <button
-              className="scroll-top-btn"
-              onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-              title="Back to top"
-            >↑</button>,
-            document.body
-          )}
-
+          {/* KernelDebugHUD — Ctrl+K accessible */}
+          <KernelDebugHUD state={kernel.state} />
         </div>
       </PlayerProvider >
+      </LocalMusicProvider>
     </SpotifyProvider >
+  )
+}
+
+// ─── NowPlayingDot ────────────────────────────────────────────────────────────
+
+function NowPlayingDot({ onOpen }: { onOpen: () => void }) {
+  // Use the shared context instance — calling useSpotify() here would spin up a
+  // second 500ms status-polling loop disconnected from the main player.
+  const { currentVideoId, isPlaying } = useSpotifyContext()
+  const active = !!currentVideoId
+  return (
+    <button
+      onClick={active ? onOpen : undefined}
+      style={{
+        width: 8, height: 8, borderRadius: '50%', padding: 0, border: 'none',
+        background: active ? (isPlaying ? ACCENT : FG3) : FG4,
+        cursor: active ? 'pointer' : 'default',
+        flexShrink: 0,
+        boxShadow: active && isPlaying ? `0 0 6px ${ACCENT}` : 'none',
+        transition: 'background 0.2s, box-shadow 0.2s',
+        WebkitAppRegion: 'no-drag',
+      } as React.CSSProperties}
+      title={active ? 'Now playing' : 'Nothing playing'}
+    />
+  )
+}
+
+// ─── Settings drawer ──────────────────────────────────────────────────────────
+
+interface SettingsDrawerProps {
+  kernelState: any
+  entropy: number
+  activeProfileName: string
+  onLoadKernel: (snap: KernelSnapshot) => void
+  onClose: () => void
+  onOpenGalaxy: () => void
+}
+
+function SettingsDrawer({ kernelState, entropy, activeProfileName, onClose, onOpenGalaxy }: SettingsDrawerProps) {
+  const [section, setSection] = useState<'kernel' | 'connectors' | 'agent'>('kernel')
+
+  const vibeLabel = entropy > 0.65
+    ? { label: 'Wandering', desc: 'Discovery mode — pushing past familiar territory', color: '#5a3d9e' }
+    : entropy > 0.33
+    ? { label: 'Calibrating', desc: 'Finding your sound — kernel is sharpening', color: '#9a6820' }
+    : { label: 'Locked in', desc: 'Deep in your groove — taste model converged', color: '#207860' }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+
+      {/* Drawer header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 14px', height: 40, borderBottom: `1px solid ${BORDER}`, flexShrink: 0 }}>
+        <div style={{ display: 'flex', gap: 0 }}>
+          {(['kernel', 'connectors', 'agent'] as const).map(s => (
+            <button key={s} onClick={() => setSection(s)} style={{
+              background: 'none', border: 'none', borderBottom: `1px solid ${section === s ? ACCENT : 'transparent'}`,
+              color: section === s ? FG : FG4, fontFamily: MONO, fontSize: 9, letterSpacing: '0.16em',
+              textTransform: 'uppercase', padding: '10px 10px 9px', cursor: 'pointer',
+            }}>{s}</button>
+          ))}
+        </div>
+        <button onClick={onClose} style={{ background: 'none', border: 'none', color: FG4, fontSize: 14, cursor: 'pointer', fontFamily: MONO, padding: '0 4px' }}>✕</button>
+      </div>
+
+      {/* Section content */}
+      <div style={{ flex: 1, overflow: 'auto', padding: 16 }}>
+
+        {section === 'kernel' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+            {/* Vibe state */}
+            <div style={{ borderLeft: `3px solid ${vibeLabel.color}`, padding: '10px 12px', background: 'rgba(255,255,255,0.02)' }}>
+              <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: vibeLabel.color, letterSpacing: '0.03em', lineHeight: 1 }}>{vibeLabel.label}</div>
+              <div style={{ fontFamily: MONO, fontSize: 10, color: FG3, marginTop: 4, lineHeight: 1.6 }}>{vibeLabel.desc}</div>
+            </div>
+
+            {/* Profile */}
+            <div>
+              <div style={{ fontFamily: MONO, fontSize: 8, color: FG4, letterSpacing: '0.18em', textTransform: 'uppercase', marginBottom: 6 }}>Active profile</div>
+              <div style={{ fontFamily: SANS, fontSize: 13, color: FG2 }}>{activeProfileName}</div>
+            </div>
+
+            {/* Collection map link */}
+            <button
+              onClick={onOpenGalaxy}
+              style={{ background: 'none', border: `1px solid ${BORDER}`, color: FG3, fontFamily: MONO, fontSize: 10, letterSpacing: '0.10em', textTransform: 'uppercase', padding: '8px 12px', cursor: 'pointer', textAlign: 'left' }}>
+              Browse the collection map →
+            </button>
+          </div>
+        )}
+
+        {section === 'connectors' && <ConnectorsView />}
+        {section === 'agent' && <AgentView />}
+      </div>
+    </div>
   )
 }
 

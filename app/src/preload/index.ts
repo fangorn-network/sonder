@@ -3,9 +3,30 @@ import { electronAPI } from '@electron-toolkit/preload'
 import type { AgentProviderConfig, ProviderStatus } from "../main/agent/agent-provider-manager";
 import type { OllamaStatus } from "../main/agent/ollama-manager";
 import type { FangornAgentResponse } from "@fangorn-network/agent";
+import type { LocalTrack } from "../main/local/types";
+
+// ── Local on-disk music ────────────────────────────────────────────────
+export interface LocalMusicApi {
+  /** OS-standard music folder (~/Music, %USERPROFILE%\Music, …). */
+  defaultDir(): Promise<string>
+  /** Last folder the user picked, or the default if none. */
+  getDir(): Promise<string>
+  /** Native folder picker. Returns the chosen path, or null if cancelled. */
+  pickDir(): Promise<string | null>
+  /** Recursively scan `dir` (defaults to the saved/default dir) for audio files. */
+  scan(dir?: string): Promise<LocalTrack[]>
+}
+
+const localMusic: LocalMusicApi = {
+  defaultDir: () => ipcRenderer.invoke('local:default-dir'),
+  getDir: () => ipcRenderer.invoke('local:get-dir'),
+  pickDir: () => ipcRenderer.invoke('local:pick-dir'),
+  scan: (dir?: string) => ipcRenderer.invoke('local:scan', dir),
+}
 
 // Custom APIs for renderer
 const api = {
+
   spotifyAuth: (): Promise<{
     access_token: string
     refresh_token: string
@@ -51,7 +72,46 @@ if (process.contextIsolated) {
       },
     })
 
+    // ── SOND3R backend boot lifecycle ────────────────────────────────
+    // First run downloads + recovers the catalog snapshot; the renderer
+    // shows a boot screen driven by these events and gates its first
+    // query on 'backend:ready'.
+    contextBridge.exposeInMainWorld('sond3r', {
+      // one-time download progress: { received, total } in bytes
+      onSnapshotProgress: (cb: (d: { received: number; total: number }) => void) => {
+        ipcRenderer.removeAllListeners('snapshot:progress')
+        ipcRenderer.on('snapshot:progress', (_e, d) => cb(d))
+      },
+      // coarse stage: 'downloading' | 'decompressing' | 'recovering'
+      onSnapshotStatus: (cb: (s: string) => void) => {
+        ipcRenderer.removeAllListeners('snapshot:status')
+        ipcRenderer.on('snapshot:status', (_e, s: string) => cb(s))
+      },
+      // backend fully up: Qdrant + collection + query server all ready
+      onBackendReady: (cb: () => void) => {
+        ipcRenderer.removeAllListeners('backend:ready')
+        ipcRenderer.on('backend:ready', () => cb())
+      },
+      // backend failed somewhere in the boot chain
+      onBackendError: (cb: (msg: string) => void) => {
+        ipcRenderer.removeAllListeners('backend:error')
+        ipcRenderer.on('backend:error', (_e, msg: string) => cb(msg))
+      },
+      // cleanup for the useEffect return, mirrors your Spotify pattern
+      offBootEvents: () => {
+        ipcRenderer.removeAllListeners('snapshot:progress')
+        ipcRenderer.removeAllListeners('snapshot:status')
+        ipcRenderer.removeAllListeners('backend:ready')
+        ipcRenderer.removeAllListeners('backend:error')
+      },
 
+      isBackendReady: () => ipcRenderer.invoke('backend:is-ready'),
+    })
+
+    // ── Local on-disk music ──────────────────────────────────────────
+    // Pick a folder, scan it, and play files in-app via <audio>. Standalone
+    // from the catalog player — see main/local/* and LocalMusicProvider.
+    contextBridge.exposeInMainWorld('localMusic', localMusic)
 
   } catch (error) {
     console.error(error)
@@ -61,6 +121,8 @@ if (process.contextIsolated) {
   window.electron = electronAPI
   // @ts-ignore (define in dts)
   window.api = api
+  // @ts-ignore (define in dts)
+  window.localMusic = localMusic
 }
 
 

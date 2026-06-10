@@ -8,127 +8,40 @@ An Electron application with React and TypeScript
 
 - [VSCode](https://code.visualstudio.com/) + [ESLint](https://marketplace.visualstudio.com/items?itemName=dbaeumer.vscode-eslint) + [Prettier](https://marketplace.visualstudio.com/items?itemName=esbenp.prettier-vscode)
 
-## Project Setup
+## Quick start
 
-### Prerequisites
-
-Setup environment variables
-
-``` sh
-touch .env
-```
-
-and paste
-
-``` 
-VITE_ARBITRUM_SEPOLIA_RPC_URL=https://arb-sepolia.g.alchemy.com/v2/5-t8t4AW4wknuQUzuDb1B
-VITE_USE_AGENT=true
-```
-
-#### Install OS-level Deps
-
--Install yt-dlp and ffmpeg
-
-Linux/WSL2
-
-``` sh
-pip install yt-dlp
-# Update yt-dlp to nightly in WSL2
-yt-dlp --update-to nightly
-# verify ffmpeg installation
-which ffmpeg || sudo apt install ffmpeg -y
-```
-
-
-Windows
-
-``` sh
-# install python >=3.12 with winget or conda
-winget install Python.Python.3.12
-# with conda
-conda install python=3.12
-
-# install yt-dlp
-winget install yt-dlp.yt-dlp
-# restart the terminal, then run
-yt-dlp --update-to nightly
-winget install DenoLand.Deno
-
-pip install yt-dlp-ejs
-
-# if you have multiple versions of python install
-py -3.12 -m pip install yt-dlp-ejs
-yt-dlp --allow-unplayable-formats --remote-components ejs:github "https://www.youtube.com/watch?v=BaW_jenozKc"
-# verify functionality
-yt-dlp --verbose "https://www.youtube.com/watch?v=BaW_jenozKc" 2>&1 | Select-String "javascript\|deno\|ejs"
-```
-
-### Install
-
-We recommend using a linux environment for an optimal developer exeperience.
-
-##### Linux
-```bash
-$ yarn install
-```
-
-#### Windows
-
-``` bash
-Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
-.\install_windows.ps1
-```
-See [troubleshooting](#troubleshooting) for common issues encountered when building on windows. 
-
-### Development
+Requirements: **Node 22** (Corepack enables Yarn 4), **Python 3.12+**, and `tar` on your PATH. `ffmpeg` is optional (audio extraction).
 
 ```bash
-$ yarn dev
-``` 
-
-### Chroma DB
-Chroma DB uses python which requires a binary to be built. 
-
-#### Linux
-Navigate to `vectordb` and activate your venv
-
-```bash
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
+yarn install   # deps + native-module rebuild
+yarn dev       # first run auto-provisions the dev backend, then launches
 ```
 
-If needed, install `pyinstaller`
-```bash
-pip install pyinstaller
-```
+That's the whole flow. The first `yarn dev` runs a one-time setup (`scripts/setup.mjs`, also available as `yarn setup`) that provisions everything a fresh clone is missing, **per-OS**:
 
-Then build your binary
+- **`.env`** — copied from `.env.example`. Fill in real values to enable auth / Firebase / Spotify / catalog features; the app still launches with blanks.
+- **yt-dlp** → `resources/bin/<os>/`.
+- **Qdrant** sidecar engine (pinned `v1.18.2`) → downloaded + extracted to `resources/qdrant/<os>/`.
+- **Python venv** → `vectordb/venv` created and `requirements.txt` installed (powers the vector-search query server). Don't need search? `SKIP_PY_SETUP=1 yarn dev`.
+
+Setup is idempotent (re-runs fetch only what's missing) and never blocks `yarn dev` — anything it can't provision degrades gracefully with a `⚠` warning.
+
+> **Linux:** dev runs Electron with `--no-sandbox`, so there's no root `chown/chmod 4755` step on `chrome-sandbox`. Packaged builds keep the Chromium sandbox.
+
+### Environment variables
+
+`.env` is generated for you from `.env.example` (the full list lives there). To actually exercise the integrations you'll need real credentials: a Spotify client/secret, a Graph API key, and Pinata/Firebase values.
+
+### The server binary (release builds only)
+
+`yarn dev` runs the Python server straight from `vectordb/venv`. **Packaged** builds instead bundle a PyInstaller binary at `vectordb/dist/<os>/server`. CI builds this automatically (see `.github/workflows/build.yml`); you only need it for a local `yarn build:*`:
+
 ```bash
-pyinstaller --onefile --name server \
-  --distpath dist/linux \
+cd vectordb && source venv/bin/activate && pip install pyinstaller
+pyinstaller --onefile --name server --distpath dist/<os> \
   $(pip list --format=freeze | cut -d= -f1 | xargs -I{} echo "--collect-submodules {}") \
   server.py
 ```
-
-#### Windows
-
-Windows operates slightly differently. We recommend that you use [conda]() for a hassle-free build experience.
-
-```sh
-conda create -n vectordb-build python=3.1 -y
-conda activate vectordb-build
-pip install -r requirements.txt
-pip install pyinstaller
-
-$certPath = (python -c "import certifi; print(certifi.where())").Trim()
-$pyiArgs = @("--onefile", "--name", "server", "--add-data", "$certPath;certifi")
-pip list --format=freeze | ForEach-Object { $_.Split('=')[0] } | ForEach-Object { $pyiArgs += "--collect-all"; $pyiArgs += $_ }
-$pyiArgs += "server.py"
-& pyinstaller @pyiArgs
-```
-
-Move the file to `vectordb/dist/win` for windows, `vectordb/dist/linux`, and so on
 
 ### Build
 

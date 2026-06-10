@@ -156,7 +156,7 @@ export function useSpotify(onEnded?: () => void) {
       // ── spotify status ────────────────────────────────────────────────────
 
       try {
-        const s = await ipc.invoke('spotify:status')
+        const s = await ipc.invoke('playback:status')
 
         if (!s) return
 
@@ -237,9 +237,13 @@ export function useSpotify(onEnded?: () => void) {
 
           // ─────────────────────────────────────────────────────────────────
           // natural end detection
+          // Guard: suppress while a track transition is in-flight. The loading
+          // window (URI sent → title confirmed) looks identical to end-of-track
+          // and must not trigger our autoplay chain.
           // ─────────────────────────────────────────────────────────────────
 
           if (
+            !transitionPendingRef.current &&
             wasPlayingRef.current &&
             !s.isPlaying &&
             s.progressMs < 1000
@@ -252,7 +256,7 @@ export function useSpotify(onEnded?: () => void) {
               handlingEndedRef.current = true
 
               ipc
-                .invoke('spotify:pause')
+                .invoke('playback:pause')
                 .catch(() => { })
 
               onEndedRef.current?.()
@@ -308,7 +312,7 @@ export function useSpotify(onEnded?: () => void) {
               s.title
 
             ipc
-              .invoke('spotify:pause')
+              .invoke('playback:pause')
               .catch(() => { })
 
             onEndedRef.current?.()
@@ -319,8 +323,11 @@ export function useSpotify(onEnded?: () => void) {
         }
 
         // ── simulated end detection ───────────────────────────────────────────
+        // Also suppressed during transitions — simDuration is set after IPC
+        // returns, so this can't fire prematurely, but guard it anyway.
 
         if (
+          !transitionPendingRef.current &&
           !hasRealData &&
           simDurationRef.current > 0 &&
           !handlingEndedRef.current
@@ -341,7 +348,7 @@ export function useSpotify(onEnded?: () => void) {
             handlingEndedRef.current = true
 
             ipc
-              .invoke('spotify:pause')
+              .invoke('playback:pause')
               .catch(() => { })
 
             onEndedRef.current?.()
@@ -404,7 +411,7 @@ export function useSpotify(onEnded?: () => void) {
 
       try {
         // 3. Send the command to Electron
-        const result = await ipc.invoke('spotify:play', a, t)
+        const result = await ipc.invoke('playback:play', { title: t, artist: a })
 
         if (result?.durationMs) {
           setDurationMs(result.durationMs)
@@ -439,7 +446,7 @@ export function useSpotify(onEnded?: () => void) {
     isPlayingRef.current = false
     wasPlayingRef.current = false
 
-    await ipc.invoke('spotify:pause')
+    await ipc.invoke('playback:pause')
   }, [])
 
   // ───────────────────────────────────────────────────────────────────────────
@@ -460,7 +467,7 @@ export function useSpotify(onEnded?: () => void) {
     isPlayingRef.current = true
     wasPlayingRef.current = true
 
-    await ipc.invoke('spotify:resume')
+    await ipc.invoke('playback:resume')
   }, [])
 
   // ───────────────────────────────────────────────────────────────────────────
@@ -468,7 +475,7 @@ export function useSpotify(onEnded?: () => void) {
   // ───────────────────────────────────────────────────────────────────────────
 
   const stop = useCallback(async () => {
-    await ipc.invoke('spotify:pause')
+    await ipc.invoke('playback:stop')
 
     setIsPlaying(false)
 
@@ -510,7 +517,7 @@ export function useSpotify(onEnded?: () => void) {
 
     setProgressMs(ms)
 
-    await ipc.invoke('spotify:seek', ms)
+    await ipc.invoke('playback:seek', ms)
   }, [])
 
   // ───────────────────────────────────────────────────────────────────────────
@@ -520,12 +527,32 @@ export function useSpotify(onEnded?: () => void) {
   const setVolume = useCallback(
     async (pct: number) => {
       await ipc.invoke(
-        'spotify:volume',
+        'playback:volume',
         pct,
       )
     },
     [],
   )
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // sources (swappable playback adapters: spotify, later local/apple/tidal)
+  // ───────────────────────────────────────────────────────────────────────────
+
+  const [sources, setSources] = useState<
+    { id: string; label: string; available: boolean }[]
+  >([])
+  const [activeSource, setActiveSource] = useState<string | null>(null)
+
+  useEffect(() => {
+    ipc.invoke('playback:sources').then(setSources).catch(() => { })
+    ipc.invoke('playback:active').then(setActiveSource).catch(() => { })
+  }, [])
+
+  const setSource = useCallback(async (id: string) => {
+    const ok = await ipc.invoke('playback:set-source', id)
+    if (ok) setActiveSource(id)
+    return ok
+  }, [])
 
   // ───────────────────────────────────────────────────────────────────────────
   // api
@@ -538,6 +565,10 @@ export function useSpotify(onEnded?: () => void) {
     stop,
     seek,
     setVolume,
+
+    sources,
+    activeSource,
+    setSource,
 
     ready,
     isPlaying,

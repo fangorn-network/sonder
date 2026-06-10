@@ -30,6 +30,9 @@ extraResources:
   - from: "resources/bin/${os}/"
     to: "bin"
     filter: ["yt-dlp*"]
+  - from: "resources/qdrant/${os}/"
+    to: "qdrant"
+    filter: ["qdrant*"]
 win:
   executableName: SOND3R
   target:
@@ -46,15 +49,9 @@ mac:
 linux:
   target:
     - AppImage
-    - deb
-    - snap
 
 appImage:
   artifactName: ${name}.${ext}
-deb:
-  artifactName: ${name}_${arch}.${ext}
-snap:
-  artifactName: ${name}_${arch}.${ext}
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
   shortcutName: ${productName}

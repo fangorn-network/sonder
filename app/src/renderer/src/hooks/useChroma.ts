@@ -1,6 +1,12 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
-import type { Track, JoinedRecord } from '../types'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import type { Track } from '../types'
 import { asTrack } from '../types'
+import type { RecordVM } from '../domain/recordVM'
+import { toRecordVM } from '../domain/recordVM'
+import {
+  fetchSchema, getCachedSchema, ensureSchemaFromHits, roleLabel,
+  type SchemaInfo, type RoleMap,
+} from '../domain/roles'
 
 const CHROMA_URL = (import.meta as any).env.VITE_CHROMA_URL ?? 'http://127.0.0.1:8080'
 const PAGE_SIZE = 20
@@ -9,36 +15,15 @@ const HEALTH_MAX_ATTEMPTS = 20
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
-function normalizeHit(hit: any): Track | null {
+function normalizeHit(hit: any): RecordVM | null {
   if (!hit?.fields) return null
-  const record: JoinedRecord = {
-    id: hit.id,
-    trackId: hit.trackId ?? hit.fields?.trackId ?? hit.id.replace(/^track:/, ''),
-    owner: hit.owner ?? '',
-    manifestCid: hit.manifestCid ?? '',
-    fields: hit.fields,
-    embedding: hit.embedding,
-    score: hit.score,
-    distance: hit.distance,
-  }
-  const track = asTrack(record)
-  if (!track) return null
-
-  return {
-    ...track,
-    genres: Array.isArray(hit.fields.genres) ? hit.fields.genres : [],
-    moods: Array.isArray(hit.fields.moods) ? hit.fields.moods : [],
-    themes: Array.isArray(hit.fields.themes) ? hit.fields.themes : [],
-    contexts: Array.isArray(hit.fields.contexts) ? hit.fields.contexts : [],
-  }
+  const rm = getCachedSchema()?.roles ?? null
+  return toRecordVM(hit, rm)
 }
 
-function dedup(tracks: Track[]): Track[] {
-  const seen = new Map<string, Track>()
-  for (const t of tracks) {
-    const key = t.trackId
-    if (!seen.has(key)) seen.set(key, t)
-  }
+function dedup(records: RecordVM[]): RecordVM[] {
+  const seen = new Map<string, RecordVM>()
+  for (const r of records) if (!seen.has(r.identity)) seen.set(r.identity, r)
   return Array.from(seen.values())
 }
 
@@ -106,7 +91,18 @@ export interface UseChromaOptions {
 }
 
 export interface UseChromaResult {
+  // Generic surface
+  records: RecordVM[]
+  schema: SchemaInfo | null
+  roleMap: RoleMap | null
+  facets: Record<string, string[]>
+  // Legacy music surface (derived; kept for not-yet-migrated views)
   tracks: Track[]
+  allGenres: string[]
+  allMoods: string[]
+  allContexts: string[]
+  allThemes: string[]
+  // Controls
   loading: boolean
   loadingMore: boolean
   error: string | null
@@ -115,10 +111,6 @@ export interface UseChromaResult {
   search: string
   setSearch: (s: string) => void
   applyKernelQuery: (embedding: number[], silent: boolean) => void
-  allGenres: string[]
-  allMoods: string[]
-  allContexts: string[]
-  allThemes: string[]
   chromaReady: boolean
   seeding: boolean
   retryConnect: () => void
@@ -130,7 +122,8 @@ export function useChroma({
   contextFilter,
   themeFilter,
 }: UseChromaOptions = {}): UseChromaResult {
-  const [tracks, setTracks] = useState<Track[]>([])
+  const [records, setRecords] = useState<RecordVM[]>([])
+  const [schema, setSchema] = useState<SchemaInfo | null>(getCachedSchema())
   const [loading, setLoading] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -151,10 +144,8 @@ export function useChroma({
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const readyRef = useRef(false)
 
-  const [allGenres, setAllGenres] = useState<string[]>([])
-  const [allMoods, setAllMoods] = useState<string[]>([])
-  const [allContexts, setAllContexts] = useState<string[]>([])
-  const [allThemes, setAllThemes] = useState<string[]>([])
+  // Facet vocabularies, keyed by the tag-role field name.
+  const [facets, setFacets] = useState<Record<string, string[]>>({})
 
   useEffect(() => { searchRef.current = search }, [search])
   useEffect(() => { genreRef.current = genreFilter }, [genreFilter])
@@ -193,12 +184,15 @@ export function useChroma({
         : await chromaBrowse(PAGE_SIZE, pageOffset)
       if (activeQueryRef.current !== queryKey) return
 
-      const normalized = dedup(hits.map(normalizeHit).filter(Boolean) as Track[])
+      // Ensure we have a role map before projecting (fallback infers from hits).
+      if (!getCachedSchema() && hits.length) setSchema(ensureSchemaFromHits(hits))
+
+      const normalized = dedup(hits.map(normalizeHit).filter(Boolean) as RecordVM[])
       const ordered = (initialLoad && !query && pageOffset === 0)
         ? shuffle(normalized)
         : normalized
 
-      setTracks(prev => dedup(replace ? ordered : [...prev, ...ordered]))
+      setRecords(prev => dedup(replace ? ordered : [...prev, ...ordered]))
       setHasMore(hits.length === PAGE_SIZE)
       offsetRef.current = pageOffset
     } catch (e: any) {
@@ -227,6 +221,10 @@ export function useChroma({
           readyRef.current = true
           setChromaReady(true)
           setError(null)
+          // Pull the authoritative schema (role map + facets) before the first page.
+          const info = await fetchSchema(CHROMA_URL)
+          if (cancelled) return
+          if (info) { setSchema(info); setFacets(info.facets ?? {}) }
           fetchPage(buildQuery(''), 0, true, true)
         }
       } else if (attempts < HEALTH_MAX_ATTEMPTS) {
@@ -259,24 +257,20 @@ export function useChroma({
   }, [search, genreFilter, moodFilter, contextFilter, themeFilter, fetchPage, buildQuery])
 
 
-  // load genres, moods, and contexts
+  // Build facet vocabularies from loaded records when the server didn't supply them.
   useEffect(() => {
-    if (tracks.length === 0) return
-    const genres = new Set<string>()
-    const moods = new Set<string>()
-    const contexts = new Set<string>()
-    const themes = new Set<string>()
-    for (const t of tracks) {
-      for (const g of (t as any).genres ?? []) genres.add(g)
-      for (const m of (t as any).moods ?? []) moods.add(m)
-      for (const c of (t as any).contexts ?? []) contexts.add(c)
-      for (const th of (t as any).themes ?? []) themes.add(th)
-    }
-    setAllGenres([...genres].sort())
-    setAllMoods([...moods].sort())
-    setAllContexts([...contexts].sort())
-    setAllThemes([...themes].sort())
-  }, [tracks])
+    if (records.length === 0) return
+    if (Object.keys(facets).length > 0) return
+    const rm = getCachedSchema()?.roles
+    const tagFields = rm?.tags ?? []
+    if (!tagFields.length) return
+    const acc: Record<string, Set<string>> = {}
+    for (const f of tagFields) acc[f] = new Set()
+    for (const r of records) for (const f of tagFields) for (const v of r.tagsByField[f] ?? []) acc[f].add(v)
+    const out: Record<string, string[]> = {}
+    for (const f of tagFields) out[f] = [...acc[f]].sort()
+    setFacets(out)
+  }, [records, facets])
 
   // ── Load more ─────────────────────────────────────────────────────────────
 
@@ -295,8 +289,9 @@ export function useChroma({
     setError(null)
     try {
       const hits = await chromaSearchVector(embedding, 100)
-      const normalized = dedup(hits.map(normalizeHit).filter(Boolean) as Track[])
-      setTracks(normalized)
+      if (!getCachedSchema() && hits.length) setSchema(ensureSchemaFromHits(hits))
+      const normalized = dedup(hits.map(normalizeHit).filter(Boolean) as RecordVM[])
+      setRecords(normalized)
       setHasMore(true)
       offsetRef.current = 0
     } catch (e: any) {
@@ -312,15 +307,30 @@ export function useChroma({
     readyRef.current = false
     setChromaReady(false)
     setError(null)
-    setTracks([])
+    setRecords([])
     setLoading(false)
     setRetryTick(t => t + 1)
   }, [])
 
+  // ── Derived legacy surface ──────────────────────────────────────────────────
+
+  const roleMap = schema?.roles ?? getCachedSchema()?.roles ?? null
+  const tracks = useMemo(() => records.map(asTrack), [records])
+
+  // Map the music tag-role fields back to the named accessors older views expect.
+  // For non-music datasets these are simply empty and those views aren't shown.
+  const allGenres = facets['genres'] ?? []
+  const allMoods = facets['moods'] ?? []
+  const allContexts = facets['contexts'] ?? []
+  const allThemes = facets['themes'] ?? []
+
   return {
-    tracks, loading, loadingMore, error, hasMore, loadMore,
+    records, schema, roleMap, facets,
+    tracks, allGenres, allMoods, allContexts, allThemes,
+    loading, loadingMore, error, hasMore, loadMore,
     search, setSearch, applyKernelQuery,
-    allGenres, allMoods, allContexts, allThemes,
     chromaReady, seeding, retryConnect,
   }
 }
+
+export { roleLabel }

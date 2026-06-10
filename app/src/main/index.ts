@@ -3,8 +3,12 @@ import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { spawn } from 'child_process'
 import path from 'path'
-import fs, { createWriteStream } from 'fs'
+import fs, { createWriteStream, createReadStream } from 'fs'
 import http from 'http'
+import zlib from 'zlib'
+import crypto from 'crypto'
+import { Transform } from 'stream'
+import { pipeline } from 'stream/promises'
 import mime from 'mime-types'
 import dotenv from 'dotenv'
 import { AgentProviderManager } from './agent/agent-provider-manager'
@@ -14,44 +18,8 @@ import { DataContext } from '@fangorn-network/agent-types'
 import { existsSync } from 'fs'
 import { ToolboxConfigManager } from './agent/toolbox-config-manager'
 import { registerSpotifyAuth, handleSpotifyCallback } from './spotify/SpotifyAuth'
-import { registerSpotifyIpc } from './spotify/SpotifyController'
-
-// ─── yt-dlp helpers ───────────────────────────────────────────────────────────
-
-function getYtDlpBin(): string {
-  const ext = process.platform === 'win32' ? '.exe' : ''
-  const updatable = path.join(app.getPath('userData'), `yt-dlp${ext}`)
-  if (fs.existsSync(updatable)) return updatable
-  if (app.isPackaged) return path.join(process.resourcesPath, 'bin', `yt-dlp${ext}`)
-  return path.join(app.getAppPath(), 'resources', 'bin', `yt-dlp${ext}`)
-}
-
-async function updateYtDlp(): Promise<void> {
-  return new Promise((resolve) => {
-    const ext = process.platform === 'win32' ? '.exe' : ''
-    const updatable = path.join(app.getPath('userData'), `yt-dlp${ext}`)
-    const bin = getYtDlpBin()
-
-    if (!fs.existsSync(updatable)) {
-      try { fs.copyFileSync(bin, updatable); if (process.platform !== 'win32') fs.chmodSync(updatable, 0o755) }
-      catch { resolve(); return }
-    }
-
-    console.log('[yt-dlp] checking for updates...')
-    const proc = spawn(updatable, ['--update-to', 'nightly'])
-    proc.on('close', (code) => { console.log(`[yt-dlp] update exited ${code}`); resolve() })
-    proc.on('error', () => resolve())
-  })
-}
-
-export interface YtResolveResult {
-  streamUrl: string
-  videoId: string
-  title: string
-  artist: string
-  thumbnail: string
-  durationMs: number
-}
+import { registerPlaybackIpc } from './playback/ipc'
+import { registerLocalMusicIpc } from './local/ipc'
 
 // ─── Stream cache ─────────────────────────────────────────────────────────────
 interface StreamEntry {
@@ -116,6 +84,44 @@ function startYtStreamProxy() {
     streamPort = (streamServer!.address() as any).port
     console.log(`[yt-stream] :${streamPort}`)
   })
+}
+
+// ─── yt-dlp helpers ───────────────────────────────────────────────────────────
+
+function getYtDlpBin(): string {
+  const ext = process.platform === 'win32' ? '.exe' : ''
+  const updatable = path.join(app.getPath('userData'), `yt-dlp${ext}`)
+  if (fs.existsSync(updatable)) return updatable
+  if (app.isPackaged) return path.join(process.resourcesPath, 'bin', `yt-dlp${ext}`)
+  const dir = process.platform === 'win32' ? 'win' : process.platform === 'darwin' ? 'mac' : 'linux'
+  return path.join(app.getAppPath(), 'resources', 'bin', dir, `yt-dlp${ext}`)
+}
+
+async function updateYtDlp(): Promise<void> {
+  return new Promise((resolve) => {
+    const ext = process.platform === 'win32' ? '.exe' : ''
+    const updatable = path.join(app.getPath('userData'), `yt-dlp${ext}`)
+    const bin = getYtDlpBin()
+
+    if (!fs.existsSync(updatable)) {
+      try { fs.copyFileSync(bin, updatable); if (process.platform !== 'win32') fs.chmodSync(updatable, 0o755) }
+      catch { resolve(); return }
+    }
+
+    console.log('[yt-dlp] checking for updates...')
+    const proc = spawn(updatable, ['--update-to', 'nightly'])
+    proc.on('close', (code) => { console.log(`[yt-dlp] update exited ${code}`); resolve() })
+    proc.on('error', () => resolve())
+  })
+}
+
+export interface YtResolveResult {
+  streamUrl: string
+  videoId: string
+  title: string
+  artist: string
+  thumbnail: string
+  durationMs: number
 }
 
 // ─── resolveYt ────────────────────────────────────────────────────────────────
@@ -226,8 +232,15 @@ function resolveYt(query: string): Promise<YtResolveResult> {
   })
 }
 
-// ─── Python backend ───────────────────────────────────────────────────────────
+// ─── Qdrant sidecar + query server ─────────────────────────────────────────────
+// The catalog is built offline (embeddings.py) and published as a GZIPPED QDRANT
+// SNAPSHOT pinned to IPFS. On first run the app downloads the .gz by CID,
+// decompresses it to a .snapshot, recovers it into the local Qdrant sidecar, and
+// caches the result in qdrant_storage. Every later run finds the collection
+// already present and skips the network entirely. Nothing leaves the machine
+// after the one-time fetch; both processes bind to localhost only.
 
+let qdrantProc: ReturnType<typeof spawn> | null = null
 let pyProcess: ReturnType<typeof spawn> | null = null
 let rendererServer: http.Server | null = null
 
@@ -237,44 +250,153 @@ if (app.isPackaged) {
   dotenv.config({ path: path.resolve(process.cwd(), '.env') })
 }
 
-function startPython() {
-  const root = is.dev ? app.getAppPath() : process.resourcesPath
+const SNAPSHOT_GATEWAY = "https://green-reasonable-heron-957.mypinata.cloud/ipfs"
+// (import.meta as any).env?.VITE_PINATA_GATEWAY ?? 'https://gateway.pinata.cloud/ipfs'
 
+// For now a pinned constant. Later: read the latest sond3r.embeddings.snapshot
+// record off Fangorn and return its cid + checksum, so a new catalog ships
+// without an app update. Keep this the single source of truth for the artifact.
+async function resolveSnapshot(): Promise<{ cid: string; sha256: string }> {
+  return {
+    cid: 'bafybeifn2ddof4aasmvg2mf3ufc67tkxphf2w5jqucmkev4newmf7okg3u',
+    // sha256 of the DECOMPRESSED .snapshot ('' skips verification while testing)
+    sha256: '957de00bfc8df0ab1388b7556889ef924c7a7136164389ce0db2d312b8f083dd',
+  }
+}
+
+function qdrantBin(): string {
+  const ext = process.platform === 'win32' ? '.exe' : ''
+  if (app.isPackaged) return path.join(process.resourcesPath, 'qdrant', `qdrant${ext}`)
+  const dir = process.platform === 'win32' ? 'win' : process.platform === 'darwin' ? 'mac' : 'linux'
+  return path.join(app.getAppPath(), 'resources', 'qdrant', dir, `qdrant${ext}`)
+}
+
+function startQdrant() {
+  const storage = path.join(app.getPath('userData'), 'qdrant_storage')
+  const snapshotsDir = path.join(app.getPath('userData'), 'qdrant_snapshots')
+  fs.mkdirSync(storage, { recursive: true })
+  fs.mkdirSync(snapshotsDir, { recursive: true })
+
+  qdrantProc = spawn(qdrantBin(), [], {
+    env: {
+      ...process.env,
+      QDRANT__STORAGE__STORAGE_PATH: storage,
+      QDRANT__STORAGE__SNAPSHOTS_PATH: snapshotsDir,
+      QDRANT__SERVICE__HTTP_PORT: '6333',
+      QDRANT__SERVICE__GRPC_PORT: '6334',
+      QDRANT__SERVICE__HOST: '127.0.0.1',   // localhost only, never exposed
+      QDRANT__TELEMETRY_DISABLED: 'true',   // no phone-home; matches the ethos
+    },
+  })
+  qdrantProc.stdout?.on('data', (d) => console.log('[qdrant]', d.toString().trimEnd()))
+  qdrantProc.stderr?.on('data', (d) => console.error('[qdrant]', d.toString().trimEnd()))
+  qdrantProc.on('error', (err) => console.error('[qdrant] failed to start:', err))
+  qdrantProc.on('exit', (code) => console.log('[qdrant] exited with code', code))
+}
+
+async function waitForReady(url: string, timeoutMs = 60000): Promise<void> {
+  const start = Date.now()
+  while (Date.now() - start < timeoutMs) {
+    try {
+      const r = await net.fetch(url)
+      if (r.ok) return
+    } catch { /* not up yet */ }
+    await new Promise((r) => setTimeout(r, 300))
+  }
+  throw new Error(`timed out waiting for ${url}`)
+}
+
+// Download the gzipped snapshot from IPFS, streaming progress to the window.
+async function downloadGz(cid: string, dest: string, win: BrowserWindow): Promise<void> {
+  const res = await fetch(`${SNAPSHOT_GATEWAY}/${cid}`)   // global Node fetch
+  if (!res.ok || !res.body) throw new Error(`snapshot download failed: ${res.status}`)
+
+  const total = Number(res.headers.get('content-length')) || 0
+  const out = createWriteStream(dest)
+  let received = 0
+
+  const reader = (res.body as any).getReader()
+  for (; ;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    received += value.length
+    out.write(Buffer.from(value))
+    win.webContents.send('snapshot:progress', { received, total })
+  }
+  out.end()
+  await new Promise<void>((r) => out.on('finish', () => r()))
+}
+
+// Decompress .gz → .snapshot, hashing the output so we can verify the artifact.
+async function gunzipVerify(gzPath: string, outPath: string, sha256: string): Promise<void> {
+  const hash = crypto.createHash('sha256')
+  const tap = new Transform({
+    transform(chunk: Buffer, _enc, cb) { hash.update(chunk); cb(null, chunk) },
+  })
+  await pipeline(createReadStream(gzPath), zlib.createGunzip(), tap, createWriteStream(outPath))
+  if (sha256 && hash.digest('hex') !== sha256) {
+    fs.unlinkSync(outPath)
+    throw new Error('snapshot checksum mismatch after decompression')
+  }
+}
+
+// First run: fetch + decompress + recover. Later runs: collection exists → skip.
+async function ensureCollection(win: BrowserWindow): Promise<void> {
+  const exists = await net.fetch('http://127.0.0.1:6333/collections/fangorn')
+    .then((r) => r.ok).catch(() => false)
+  if (exists) return
+
+  const { cid, sha256 } = await resolveSnapshot()
+  const userData = app.getPath('userData')
+  const gzPath = path.join(userData, 'fangorn.snapshot.gz')
+
+  // must live inside Qdrant's snapshots dir or recover 403s
+  const snapDir = path.join(userData, 'qdrant_snapshots', 'fangorn')
+  fs.mkdirSync(snapDir, { recursive: true })
+  const snapPath = path.join(snapDir, 'fangorn.snapshot')
+
+  win.webContents.send('snapshot:status', 'downloading')
+  await downloadGz(cid, gzPath, win)
+
+  win.webContents.send('snapshot:status', 'decompressing')
+  await gunzipVerify(gzPath, snapPath, sha256)
+  try { fs.unlinkSync(gzPath) } catch { }
+
+  win.webContents.send('snapshot:status', 'recovering')
+  const res = await net.fetch('http://127.0.0.1:6333/collections/fangorn/snapshots/recover', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ location: `file://${snapPath}` }),
+  })
+  if (!res.ok) throw new Error(`recover failed: ${res.status} ${await res.text()}`)
+
+  try { fs.unlinkSync(snapPath) } catch { }
+}
+
+function startQueryServer() {
+  const root = is.dev ? app.getAppPath() : process.resourcesPath
   const serverName = process.platform === 'win32' ? 'server.exe' : 'server'
 
-  const apiKey = (import.meta as any).env.VITE_GRAPH_API_KEY ?? "";
-  const userDataPath = app.getPath('userData')
+  // Read-only: proxies Qdrant and embeds text queries with nomic. No schema args,
+  // no chroma path, no checkpoint, no graph key — that all moved to the builder.
+  // The vector dim is read from the recovered snapshot's collection (and query
+  // embeddings are Matryoshka-truncated to match), so nothing is hardcoded here.
   const [bin, args, cwd]: [string, string[], string] = app.isPackaged
     ? [
       path.join(root, serverName),
-      [
-        '--graph-api-key', apiKey,
-        '--chroma-path', path.join(userDataPath, 'chroma_db'),
-        '--checkpoint-file', path.join(userDataPath, 'ingest_checkpoint.json'),
-        '-s', 'test.sond3r.track.invariants.0=0xd3e0128222087190a574329cbb049a834e276923e269f7eaf974572ef1e5ff53',
-        '-s', 'test.sond3r.track.taxonomy.0=0xa29392f3d443285ffd2e3b03f4d966fb47dac4f8a1691c3c5eb91859ec1f7f7a',
-        // '-s', 'test.sond3r.track.source.0=0x052f754de156c31a8ef35e3a50a1eae452dd79abb3f32a76a4663ab182f261da',
-        '--primary', 'test.sond3r.track.invariants.0',
-      ],
+      ['--collection', 'fangorn'],
       root,
     ]
     : [
       path.join(root, 'vectordb/venv/bin/python'),
       [
         path.join(root, 'vectordb/server.py'),
-        '--graph-api-key', apiKey,
-        '-s', 'test.sond3r.track.invariants.0=0xd3e0128222087190a574329cbb049a834e276923e269f7eaf974572ef1e5ff53',
-        '-s', 'test.sond3r.track.taxonomy.0=0xa29392f3d443285ffd2e3b03f4d966fb47dac4f8a1691c3c5eb91859ec1f7f7a',
-        // '-s', 'test.sond3r.track.source.0=0x052f754de156c31a8ef35e3a50a1eae452dd79abb3f32a76a4663ab182f261da',
-        '--primary', 'test.sond3r.track.invariants.0',
+        '--collection', 'fangorn',
       ],
       path.join(root, 'vectordb'),
     ]
 
-  pyProcess = spawn(bin, args, {
-    cwd,
-    env: { ...process.env, CHROMA_PATH: path.join(app.getPath('userData'), 'chroma_db') },
-  })
+  pyProcess = spawn(bin, args, { cwd, env: { ...process.env } })
 
   pyProcess.stdout?.on('data', (d) => console.log('[py]', d.toString().trimEnd()))
   pyProcess.stderr?.on('data', (d) => console.error('[py]', d.toString().trimEnd()))
@@ -326,7 +448,10 @@ function createWindow(): BrowserWindow {
     fullscreen: false, fullscreenable: true,
     show: false, darkTheme: true, movable: true, resizable: true,
     title: 'SOND3R', frame: false, titleBarStyle: 'hidden',
-    titleBarOverlay: { color: 'black', symbolColor: '#ffffff', height: 40 },
+    // Native window-controls overlay tinted to match the light editorial header
+    // (App.tsx BG1 background / FG symbols) so min/max/close read as part of the
+    // app instead of black boxes. Height matches the 40px header.
+    titleBarOverlay: { color: '#f0ece5', symbolColor: '#1a1714', height: 40 },
     backgroundColor: '#1a1a1a', autoHideMenuBar: true,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -355,8 +480,14 @@ function createWindow(): BrowserWindow {
 // ─── IPC handlers ─────────────────────────────────────────────────────────────
 
 function registerIpcHandlers() {
+  ipcMain.handle('shell:open-external', (_event, url: string) => {
+    if (typeof url === 'string' && (url.startsWith('https://') || url.startsWith('http://'))) {
+      shell.openExternal(url)
+    }
+  })
+
   ipcMain.handle('fetch:proxy', async (_event, { url, options }) => {
-      const res = await net.fetch(url, options ?? {})
+    const res = await net.fetch(url, options ?? {})
     return { status: res.status, body: await res.text() }
   })
 
@@ -388,8 +519,6 @@ function registerIpcHandlers() {
     console.log('[rpc]', method, res.status, text.slice(0, 200))
     return text
   })
-
-  // ── yt-dlp ──────────────────────────────────────────────────────────────────
 
   ipcMain.handle('yt:resolve', async (_event, query: string): Promise<YtResolveResult> => {
     return resolveYt(query)
@@ -438,6 +567,10 @@ function registerIpcHandlers() {
         resolve(results)
       })
     })
+  })
+
+  ipcMain.handle('backend:is-ready', async () => {
+    return net.fetch('http://127.0.0.1:8080/health').then(r => r.ok).catch(() => false)
   })
 }
 
@@ -498,28 +631,46 @@ async function bootstrap() {
   }
 }
 
+// ─── Dev sandbox (Linux) ─────────────────────────────────────────────────────
+// In dev we run unsandboxed so onboarding needs no root `chown/chmod 4755` on
+// node_modules/electron/dist/chrome-sandbox. Packaged builds keep the sandbox.
+if (is.dev && process.platform === 'linux') {
+  app.commandLine.appendSwitch('no-sandbox')
+}
+
+// ─── GPU acceleration (WSL2 / Linux) ─────────────────────────────────────────
+if (process.platform === 'linux' && process.env.SOND3R_DISABLE_GPU !== '1') {
+  app.commandLine.appendSwitch('ignore-gpu-blocklist')
+  app.commandLine.appendSwitch('enable-gpu-rasterization')
+  app.commandLine.appendSwitch('enable-zero-copy')
+  if (process.env.SOND3R_GPU_ANGLE === '1') {
+    app.commandLine.appendSwitch('use-gl', 'angle')
+    app.commandLine.appendSwitch('use-angle', 'gl')
+  }
+}
+
 // ─── Protocol + single-instance lock (must be before whenReady) ──────────────
 
-// sond3r:// is the OAuth redirect URI registered in the Spotify dashboard.
-// On macOS it arrives via open-url; on Windows/Linux via second-instance argv.
 if (!app.isDefaultProtocolClient('sond3r')) {
   app.setAsDefaultProtocolClient('sond3r')
 }
 
-// Ensures only one app instance handles the protocol callback on Win/Linux.
 const gotLock = app.requestSingleInstanceLock()
 if (!gotLock) {
   app.quit()
 }
 
 // ─── App lifecycle ────────────────────────────────────────────────────────────
+// Order matters: the WINDOW comes up first so the first-run download has a UI to
+// report into. The data backend (Qdrant + snapshot fetch + query server) is
+// brought up afterwards, behind a boot screen the renderer renders.
 
 app.whenReady().then(async () => {
   electronApp.setAppUserModelId('com.electron')
 
-  startPython()
-  updateYtDlp()
+  startQdrant()
   startYtStreamProxy()
+  updateYtDlp()
 
   if (!is.dev) await startRendererServer()
 
@@ -548,18 +699,32 @@ app.whenReady().then(async () => {
   registerIpcHandlers()
   await bootstrap()
 
-  // createWindow() now returns the BrowserWindow so we can hand it to
-  // registerSpotifyAuth, which needs it to send IPC events back to the renderer.
   const mainWindow = createWindow()
 
-  // registerSpotifyAuth(mainWindow)   // spotify-auth:* IPC handlers
-  registerSpotifyIpc()              // spotify:* IPC handlers (MPRIS / AppleScript / URI)
+  registerSpotifyAuth(mainWindow)   // spotify-auth:* IPC handlers (PKCE OAuth)
+  registerPlaybackIpc()             // playback:* IPC handlers (source-agnostic; Spotify default)
+  registerLocalMusicIpc()           // local:* IPC handlers (on-disk music + localhost file server)
 
-  // Windows / Linux: protocol URI arrives as argv of the second instance
+  // Wait until the renderer is mounted so it can actually receive boot events.
+  await new Promise<void>((r) => mainWindow.webContents.once('did-finish-load', () => r()))
+
+  // Backend comes up behind the window: Qdrant ready → collection present
+  // (download + decompress + recover on first run, skip if cached) → query server.
+  try {
+    await waitForReady('http://127.0.0.1:6333/readyz')
+    await ensureCollection(mainWindow)
+    startQueryServer()
+    await waitForReady('http://127.0.0.1:8080/health')
+    console.log('[boot] data backend ready')
+    mainWindow.webContents.send('backend:ready')
+  } catch (err) {
+    console.error('[boot] backend failed to come up:', err)
+    mainWindow.webContents.send('backend:error', String(err))
+  }
+
   app.on('second-instance', (_e, argv) => {
     const url = argv.find((a: string) => a.startsWith('sond3r://'))
     if (url) handleSpotifyCallback(url)
-    // Also focus the existing window
     if (mainWindow.isMinimized()) mainWindow.restore()
     mainWindow.focus()
   })
@@ -577,11 +742,14 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', async () => {
-  if (pyProcess && !pyProcess.killed) {
-    if (process.platform === 'win32') {
-      spawn('taskkill', ['/PID', String(pyProcess.pid), '/F', '/T'])
-    } else {
-      pyProcess.kill()
+  // Kill both child processes; /T on Windows takes their trees with them.
+  for (const proc of [pyProcess, qdrantProc]) {
+    if (proc && !proc.killed) {
+      if (process.platform === 'win32') {
+        spawn('taskkill', ['/PID', String(proc.pid), '/F', '/T'])
+      } else {
+        proc.kill()
+      }
     }
   }
   if (rendererServer) {

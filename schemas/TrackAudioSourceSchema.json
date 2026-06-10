@@ -2,10 +2,9 @@
     "trackId": {
         "@type": "string"
     },
-    "platform": {
-        "@type": "string"
-    },
-    "platformId": {
-        "@type": "string"
+    "audio": {
+        "@type": "handle",
+        "identifier": "r2://1xkkSLLL99fhdkadfjkae83", 
+        "gateway": "https://..."
     }
 }

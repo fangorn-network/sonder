@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react'
+import type { RecordVM } from './domain/recordVM'
 
 export interface JoinedRecord {
   // Fangorn envelope
@@ -23,29 +24,37 @@ export type FieldValue =
   | FieldValue[]
   | FieldValueObject
 
-export function asTrack(r: JoinedRecord): Track {
-  const f = r.fields
+/**
+ * Compatibility bridge: project a generic RecordVM into the legacy music `Track`
+ * shape so not-yet-migrated music components keep working unchanged. Roles map
+ * 1:1 to the old fields, so for the music dataset this reproduces the previous
+ * `Track` exactly. Removed once every view consumes RecordVM directly.
+ */
+export function asTrack(vm: RecordVM): Track {
+  const year = vm.temporal && /\d{4}/.test(vm.temporal)
+    ? parseInt(vm.temporal.slice(0, 4)) || null
+    : null
+  const durKey = Object.keys(vm.measures).find(k => /dur|length/i.test(k))
+  const durationMs = durKey ? vm.measures[durKey] : (Object.values(vm.measures)[0] ?? null)
+  const contributors = Array.isArray(vm.raw.contributors)
+    ? (vm.raw.contributors as any[]).map(c => ({ role: c.role ?? null, name: c.name ?? null, id: c.id ?? null }))
+    : []
   return {
-    id: r.id,
-    trackId: r.trackId,
-    owner: r.owner,
-    manifestCid: r.manifestCid,
-    title: (f.title as string) ?? 'Unknown',
-    artist: (f.byArtist as string) ?? '',
-    year: typeof f.datePublished === 'string' && f.datePublished
-      ? parseInt(f.datePublished.slice(0, 4)) || null
-      : null,
-    durationMs: (f.durationMs as number) ?? null,
-    // platformId comes from the joined source schema record
-    youtubeVideoId: (f.platformId as string) ?? undefined,
-    contributors: Array.isArray(f.contributors)
-      ? (f.contributors as any[]).map(c => ({
-        role: c.role ?? null,
-        name: c.name ?? null,
-        id: c.id ?? null,
-      }))
-      : [],
-    embedding: r.embedding,
+    id: vm.id,
+    trackId: vm.identity,
+    owner: vm.owner,
+    manifestCid: vm.manifestCid,
+    title: vm.title || 'Unknown',
+    artist: vm.subtitle,
+    year,
+    durationMs,
+    youtubeVideoId: vm.media ?? undefined,
+    contributors,
+    embedding: vm.embedding,
+    genres: vm.tagsByField['genres'] ?? [],
+    moods: vm.tagsByField['moods'] ?? [],
+    themes: vm.tagsByField['themes'] ?? [],
+    contexts: vm.tagsByField['contexts'] ?? [],
   }
 }
 

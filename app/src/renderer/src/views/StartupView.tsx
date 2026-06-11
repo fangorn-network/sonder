@@ -6,13 +6,14 @@ import { useEffect, useState, ReactNode } from 'react'
 // recovers it into the local Qdrant instance. We surface download progress as a
 // determinate bar and the decompress/recover stages as an indeterminate one.
 
-type BootStage = 'init' | 'downloading' | 'decompressing' | 'recovering' | 'ready' | 'error'
+type BootStage = 'init' | 'downloading' | 'decompressing' | 'recovering' | 'warming' | 'ready' | 'error'
 
 const STAGE_LABEL: Record<BootStage, string> = {
   init:         'initializing',
   downloading:  'fetching catalog from ipfs',
   decompressing:'decompressing snapshot',
   recovering:   'loading into vector store',
+  warming:      'warming search index',
   ready:        'ready',
   error:        'connection failed',
 }
@@ -45,7 +46,7 @@ function useBootSequence(): BootState {
 
     s.onSnapshotProgress((d) => { setStage('downloading'); setProgress(d) })
     s.onSnapshotStatus((status) => {
-      if (status === 'downloading' || status === 'decompressing' || status === 'recovering') {
+      if (status === 'downloading' || status === 'decompressing' || status === 'recovering' || status === 'warming') {
         setStage(status as BootStage)
       }
     })

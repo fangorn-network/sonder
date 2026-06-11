@@ -571,7 +571,7 @@ function registerIpcHandlers() {
   })
 
   ipcMain.handle('backend:is-ready', async () => {
-    return net.fetch('http://127.0.0.1:8080/health').then(r => r.ok).catch(() => false)
+    return net.fetch('http://127.0.0.1:8080/ready').then(r => r.ok).catch(() => false)
   })
 }
 
@@ -716,6 +716,14 @@ app.whenReady().then(async () => {
     await ensureCollection(mainWindow)
     startQueryServer()
     await waitForReady('http://127.0.0.1:8080/health')
+    // Hold the splash through warmup. /health is up as soon as the server binds,
+    // but its lexical index + embedding model + vector index aren't hot yet —
+    // /ready flips to 200 only when warmup finishes. Gating here means the user
+    // can't reach the search box until the very first query is fast, which is
+    // the whole point of a local-first search. Generous timeout: building the
+    // 860k-record lexical index can take a bit on a cold disk.
+    mainWindow.webContents.send('snapshot:status', 'warming')
+    await waitForReady('http://127.0.0.1:8080/ready', 300000)
     console.log('[boot] data backend ready')
     mainWindow.webContents.send('backend:ready')
   } catch (err) {

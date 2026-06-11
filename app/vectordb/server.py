@@ -34,7 +34,7 @@ import uvicorn
 
 from qdrant_client import QdrantClient, models as qmodels
 from fastembed import TextEmbedding
-from fastapi import FastAPI, Query, BackgroundTasks, Request
+from fastapi import FastAPI, Query, BackgroundTasks, Request, Response
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -398,6 +398,11 @@ def _build_map_sync() -> dict:
 _text_index:      list[dict] | None = None
 _text_index_lock = threading.Lock()
 
+# True once background warmup has finished: lexical index built, embedding model
+# loaded, and the vector index paged into memory. The /ready boot gate keys off
+# this so the loading screen can hold until the very first query is fast.
+_warm = False
+
 def _build_text_index_sync() -> list[dict]:
     total = _collection_count()
     if total == 0:
@@ -437,18 +442,23 @@ def _score_rec(rec: dict, q_l: str, tokens: list[str]) -> float:
         score += 12 * (sum(1 for tok in tokens if tok in tags) / len(tokens))
     return score
 
-def _search_text_sync(q: str, limit: int, owner: str | None) -> list[dict]:
+def _ensure_text_index() -> list[dict]:
+    """Build the lexical index once, lazily, under a lock + double-check so two
+    concurrent callers (each on its own executor thread) don't both scroll the
+    full 860k-record collection. Pre-called from warmup so the user's first text
+    search does only scoring, not the build."""
     global _text_index
-    # Built lazily on first text search. Guard with a lock + double-check so two
-    # concurrent searches (each on its own executor thread) don't both scroll the
-    # full 860k-record collection and build the index twice.
     if _text_index is None:
         with _text_index_lock:
             if _text_index is None:
                 _text_index = _build_text_index_sync()
+    return _text_index
+
+def _search_text_sync(q: str, limit: int, owner: str | None) -> list[dict]:
+    index  = _ensure_text_index()
     q_l    = q.strip().lower()
     tokens = [tok for tok in q_l.split() if tok]
-    recs   = _text_index if not owner else [r for r in _text_index if r.get("owner") == owner]
+    recs   = index if not owner else [r for r in index if r.get("owner") == owner]
     scored = [(s, r) for r in recs if (s := _score_rec(r, q_l, tokens)) > 0]
     scored.sort(key=lambda x: (-x[0], x[1]["_sort"]))
     return [{"id": r["id"], "fields": r["fields"], "owner": r.get("owner")}
@@ -1056,7 +1066,7 @@ async def _seed_from_ipfs(cid: str) -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global qdrant_client, embed_engine, vector_dim
+    global qdrant_client, embed_engine, vector_dim, _warm
     # `timeout` is the per-request gRPC deadline. The default (5s) is too tight
     # for a cold first query: against a freshly-recovered 1M-vector collection,
     # Qdrant has to page the HNSW graph + mmap'd segments into memory before it
@@ -1126,14 +1136,24 @@ async def lifespan(app: FastAPI):
     # critical path means /health comes up immediately while warmup proceeds.
     if count > 0:
         asyncio.create_task(_warmup())
+    else:
+        # Nothing to warm (empty / still-seeding collection) — don't gate boot on
+        # a warmup that will never run.
+        _warm = True
 
     yield
 
 
 async def _warmup() -> None:
+    global _warm
     loop = asyncio.get_event_loop()
     try:
-        # Force the embedding model to fully initialise.
+        # Pre-build the lexical index first: it's the first thing most users hit,
+        # and building it lazily on the first /search/text means an 860k-record
+        # scroll blocks that query. Doing it here (behind /health, at startup)
+        # makes the first text search do only scoring.
+        await loop.run_in_executor(None, _ensure_text_index)
+        # Force the embedding model to fully initialise (semantic search path).
         await loop.run_in_executor(None, lambda: _embed_texts(["warmup"]))
         # Touch the collection so its HNSW graph + segments page into memory.
         dim = vector_dim or MODEL_DIM_MAP.get(cfg.embedding_model, 768)
@@ -1144,9 +1164,13 @@ async def _warmup() -> None:
             with_payload=False,
             with_vectors=False,
         ))
-        print("[startup] warmup complete — embeddings + vector index hot")
+        print("[startup] warmup complete — lexical index + embeddings + vector index hot")
     except Exception as e:
         print(f"[startup] warmup skipped: {e}")
+    finally:
+        # Release the boot gate either way: on success everything's hot; on
+        # failure the lazy fallbacks still work and we must not hang the splash.
+        _warm = True
 
 app = FastAPI(lifespan=lifespan)
 
@@ -1494,7 +1518,18 @@ async def health():
         "map_cached":    _map_cache is not None,
         "map_computing": _map_computing,
         "text_indexed":  _text_index is not None,
+        "warm":          _warm,
     }
+
+@app.get("/ready")
+async def ready(response: Response):
+    """Boot gate. Returns 200 only once background warmup has finished (lexical
+    index + embedding model + vector index hot), so the loading screen can hold
+    until the very first query is fast. 503 while still warming."""
+    if _warm:
+        return {"ready": True}
+    response.status_code = 503
+    return {"ready": False}
 
 @app.post("/reingest")
 async def reingest():

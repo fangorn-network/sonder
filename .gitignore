@@ -43,3 +43,6 @@ db/
 **/resources/
 **/qdrant_storage
 .qdrant-initialized
+**/__pycache__/
+*.pyc
+*.pyo

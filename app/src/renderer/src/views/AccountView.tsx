@@ -1,0 +1,360 @@
+/**
+ * AccountView.tsx
+ *
+ * Account management — renders inline inside the settings drawer ("account"
+ * section). Sensitive flows (email update, MFA enrollment, key export,
+ * funding) all route through Privy's hosted modals; this view is the chrome
+ * around them plus read-only account/wallet state.
+ */
+
+import { useCallback, useEffect, useState } from 'react'
+import {
+  usePrivy,
+  useWallets,
+  useFundWallet,
+  useMfaEnrollment,
+  useExportWallet,
+} from '@privy-io/react-auth'
+import { createPublicClient, http, parseAbi, formatUnits, formatEther } from 'viem'
+import { arbitrumSepolia } from 'viem/chains'
+
+const USDC_ADDRESS = '0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d'
+const USDC_ABI = parseAbi(['function balanceOf(address) view returns (uint256)'])
+
+const publicClient = createPublicClient({
+  chain: arbitrumSepolia,
+  transport: http('https://sepolia-rollup.arbitrum.io/rpc'),
+})
+
+const MFA_LABELS: Record<string, string> = {
+  sms: 'SMS',
+  totp: 'Authenticator app',
+  passkey: 'Passkey',
+}
+
+export function AccountView() {
+  const {
+    ready, authenticated, user,
+    login, logout,
+    linkEmail, updateEmail,
+    createWallet,
+  } = usePrivy()
+  const { wallets } = useWallets()
+  const { exportWallet } = useExportWallet()
+  const { showMfaEnrollmentModal } = useMfaEnrollment()
+
+  const embeddedWallet = wallets.find(w => w.walletClientType === 'privy')
+  const address = (user?.wallet?.address ?? embeddedWallet?.address) as `0x${string}` | undefined
+
+  // ── Balances ───────────────────────────────────────────────────────────────
+
+  const [usdcBalance, setUsdcBalance] = useState<string | null>(null)
+  const [ethBalance, setEthBalance] = useState<string | null>(null)
+
+  const refreshBalances = useCallback(() => {
+    if (!address) { setUsdcBalance(null); setEthBalance(null); return }
+    publicClient.readContract({
+      address: USDC_ADDRESS, abi: USDC_ABI, functionName: 'balanceOf', args: [address],
+    })
+      .then(raw => setUsdcBalance(formatUnits(raw, 6)))
+      .catch(console.error)
+    publicClient.getBalance({ address })
+      .then(raw => setEthBalance(formatEther(raw)))
+      .catch(console.error)
+  }, [address])
+
+  useEffect(() => { refreshBalances() }, [refreshBalances])
+
+  const { fundWallet } = useFundWallet({ onUserExited: refreshBalances })
+
+  // ── Copy-to-clipboard flash ────────────────────────────────────────────────
+
+  const [copied, setCopied] = useState<string | null>(null)
+  const copy = useCallback((key: string, value: string) => {
+    navigator.clipboard.writeText(value)
+    setCopied(key)
+    setTimeout(() => setCopied(null), 1500)
+  }, [])
+
+  // ── Sign-out confirmation ──────────────────────────────────────────────────
+
+  const [confirmLogout, setConfirmLogout] = useState(false)
+
+  // ─────────────────────────────────────────────────────────────────────────
+
+  if (!ready) {
+    return <Note>loading account…</Note>
+  }
+
+  if (!authenticated || !user) {
+    return (
+      <div>
+        <PanelHeading title="ACCOUNT" sub="not signed in" />
+        <Note style={{ marginBottom: 'var(--sp-4)' }}>
+          Connect to manage your email, wallet, and security settings.
+        </Note>
+        <button className="studio-submit" style={{ width: '100%' }} onClick={login}>
+          connect
+        </button>
+      </div>
+    )
+  }
+
+  const mfaMethods = user.mfaMethods ?? []
+
+  return (
+    <div>
+      <PanelHeading title="ACCOUNT" sub="identity · wallet · security" />
+
+      {/* ── Identity ─────────────────────────────────────────────────────── */}
+      <Section label="Identity">
+        <Row label="Email">
+          {user.email ? (
+            <ValueWithAction
+              value={user.email.address}
+              actionLabel="update"
+              onAction={updateEmail}
+            />
+          ) : (
+            <ValueWithAction
+              value="not linked"
+              dim
+              actionLabel="link email"
+              onAction={linkEmail}
+            />
+          )}
+        </Row>
+        <Row label="User ID">
+          <ValueWithAction
+            value={copied === 'did' ? 'copied!' : truncateMiddle(user.id.replace(/^did:privy:/, ''), 14)}
+            mono
+            actionLabel="copy"
+            onAction={() => copy('did', user.id)}
+          />
+        </Row>
+        <Row label="Member since">
+          <Value value={new Date(user.createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })} />
+        </Row>
+      </Section>
+
+      {/* ── Wallet ───────────────────────────────────────────────────────── */}
+      <Section label="Wallet" trailing={address ? <Dot ok label={embeddedWallet ? 'embedded' : 'linked'} /> : <Dot label="none" />}>
+        {address ? (
+          <>
+            <Row label="Address">
+              <ValueWithAction
+                value={copied === 'addr' ? 'copied!' : truncateMiddle(address, 16)}
+                mono
+                actionLabel="copy"
+                onAction={() => copy('addr', address)}
+              />
+            </Row>
+            <Row label="USDC">
+              <Value mono value={usdcBalance !== null ? `$${Number(usdcBalance).toFixed(2)}` : '…'} />
+            </Row>
+            <Row label="ETH">
+              <Value mono value={ethBalance !== null ? Number(ethBalance).toFixed(5) : '…'} />
+            </Row>
+            <Actions>
+              <button className="btn-ghost" style={{ flex: 1 }} onClick={() => fundWallet({ address })}>
+                add funds
+              </button>
+              {embeddedWallet && (
+                <button className="btn-ghost" style={{ flex: 1 }} onClick={() => exportWallet({ address: embeddedWallet.address })}>
+                  export key
+                </button>
+              )}
+            </Actions>
+          </>
+        ) : (
+          <>
+            <Note style={{ padding: 'var(--sp-4)' }}>
+              No wallet linked to this account yet.
+            </Note>
+            <Actions>
+              <button className="btn-ghost" style={{ flex: 1 }} onClick={() => createWallet()}>
+                create embedded wallet
+              </button>
+            </Actions>
+          </>
+        )}
+      </Section>
+
+      {/* ── Security ─────────────────────────────────────────────────────── */}
+      <Section label="Security" trailing={<Dot ok={mfaMethods.length > 0} label={mfaMethods.length > 0 ? 'mfa on' : 'mfa off'} />}>
+        <Row label="2-factor auth">
+          <Value
+            value={mfaMethods.length > 0
+              ? mfaMethods.map(m => MFA_LABELS[m] ?? m).join(', ')
+              : 'not enrolled'}
+            dim={mfaMethods.length === 0}
+          />
+        </Row>
+        <Actions>
+          <button className="btn-ghost" style={{ flex: 1 }} onClick={showMfaEnrollmentModal}>
+            {mfaMethods.length > 0 ? 'manage mfa' : 'enable mfa'}
+          </button>
+        </Actions>
+      </Section>
+
+      {/* ── Session ──────────────────────────────────────────────────────── */}
+      <Section label="Session">
+        <Actions noBorder>
+          {confirmLogout ? (
+            <>
+              <button
+                className="btn-ghost"
+                style={{ flex: 1, color: 'var(--err)' }}
+                onClick={() => { setConfirmLogout(false); logout() }}>
+                confirm sign out
+              </button>
+              <button className="btn-ghost" style={{ flex: 1 }} onClick={() => setConfirmLogout(false)}>
+                cancel
+              </button>
+            </>
+          ) : (
+            <button
+              className="btn-ghost"
+              style={{ flex: 1, color: 'var(--err)' }}
+              onClick={() => setConfirmLogout(true)}>
+              sign out
+            </button>
+          )}
+        </Actions>
+      </Section>
+    </div>
+  )
+}
+
+// ─── Layout atoms ─────────────────────────────────────────────────────────────
+
+function PanelHeading({ title, sub }: { title: string; sub: string }) {
+  return (
+    <div style={{ marginBottom: 'var(--sp-5)' }}>
+      <h1 style={{
+        fontFamily: 'var(--font-display)', fontSize: 36, letterSpacing: '0.03em',
+        lineHeight: 1, color: 'var(--fg)', margin: 0,
+      }}>
+        {title}
+      </h1>
+      <p style={{
+        fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.16em',
+        textTransform: 'uppercase', color: 'var(--fg3)', margin: '6px 0 0',
+      }}>
+        {sub}
+      </p>
+    </div>
+  )
+}
+
+function Section({ label, trailing, children }: {
+  label: string; trailing?: React.ReactNode; children: React.ReactNode
+}) {
+  return (
+    <div className="studio-section" style={{ marginBottom: 'var(--sp-4)' }}>
+      <div className="studio-section-label" style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: 'var(--sp-3) var(--sp-4)',
+      }}>
+        <span>{label}</span>
+        {trailing}
+      </div>
+      {children}
+    </div>
+  )
+}
+
+function Row({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+      padding: 'var(--sp-3) var(--sp-4)',
+      borderTop: '1px solid var(--glass-edge)',
+    }}>
+      <span style={{
+        fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.12em',
+        textTransform: 'uppercase', color: 'var(--fg3)', flexShrink: 0,
+      }}>
+        {label}
+      </span>
+      {children}
+    </div>
+  )
+}
+
+function Value({ value, mono, dim }: { value: string; mono?: boolean; dim?: boolean }) {
+  return (
+    <span style={{
+      fontFamily: mono ? 'var(--font-mono)' : 'var(--font-body)',
+      fontSize: mono ? 11 : 12,
+      color: dim ? 'var(--fg4)' : 'var(--fg2)',
+      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+    }}>
+      {value}
+    </span>
+  )
+}
+
+function ValueWithAction({ value, mono, dim, actionLabel, onAction }: {
+  value: string; mono?: boolean; dim?: boolean; actionLabel: string; onAction: () => void
+}) {
+  return (
+    <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+      <Value value={value} mono={mono} dim={dim} />
+      <button
+        className="btn-ghost"
+        onClick={onAction}
+        style={{ flexShrink: 0, padding: '3px 8px', fontSize: 9 }}>
+        {actionLabel}
+      </button>
+    </span>
+  )
+}
+
+function Actions({ noBorder, children }: { noBorder?: boolean; children: React.ReactNode }) {
+  return (
+    <div style={{
+      padding: 'var(--sp-3) var(--sp-4)',
+      borderTop: noBorder ? 'none' : '1px solid var(--glass-edge)',
+      display: 'flex', gap: 8, alignItems: 'center',
+    }}>
+      {children}
+    </div>
+  )
+}
+
+function Dot({ ok, label }: { ok?: boolean; label: string }) {
+  const color = ok ? 'var(--success)' : 'var(--fg4)'
+  return (
+    <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+      <span style={{
+        width: 6, height: 6, borderRadius: '50%', background: color, flexShrink: 0,
+        boxShadow: ok ? `0 0 6px ${color}` : 'none',
+      }} />
+      <span style={{
+        fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.1em',
+        textTransform: 'uppercase', color,
+      }}>
+        {label}
+      </span>
+    </span>
+  )
+}
+
+function Note({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
+  return (
+    <p style={{
+      fontFamily: 'var(--font-body)', fontSize: 12, fontWeight: 300,
+      color: 'var(--fg3)', lineHeight: 1.7, margin: 0, ...style,
+    }}>
+      {children}
+    </p>
+  )
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function truncateMiddle(s: string, keep: number): string {
+  if (s.length <= keep * 2 + 1) return s
+  return `${s.slice(0, keep)}…${s.slice(-Math.max(4, Math.floor(keep / 3)))}`
+}

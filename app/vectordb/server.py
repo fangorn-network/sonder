@@ -1,10 +1,28 @@
 import certifi
 import os
+
+# ── Native thread governance ────────────────────────────────────────────────
+# numba (pulled in by UMAP), numpy/OpenBLAS, and onnxruntime (via fastembed)
+# each start a pool of worker threads that *busy-wait* when idle. After a big
+# job like the 860k-point UMAP build finishes, those leftover threads keep every
+# core pinned at 100% for the life of the process. Make idle OpenMP threads
+# sleep, and cap each pool to ~half the cores so a build can't lock up the whole
+# machine. Must run before those libraries load (fastembed below pulls in
+# onnxruntime at import time; numpy/numba load lazily on the first map build).
+_HALF_CORES = str(max(1, (os.cpu_count() or 4) // 2))
+os.environ.setdefault("OMP_WAIT_POLICY", "PASSIVE")
+os.environ.setdefault("OMP_NUM_THREADS", _HALF_CORES)
+os.environ.setdefault("OPENBLAS_NUM_THREADS", _HALF_CORES)
+os.environ.setdefault("MKL_NUM_THREADS", _HALF_CORES)
+os.environ.setdefault("NUMEXPR_NUM_THREADS", _HALF_CORES)
+os.environ.setdefault("NUMBA_NUM_THREADS", _HALF_CORES)
+
 import io
 import sys
 os.environ['SSL_CERT_FILE'] = certifi.where()
 import argparse
 import asyncio
+import threading
 import aiohttp
 import random
 import hashlib
@@ -377,7 +395,8 @@ def _build_map_sync() -> dict:
 # TEXT (LEXICAL) SEARCH
 # ---------------------------------------------------------------------------
 
-_text_index:    list[dict] | None = None
+_text_index:      list[dict] | None = None
+_text_index_lock = threading.Lock()
 
 def _build_text_index_sync() -> list[dict]:
     total = _collection_count()
@@ -420,8 +439,13 @@ def _score_rec(rec: dict, q_l: str, tokens: list[str]) -> float:
 
 def _search_text_sync(q: str, limit: int, owner: str | None) -> list[dict]:
     global _text_index
+    # Built lazily on first text search. Guard with a lock + double-check so two
+    # concurrent searches (each on its own executor thread) don't both scroll the
+    # full 860k-record collection and build the index twice.
     if _text_index is None:
-        _text_index = _build_text_index_sync()
+        with _text_index_lock:
+            if _text_index is None:
+                _text_index = _build_text_index_sync()
     q_l    = q.strip().lower()
     tokens = [tok for tok in q_l.split() if tok]
     recs   = _text_index if not owner else [r for r in _text_index if r.get("owner") == owner]

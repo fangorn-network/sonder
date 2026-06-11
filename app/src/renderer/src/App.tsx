@@ -14,8 +14,8 @@ import { useChroma } from './hooks/useChroma'
 import { StartupView } from './views/StartupView'
 import { useSessionKernel } from './hooks/useSessionKernel'
 import { ConnectorsView } from './views/ConnectorsView'
+import { AccountView } from './views/AccountView'
 import type { TasteSignal } from './types'
-import { ConnectWallet } from './components/ConnectWallet'
 import { type SessionEvent } from './kernel/Visualizer'
 import { useChromaSync } from './hooks/useChromaSync'
 import KernelDebugHUD from './kernel/HUD'
@@ -53,6 +53,7 @@ const MB_USER_AGENT = 'SOND3R/1.0.0 (https://fangorn.network)'
 const onTrackEndedRef = { current: () => { } }
 
 type AnalyzeTab = 'wiki' | 'neighborhood' | 'galaxy'
+type DrawerSection = 'kernel' | 'account' | 'connectors' | 'agent'
 
 // ─── Root ──────────────────────────────────────────────────────────────────────
 
@@ -132,9 +133,15 @@ function Main() {
 
   // ── UI state ──────────────────────────────────────────────────────────────
   const [showSettings, setShowSettings] = useState(false)
+  const [settingsSection, setSettingsSection] = useState<DrawerSection>('kernel')
   const [nowPlayingOpen, setNowPlayingOpen] = useState(false)
   const [showGalaxy, setShowGalaxy] = useState(false)
   const [showLocal, setShowLocal] = useState(false)
+
+  const openSettings = useCallback((section: DrawerSection) => {
+    setSettingsSection(section)
+    setShowSettings(true)
+  }, [])
 
   // ── Kernel / chroma ───────────────────────────────────────────────────────
 
@@ -352,6 +359,9 @@ function Main() {
     wikiNavigate({ kind: 'results', query: q, mode: 'semantic' })
   }, [wikiNavigate])
 
+  const accountActive  = showSettings && settingsSection === 'account'
+  const settingsActive = showSettings && settingsSection !== 'account'
+
   // ─────────────────────────────────────────────────────────────────────────
   // Render
   // ─────────────────────────────────────────────────────────────────────────
@@ -455,8 +465,12 @@ function Main() {
 
             {/* Settings icon */}
             <button
-              onClick={() => setShowSettings(s => !s)}
-              style={{ background: showSettings ? `${ACCENT}18` : 'none', border: `1px solid ${showSettings ? ACCENT + '44' : BORDER2}`, color: showSettings ? ACCENT : FG4, fontFamily: MONO, fontSize: 11, padding: '3px 8px', cursor: 'pointer', flexShrink: 0, WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+              onClick={() => {
+                if (!showSettings) openSettings('kernel')
+                else if (settingsSection === 'account') setSettingsSection('kernel')
+                else setShowSettings(false)
+              }}
+              style={{ background: settingsActive ? `${ACCENT}18` : 'none', border: `1px solid ${settingsActive ? ACCENT + '44' : BORDER2}`, color: settingsActive ? ACCENT : FG4, fontFamily: MONO, fontSize: 11, padding: '3px 8px', cursor: 'pointer', flexShrink: 0, WebkitAppRegion: 'no-drag' } as React.CSSProperties}
               title="Settings">
               ⚙
             </button>
@@ -464,10 +478,17 @@ function Main() {
             {/* Now-playing dot — only when the dataset is playable */}
             {canPlay && <NowPlayingDot onOpen={() => setNowPlayingOpen(true)} />}
 
-            {/* Wallet */}
-            <div style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
-              <ConnectWallet />
-            </div>
+            {/* Account */}
+            <button
+              onClick={() => {
+                if (!showSettings) openSettings('account')
+                else if (settingsSection !== 'account') setSettingsSection('account')
+                else setShowSettings(false)
+              }}
+              style={{ background: accountActive ? `${ACCENT}18` : 'none', border: `1px solid ${accountActive ? ACCENT + '44' : BORDER2}`, color: accountActive ? ACCENT : FG4, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '4px 8px', cursor: 'pointer', flexShrink: 0, WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+              title="Account">
+              <AccountIcon />
+            </button>
           </header>
 
           {/* ── Content area ─────────────────────────────────────────────── */}
@@ -507,6 +528,8 @@ function Main() {
                   kernelState={kernel.state}
                   entropy={entropy}
                   activeProfileName={activeProfileName}
+                  section={settingsSection}
+                  onSectionChange={setSettingsSection}
                   onLoadKernel={handleLoadKernel}
                   onClose={() => setShowSettings(false)}
                   onOpenGalaxy={() => { setShowGalaxy(true); setShowSettings(false) }}
@@ -602,19 +625,31 @@ function NowPlayingDot({ onOpen }: { onOpen: () => void }) {
   )
 }
 
+// ─── AccountIcon ──────────────────────────────────────────────────────────────
+
+function AccountIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+      <circle cx="12" cy="7" r="4" />
+    </svg>
+  )
+}
+
 // ─── Settings drawer ──────────────────────────────────────────────────────────
 
 interface SettingsDrawerProps {
   kernelState: any
   entropy: number
   activeProfileName: string
+  section: DrawerSection
+  onSectionChange: (s: DrawerSection) => void
   onLoadKernel: (snap: KernelSnapshot) => void
   onClose: () => void
   onOpenGalaxy: () => void
 }
 
-function SettingsDrawer({ kernelState, entropy, activeProfileName, onClose, onOpenGalaxy }: SettingsDrawerProps) {
-  const [section, setSection] = useState<'kernel' | 'connectors' | 'agent'>('kernel')
+function SettingsDrawer({ kernelState, entropy, activeProfileName, section, onSectionChange, onClose, onOpenGalaxy }: SettingsDrawerProps) {
 
   const vibeLabel = entropy > 0.65
     ? { label: 'Wandering', desc: 'Discovery mode — pushing past familiar territory', color: '#5a3d9e' }
@@ -628,8 +663,8 @@ function SettingsDrawer({ kernelState, entropy, activeProfileName, onClose, onOp
       {/* Drawer header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 14px', height: 40, borderBottom: `1px solid ${BORDER}`, flexShrink: 0 }}>
         <div style={{ display: 'flex', gap: 0 }}>
-          {(['kernel', 'connectors', 'agent'] as const).map(s => (
-            <button key={s} onClick={() => setSection(s)} style={{
+          {(['kernel', 'account', 'connectors', 'agent'] as const).map(s => (
+            <button key={s} onClick={() => onSectionChange(s)} style={{
               background: 'none', border: 'none', borderBottom: `1px solid ${section === s ? ACCENT : 'transparent'}`,
               color: section === s ? FG : FG4, fontFamily: MONO, fontSize: 9, letterSpacing: '0.16em',
               textTransform: 'uppercase', padding: '10px 10px 9px', cursor: 'pointer',
@@ -666,6 +701,7 @@ function SettingsDrawer({ kernelState, entropy, activeProfileName, onClose, onOp
           </div>
         )}
 
+        {section === 'account' && <AccountView />}
         {section === 'connectors' && <ConnectorsView />}
         {section === 'agent' && <AgentView />}
       </div>

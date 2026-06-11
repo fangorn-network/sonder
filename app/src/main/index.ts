@@ -278,6 +278,7 @@ function startQdrant() {
   fs.mkdirSync(snapshotsDir, { recursive: true })
 
   qdrantProc = spawn(qdrantBin(), [], {
+    detached: process.platform !== 'win32',
     env: {
       ...process.env,
       QDRANT__STORAGE__STORAGE_PATH: storage,
@@ -396,7 +397,7 @@ function startQueryServer() {
       path.join(root, 'vectordb'),
     ]
 
-  pyProcess = spawn(bin, args, { cwd, env: { ...process.env } })
+  pyProcess = spawn(bin, args, { cwd, detached: process.platform !== 'win32', env: { ...process.env } })
 
   pyProcess.stdout?.on('data', (d) => console.log('[py]', d.toString().trimEnd()))
   pyProcess.stderr?.on('data', (d) => console.error('[py]', d.toString().trimEnd()))
@@ -741,19 +742,42 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
 
-app.on('before-quit', async () => {
-  // Kill both child processes; /T on Windows takes their trees with them.
+// Tear down the sidecars (Qdrant + Python query server). Both are spawned
+// `detached` on POSIX so each leads its own process group — killing the
+// negative PID takes the whole group (and any grandchildren) with it. SIGKILL
+// can't be trapped, so a busy or mid-graceful-shutdown uvicorn can't linger and
+// keep pegging the CPU. Idempotent: the nulled refs make repeat calls
+// (before-quit → exit) no-ops. /T on Windows takes the child's tree instead.
+function killSidecars(): void {
   for (const proc of [pyProcess, qdrantProc]) {
-    if (proc && !proc.killed) {
+    if (!proc || proc.pid == null || proc.killed) continue
+    try {
       if (process.platform === 'win32') {
         spawn('taskkill', ['/PID', String(proc.pid), '/F', '/T'])
       } else {
-        proc.kill()
+        process.kill(-proc.pid, 'SIGKILL')
       }
+    } catch {
+      try { proc.kill('SIGKILL') } catch { /* already gone */ }
     }
   }
+  pyProcess = null
+  qdrantProc = null
+}
+
+app.on('before-quit', async () => {
+  killSidecars()
   if (rendererServer) {
     await new Promise<void>((resolve) => rendererServer?.close(() => resolve()))
   }
   await providerManager.shutdown()
 })
+
+// `before-quit` doesn't fire on every exit path: when `electron-vite dev`
+// restarts the main process on a file change — or you Ctrl-C the dev server —
+// Electron receives a raw signal instead. Without these, each restart orphans
+// the previous Qdrant + Python pair, which keep running and pile up until they
+// saturate the CPU. `exit` is the last-ditch synchronous safety net.
+process.on('exit', killSidecars)
+process.on('SIGINT', () => { killSidecars(); process.exit(0) })
+process.on('SIGTERM', () => { killSidecars(); process.exit(0) })

@@ -27,6 +27,7 @@ import aiohttp
 import random
 import hashlib
 import json
+import logging
 import math
 import uuid
 import requests
@@ -407,9 +408,12 @@ def _build_text_index_sync() -> list[dict]:
     total = _collection_count()
     if total == 0:
         return []
+    print(f"[search/text] building lexical index over {total} records…")
     _ensure_role_map()
     out: list[dict] = []
-    for pt_id, payload, _ in _scroll_all(with_vectors=False):
+    # Larger scroll pages → far fewer gRPC round-trips over the full collection,
+    # which is the slow part of the cold build.
+    for pt_id, payload, _ in _scroll_all(with_vectors=False, batch=20_000):
         fields   = payload.get("fields", {}) or {}
         owner    = payload.get("owner")
         subtitle = _role_subtitle(fields)
@@ -1067,6 +1071,10 @@ async def _seed_from_ipfs(cid: str) -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global qdrant_client, embed_engine, vector_dim, _warm
+    # Silence the boot-poll access logs (main polls /ready every ~300ms until the
+    # warmup below flips it to 200). Done here, after uvicorn has set up its
+    # loggers, so the filter sticks.
+    logging.getLogger("uvicorn.access").addFilter(_AccessLogPollFilter())
     # `timeout` is the per-request gRPC deadline. The default (5s) is too tight
     # for a cold first query: against a freshly-recovered 1M-vector collection,
     # Qdrant has to page the HNSW graph + mmap'd segments into memory before it
@@ -1171,6 +1179,18 @@ async def _warmup() -> None:
         # Release the boot gate either way: on success everything's hot; on
         # failure the lazy fallbacks still work and we must not hang the splash.
         _warm = True
+
+
+class _AccessLogPollFilter(logging.Filter):
+    """Drop uvicorn access-log lines for the boot-gate poll endpoints. While the
+    splash waits for warmup, main hits /ready every ~300ms — without this the
+    console fills with '"GET /ready" 503' until the index is hot."""
+    _QUIET = ("/ready", "/health")
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        msg = record.getMessage()
+        return not any(p in msg for p in self._QUIET)
+
 
 app = FastAPI(lifespan=lifespan)
 

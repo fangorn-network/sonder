@@ -45,7 +45,6 @@ const BORDER2 = 'rgba(0,0,0,0.07)'
 const MONO   = 'var(--font-mono,"Fragment Mono","DM Mono",monospace)'
 const SANS   = 'var(--font-body,"Geist","Inter",sans-serif)'
 const DISP   = 'var(--font-display,"Bebas Neue",sans-serif)'
-const CHROMA_URL = 'http://localhost:8080'
 
 const SNAPSHOT_HISTORY_DEPTH = 5
 const MB_USER_AGENT = 'SOND3R/1.0.0 (https://fangorn.network)'
@@ -324,8 +323,11 @@ function Main() {
     kernel.embedText(query)
       .then(vec => applyKernelQuery(Array.from(vec), true))
       .catch(e => console.warn('[app] startup embed failed:', e))
-    // Warm the UMAP projection cache so the galaxy view loads faster
-    fetch(`${CHROMA_URL}/catalog/map`).catch(() => {})
+    // The UMAP projection (/catalog/map) is deliberately NOT prefetched here:
+    // building it over 860k points is a multi-minute, CPU-saturating job, and
+    // running it in the background during normal search pegs the machine. The
+    // galaxy view (SoundTownView) builds it lazily on open — the only place it's
+    // actually needed.
   }, [chromaReady, loading, kernelTopGenres]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function buildStartupQuery(topGenres?: string[]): string {

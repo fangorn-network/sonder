@@ -6,6 +6,7 @@ import { FangornAgentApi } from '.';
 export interface Sond3rBootApi {
   onSnapshotProgress: (cb: (d: { received: number; total: number }) => void) => void
   onSnapshotStatus: (cb: (s: string) => void) => void
+  onWarmupProgress: (cb: (d: { phase: string | null; pct: number | null; indexed: number; total: number }) => void) => void
   onBackendReady: (cb: () => void) => void
   onBackendError: (cb: (msg: string) => void) => void
   offBootEvents: () => void

@@ -87,6 +87,13 @@ if (process.contextIsolated) {
         ipcRenderer.removeAllListeners('snapshot:status')
         ipcRenderer.on('snapshot:status', (_e, s: string) => cb(s))
       },
+      // warmup progress: { phase, pct, indexed, total }. pct is a real fraction
+      // (records scanned / total) during the lexical build, and null for the
+      // tail steps that have no measurable sub-progress.
+      onWarmupProgress: (cb: (d: { phase: string | null; pct: number | null; indexed: number; total: number }) => void) => {
+        ipcRenderer.removeAllListeners('snapshot:warmup')
+        ipcRenderer.on('snapshot:warmup', (_e, d) => cb(d))
+      },
       // backend fully up: Qdrant + collection + query server all ready
       onBackendReady: (cb: () => void) => {
         ipcRenderer.removeAllListeners('backend:ready')
@@ -101,6 +108,7 @@ if (process.contextIsolated) {
       offBootEvents: () => {
         ipcRenderer.removeAllListeners('snapshot:progress')
         ipcRenderer.removeAllListeners('snapshot:status')
+        ipcRenderer.removeAllListeners('snapshot:warmup')
         ipcRenderer.removeAllListeners('backend:ready')
         ipcRenderer.removeAllListeners('backend:error')
       },

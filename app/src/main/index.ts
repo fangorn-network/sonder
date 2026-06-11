@@ -307,6 +307,32 @@ async function waitForReady(url: string, timeoutMs = 60000): Promise<void> {
   throw new Error(`timed out waiting for ${url}`)
 }
 
+// Like waitForReady, but forwards the /ready 503 body to the splash so it can
+// show real warmup progress (records scanned during the lexical build) instead
+// of a blind spinner. Resolves when /ready flips to 200.
+async function waitForWarmup(url: string, win: BrowserWindow, timeoutMs = 300000): Promise<void> {
+  const start = Date.now()
+  while (Date.now() - start < timeoutMs) {
+    try {
+      const r = await net.fetch(url)
+      if (r.ok) return
+      if (r.status === 503) {
+        const body = await r.json().catch(() => null)
+        if (body && !win.isDestroyed()) {
+          win.webContents.send('snapshot:warmup', {
+            phase:   typeof body.phase === 'string' ? body.phase : null,
+            pct:     typeof body.pct === 'number' ? body.pct : null,
+            indexed: typeof body.indexed === 'number' ? body.indexed : 0,
+            total:   typeof body.total === 'number' ? body.total : 0,
+          })
+        }
+      }
+    } catch { /* not up yet */ }
+    await new Promise((r) => setTimeout(r, 300))
+  }
+  throw new Error(`timed out waiting for ${url}`)
+}
+
 // Download the gzipped snapshot from IPFS, streaming progress to the window.
 async function downloadGz(cid: string, dest: string, win: BrowserWindow): Promise<void> {
   const res = await fetch(`${SNAPSHOT_GATEWAY}/${cid}`)   // global Node fetch
@@ -723,7 +749,7 @@ app.whenReady().then(async () => {
     // the whole point of a local-first search. Generous timeout: building the
     // 860k-record lexical index can take a bit on a cold disk.
     mainWindow.webContents.send('snapshot:status', 'warming')
-    await waitForReady('http://127.0.0.1:8080/ready', 300000)
+    await waitForWarmup('http://127.0.0.1:8080/ready', mainWindow, 300000)
     console.log('[boot] data backend ready')
     mainWindow.webContents.send('backend:ready')
   } catch (err) {

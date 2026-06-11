@@ -404,10 +404,25 @@ _text_index_lock = threading.Lock()
 # this so the loading screen can hold until the very first query is fast.
 _warm = False
 
+# Real, not-cosmetic warmup progress for the boot splash. The dominant warmup cost
+# is the lexical build, which scans a *known* number of records — so the splash can
+# show `_warm_indexed / _warm_total` as a literal count of work completed, not an
+# estimate. The two tail steps (embedding-model load, vector-index touch) have no
+# measurable sub-progress; `_warm_phase` names the current step so the UI can show
+# an honest indeterminate state for those instead of fabricating a percentage.
+_warm_phase   = "starting"
+_warm_indexed = 0
+_warm_total   = 0
+
 def _build_text_index_sync() -> list[dict]:
+    global _warm_indexed, _warm_total
     total = _collection_count()
     if total == 0:
         return []
+    # Publish the denominator before the scroll starts so the splash bar is a real
+    # fraction (records folded in / total) from the first tick onward.
+    _warm_total   = total
+    _warm_indexed = 0
     print(f"[search/text] building lexical index over {total} records…")
     _ensure_role_map()
     out: list[dict] = []
@@ -428,6 +443,11 @@ def _build_text_index_sync() -> list[dict]:
             "_tags_l":  " ".join(t.lower() for t in tags),
             "_sort":    (subtitle.lower(), title.lower()),
         })
+        # Coarse progress tick — every 5k records is smooth enough for the bar
+        # without churning a global per row over 860k iterations.
+        if len(out) % 5_000 == 0:
+            _warm_indexed = len(out)
+    _warm_indexed = len(out)
     print(f"[search/text] built lexical index: {len(out)} records")
     return out
 
@@ -1153,17 +1173,22 @@ async def lifespan(app: FastAPI):
 
 
 async def _warmup() -> None:
-    global _warm
+    global _warm, _warm_phase
     loop = asyncio.get_event_loop()
     try:
         # Pre-build the lexical index first: it's the first thing most users hit,
         # and building it lazily on the first /search/text means an 860k-record
         # scroll blocks that query. Doing it here (behind /health, at startup)
-        # makes the first text search do only scoring.
+        # makes the first text search do only scoring. This is the long phase and
+        # the one with a real percentage (records scanned / total).
+        _warm_phase = "building text index"
         await loop.run_in_executor(None, _ensure_text_index)
         # Force the embedding model to fully initialise (semantic search path).
+        # No measurable sub-progress — the UI shows this as an indeterminate step.
+        _warm_phase = "loading embedding model"
         await loop.run_in_executor(None, lambda: _embed_texts(["warmup"]))
         # Touch the collection so its HNSW graph + segments page into memory.
+        _warm_phase = "warming vector index"
         dim = vector_dim or MODEL_DIM_MAP.get(cfg.embedding_model, 768)
         await loop.run_in_executor(None, lambda: qdrant_client.query_points(
             collection_name=cfg.collection,
@@ -1178,6 +1203,7 @@ async def _warmup() -> None:
     finally:
         # Release the boot gate either way: on success everything's hot; on
         # failure the lazy fallbacks still work and we must not hang the splash.
+        _warm_phase = "ready"
         _warm = True
 
 
@@ -1539,17 +1565,34 @@ async def health():
         "map_computing": _map_computing,
         "text_indexed":  _text_index is not None,
         "warm":          _warm,
+        "warm_phase":    _warm_phase,
+        "warm_indexed":  _warm_indexed,
+        "warm_total":    _warm_total,
     }
 
 @app.get("/ready")
 async def ready(response: Response):
     """Boot gate. Returns 200 only once background warmup has finished (lexical
     index + embedding model + vector index hot), so the loading screen can hold
-    until the very first query is fast. 503 while still warming."""
+    until the very first query is fast. 503 while still warming.
+
+    The 503 body carries *real* progress: `phase` names the current step and,
+    during the lexical build, `indexed`/`total`/`pct` report records scanned so
+    far. `pct` is non-null only while that build runs — the tail steps have no
+    measurable sub-progress, so the splash shows them as an indeterminate state
+    rather than a fabricated number."""
     if _warm:
         return {"ready": True}
     response.status_code = 503
-    return {"ready": False}
+    building = _warm_phase == "building text index"
+    pct = round(100 * _warm_indexed / _warm_total) if (building and _warm_total) else None
+    return {
+        "ready":   False,
+        "phase":   _warm_phase,
+        "indexed": _warm_indexed,
+        "total":   _warm_total,
+        "pct":     pct,
+    }
 
 @app.post("/reingest")
 async def reingest():

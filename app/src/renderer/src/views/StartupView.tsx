@@ -25,18 +25,22 @@ function fmtBytes(n: number): string {
   return `${n} B`
 }
 
+interface WarmupState { phase: string | null; pct: number | null; indexed: number; total: number }
+
 interface BootState {
   stage: BootStage
-  pct: number | null          // download %, null when total is unknown / not downloading
+  pct: number | null          // determinate %, null when there's no real number to show
   received: number
   total: number
   error: string | null
   done: boolean
+  warmup: WarmupState
 }
 
 function useBootSequence(): BootState {
   const [stage, setStage] = useState<BootStage>('init')
   const [progress, setProgress] = useState<{ received: number; total: number }>({ received: 0, total: 0 })
+  const [warmup, setWarmup] = useState<WarmupState>({ phase: null, pct: null, indexed: 0, total: 0 })
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -49,6 +53,10 @@ function useBootSequence(): BootState {
       if (status === 'downloading' || status === 'decompressing' || status === 'recovering' || status === 'warming') {
         setStage(status as BootStage)
       }
+    })
+    s.onWarmupProgress((d) => {
+      setWarmup(d)
+      setStage((cur) => (cur === 'ready' || cur === 'error') ? cur : 'warming')
     })
     s.onBackendReady(() => setStage('ready'))
     s.onBackendError((msg) => { setStage('error'); setError(msg) })
@@ -63,11 +71,16 @@ function useBootSequence(): BootState {
   }, [])
 
   const { received, total } = progress
+  // Determinate % only where it's a real measurement: download bytes, or — during
+  // warmup — records scanned in the lexical build. The warmup tail steps report
+  // pct=null, so the bar honestly falls back to an indeterminate sweep for them.
   const pct = stage === 'downloading' && total > 0
     ? Math.min(100, Math.round((received / total) * 100))
+    : stage === 'warming'
+    ? warmup.pct
     : null
 
-  return { stage, pct, received, total, error, done: stage === 'ready' }
+  return { stage, pct, received, total, error, done: stage === 'ready', warmup }
 }
 
 // ── Main Startup View ──────────────────────────────────────────────────────────
@@ -82,7 +95,12 @@ interface StartupViewProps {
 
 export function StartupView({ onReady, children }: StartupViewProps) {
   const [exiting, setExiting] = useState(false)
-  const { stage, pct, received, total, error, done } = useBootSequence()
+  const { stage, pct, received, total, error, done, warmup } = useBootSequence()
+
+  // During warmup, name the actual step the server is on ("building text index",
+  // "loading embedding model", …) rather than a generic label — the phase comes
+  // straight from the backend so it reflects what's really running.
+  const label = stage === 'warming' && warmup.phase ? warmup.phase : STAGE_LABEL[stage]
 
   // Let the user through once the catalog is ready, or if the boot failed (so a
   // backend hiccup never hard-locks the splash — the app surfaces its own retry).
@@ -136,7 +154,7 @@ export function StartupView({ onReady, children }: StartupViewProps) {
               {/* Stage label + percent */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '8px', fontFamily: 'var(--font-mono)', fontSize: '11px', letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--fg2)' }}>
                 <span>
-                  {STAGE_LABEL[stage]}<span style={{ animation: 'sonderBlink 1s step-end infinite' }}>_</span>
+                  {label}<span style={{ animation: 'sonderBlink 1s step-end infinite' }}>_</span>
                 </span>
                 <span style={{ color: 'var(--fg3)', fontVariantNumeric: 'tabular-nums' }}>
                   {pct !== null ? `${pct}%` : '— —'}
@@ -152,9 +170,14 @@ export function StartupView({ onReady, children }: StartupViewProps) {
                 ))}
               </div>
 
-              {/* Byte readout */}
+              {/* Raw count readout — verifiable units behind the bar: bytes while
+                  downloading, records while the lexical index builds. */}
               <div style={{ marginTop: '8px', fontFamily: 'var(--font-mono)', fontSize: '10px', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--fg4)', fontVariantNumeric: 'tabular-nums' }}>
-                {stage === 'downloading' && total > 0 ? `${fmtBytes(received)} / ${fmtBytes(total)}` : ' '}
+                {stage === 'downloading' && total > 0
+                  ? `${fmtBytes(received)} / ${fmtBytes(total)}`
+                  : stage === 'warming' && warmup.total > 0
+                  ? `${warmup.indexed.toLocaleString()} / ${warmup.total.toLocaleString()} records`
+                  :' '}
               </div>
             </>
           )}

@@ -1,86 +1,18 @@
-import { useEffect, useState, ReactNode } from 'react'
+import { useState, ReactNode } from 'react'
+import { useBoot } from '../providers/BootProvider'
 
 // ── Boot sequence ─────────────────────────────────────────────────────────────
-// Driven by the real backend boot lifecycle (main → preload `window.sond3r`):
-// first run fetches a ~1.5GB catalog snapshot from IPFS, decompresses it, and
-// recovers it into the local Qdrant instance. We surface download progress as a
-// determinate bar and the decompress/recover stages as an indeterminate one.
-
-type BootStage = 'init' | 'downloading' | 'decompressing' | 'recovering' | 'warming' | 'ready' | 'error'
-
-const STAGE_LABEL: Record<BootStage, string> = {
-  init:         'initializing',
-  downloading:  'fetching catalog from ipfs',
-  decompressing:'decompressing snapshot',
-  recovering:   'loading into vector store',
-  warming:      'warming search index',
-  ready:        'ready',
-  error:        'connection failed',
-}
+// The backend boot lifecycle now lives in BootProvider (shared with the running
+// app's IndexingBar). This view just renders it: first run fetches a ~1.5GB
+// catalog snapshot from IPFS, recovers it into Qdrant, then warms the search
+// index. Download progress is a determinate bar; decompress/recover are an
+// indeterminate sweep.
 
 function fmtBytes(n: number): string {
   if (n >= 1e9) return (n / 1e9).toFixed(2) + ' GB'
   if (n >= 1e6) return (n / 1e6).toFixed(1) + ' MB'
   if (n >= 1e3) return (n / 1e3).toFixed(0) + ' KB'
   return `${n} B`
-}
-
-interface WarmupState { phase: string | null; pct: number | null; indexed: number; total: number }
-
-interface BootState {
-  stage: BootStage
-  pct: number | null          // determinate %, null when there's no real number to show
-  received: number
-  total: number
-  error: string | null
-  done: boolean
-  warmup: WarmupState
-}
-
-function useBootSequence(): BootState {
-  const [stage, setStage] = useState<BootStage>('init')
-  const [progress, setProgress] = useState<{ received: number; total: number }>({ received: 0, total: 0 })
-  const [warmup, setWarmup] = useState<WarmupState>({ phase: null, pct: null, indexed: 0, total: 0 })
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    const s = window.sond3r
-    // No bridge (e.g. a plain browser dev session) → nothing to wait on.
-    if (!s) { setStage('ready'); return }
-
-    s.onSnapshotProgress((d) => { setStage('downloading'); setProgress(d) })
-    s.onSnapshotStatus((status) => {
-      if (status === 'downloading' || status === 'decompressing' || status === 'recovering' || status === 'warming') {
-        setStage(status as BootStage)
-      }
-    })
-    s.onWarmupProgress((d) => {
-      setWarmup(d)
-      setStage((cur) => (cur === 'ready' || cur === 'error') ? cur : 'warming')
-    })
-    s.onBackendReady(() => setStage('ready'))
-    s.onBackendError((msg) => { setStage('error'); setError(msg) })
-
-    // Cached fast path: the backend may already be up (and `backend:ready` may
-    // have fired) before our listeners attached. Reconcile once on mount.
-    s.isBackendReady()
-      .then((ready) => { if (ready) setStage((cur) => (cur === 'init' ? 'ready' : cur)) })
-      .catch(() => { })
-
-    return () => s.offBootEvents()
-  }, [])
-
-  const { received, total } = progress
-  // Determinate % only where it's a real measurement: download bytes, or — during
-  // warmup — records scanned in the lexical build. The warmup tail steps report
-  // pct=null, so the bar honestly falls back to an indeterminate sweep for them.
-  const pct = stage === 'downloading' && total > 0
-    ? Math.min(100, Math.round((received / total) * 100))
-    : stage === 'warming'
-    ? warmup.pct
-    : null
-
-  return { stage, pct, received, total, error, done: stage === 'ready', warmup }
 }
 
 // ── Main Startup View ──────────────────────────────────────────────────────────
@@ -95,16 +27,13 @@ interface StartupViewProps {
 
 export function StartupView({ onReady, children }: StartupViewProps) {
   const [exiting, setExiting] = useState(false)
-  const { stage, pct, received, total, error, done, warmup } = useBootSequence()
+  // `label` reflects the real backend step ("building text index", …); `canEnter`
+  // flips on once the index build starts so we can show Enter early.
+  const { stage, pct, received, total, error, ready, warmup, canEnter, label } = useBoot()
 
-  // During warmup, name the actual step the server is on ("building text index",
-  // "loading embedding model", …) rather than a generic label — the phase comes
-  // straight from the backend so it reflects what's really running.
-  const label = stage === 'warming' && warmup.phase ? warmup.phase : STAGE_LABEL[stage]
-
-  // Let the user through once the catalog is ready, or if the boot failed (so a
-  // backend hiccup never hard-locks the splash — the app surfaces its own retry).
-  const revealed = done || stage === 'error'
+  // The bar keeps running until the backend is actually ready (or errors) — the
+  // loading screen looks the same as before for anyone who waits it out.
+  const revealed = ready || stage === 'error'
 
   // The bar shows for the whole boot so there's always a visible indicator
   // (incl. the init gap before the first event). Indeterminate when we have no
@@ -112,8 +41,11 @@ export function StartupView({ onReady, children }: StartupViewProps) {
   const showBar = !revealed
   const indeterminate = pct === null
 
+  // Enter is offered the moment warmup begins (the "building text index" phase),
+  // not just at full ready — the user can enter and let the index finish inside
+  // the app, where IndexingBar takes over the progress display.
   const handleExit = () => {
-    if (!revealed || exiting) return
+    if (!canEnter || exiting) return
     setExiting(true)
     setTimeout(onReady, 700)
   }
@@ -189,14 +121,16 @@ export function StartupView({ onReady, children }: StartupViewProps) {
           )}
         </div>
 
-        {/* Enter affordance — flat, sharp, ink. Hover inverts to ink fill. */}
+        {/* Enter affordance — flat, sharp, ink. Hover inverts to ink fill.
+            Revealed at `canEnter` (warmup started), so users can enter while the
+            index is still building. */}
         <div
           onClick={handleExit}
           style={{
-            opacity: revealed ? 1 : 0,
-            transform: revealed ? 'translateY(0)' : 'translateY(8px)',
+            opacity: canEnter ? 1 : 0,
+            transform: canEnter ? 'translateY(0)' : 'translateY(8px)',
             transition: 'opacity 0.5s ease, transform 0.5s ease',
-            pointerEvents: revealed ? 'auto' : 'none',
+            pointerEvents: canEnter ? 'auto' : 'none',
             cursor: 'pointer',
           }}
         >

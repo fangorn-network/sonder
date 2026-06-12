@@ -564,6 +564,18 @@ textarea {
   }
 }
 
+/* Shared with the splash (StartupView). Defined here too so the in-app
+   IndexingBar — which replaces the search field while the index builds —
+   animates after the splash unmounts. */
+@keyframes sonderBootSlide {
+  0% { left: -32%; }
+  100% { left: 100%; }
+}
+@keyframes sonderBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
 .upload-error {
   font-size: 11px;
   color: var(--err);

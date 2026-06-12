@@ -54,6 +54,8 @@ import {
 } from '../kernel/neighborhoodAnalysis'
 import { toRecordVM, type RecordVM } from '../domain/recordVM'
 import { getCachedSchema, fetchSchema, roleLabel } from '../domain/roles'
+import { useBoot } from '../providers/BootProvider'
+import { IndexingBar } from '../components/IndexingBar'
 
 // Open a URL in the OS default browser via the preload bridge
 function openExternal(url: string) {
@@ -1556,6 +1558,7 @@ function Home({ onNavigate, kernelTopGenres, allGenres, kernelEntropy }: {
     allGenres?: string[]
     kernelEntropy?: number
 }) {
+    const { indexing } = useBoot()
     const slot = getTimeSlotMoods()
     const phrase = kernelPhrase(kernelEntropy)
 
@@ -1567,6 +1570,18 @@ function Home({ onNavigate, kernelTopGenres, allGenres, kernelEntropy }: {
     }, [allGenres, kernelTopGenres])
 
     const hasKernel = kernelTopGenres && kernelTopGenres.length > 0
+
+    // While the backend is still building its text index, the home page shows
+    // nothing but the progress bar — no search, tagline, or discovery sections.
+    if (indexing) {
+        return (
+            <div style={{ flex: 1, overflowY: 'auto', background: BG }}>
+                <div style={{ maxWidth: 600, margin: '0 auto', padding: '48px 32px 80px' }}>
+                    <IndexingBar variant="home" />
+                </div>
+            </div>
+        )
+    }
 
     return (
         <div style={{ flex: 1, overflowY: 'auto', background: BG }}>

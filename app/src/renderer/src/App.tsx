@@ -12,6 +12,8 @@ import { SpotifyProvider, useSpotifyContext } from './context/SpotifyContext'
 import { useFangornAgent } from './hooks/useFangornAgent'
 import { useChroma } from './hooks/useChroma'
 import { StartupView } from './views/StartupView'
+import { BootProvider, useBoot } from './providers/BootProvider'
+import { IndexingBar } from './components/IndexingBar'
 import { useSessionKernel } from './hooks/useSessionKernel'
 import { ConnectorsView } from './views/ConnectorsView'
 import { AccountView } from './views/AccountView'
@@ -57,6 +59,16 @@ type DrawerSection = 'kernel' | 'account' | 'connectors' | 'agent'
 // ─── Root ──────────────────────────────────────────────────────────────────────
 
 export default function App() {
+  // BootProvider wraps everything so the backend boot/index subscription is
+  // shared and survives the splash → app transition (user can enter mid-index).
+  return (
+    <BootProvider>
+      <AppRoot />
+    </BootProvider>
+  )
+}
+
+function AppRoot() {
   const [booted, setBooted] = useState(() => localStorage.getItem('booted') === 'true')
   const { ready, authenticated, login } = usePrivy()
 
@@ -83,6 +95,10 @@ export default function App() {
 
 function Main() {
   const spotify = useSpotify(() => onTrackEndedRef.current())
+
+  // Search is gated until the backend's text index is built; the IndexingBar
+  // stands in for the search field meanwhile.
+  const { indexing } = useBoot()
 
   const [sessionHistory, setSessionHistory] = useState<SessionEvent[]>([])
   const [entropy, setEntropy] = useState(0.2)
@@ -429,8 +445,11 @@ function Main() {
               })}
             </div>
 
-            {/* Search input — hidden on home (the home page has its own prominent search) */}
-            {wikiView.kind !== 'home' && (
+            {/* Search input — hidden on home (the home page has its own prominent
+                search). While the index is building, the search is replaced by a
+                progress bar so it can't be used until queries are fast. */}
+            {wikiView.kind !== 'home' && indexing && <IndexingBar variant="header" />}
+            {wikiView.kind !== 'home' && !indexing && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 0, flexShrink: 0, WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
                 <input
                   value={wikiSearchBox}

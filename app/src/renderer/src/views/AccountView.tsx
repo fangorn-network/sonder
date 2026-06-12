@@ -15,16 +15,8 @@ import {
   useMfaEnrollment,
   useExportWallet,
 } from '@privy-io/react-auth'
-import { createPublicClient, http, parseAbi, formatUnits, formatEther } from 'viem'
-import { arbitrumSepolia } from 'viem/chains'
-
-const USDC_ADDRESS = '0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d'
-const USDC_ABI = parseAbi(['function balanceOf(address) view returns (uint256)'])
-
-const publicClient = createPublicClient({
-  chain: arbitrumSepolia,
-  transport: http('https://sepolia-rollup.arbitrum.io/rpc'),
-})
+import { formatUnits, formatEther } from 'viem'
+import { NETWORK, USDC_ABI, USDC_DECIMALS, publicClient, usdcFundingOptions } from '../lib/network'
 
 const MFA_LABELS: Record<string, string> = {
   sms: 'SMS',
@@ -54,9 +46,9 @@ export function AccountView() {
   const refreshBalances = useCallback(() => {
     if (!address) { setUsdcBalance(null); setEthBalance(null); return }
     publicClient.readContract({
-      address: USDC_ADDRESS, abi: USDC_ABI, functionName: 'balanceOf', args: [address],
+      address: NETWORK.usdc, abi: USDC_ABI, functionName: 'balanceOf', args: [address],
     })
-      .then(raw => setUsdcBalance(formatUnits(raw, 6)))
+      .then(raw => setUsdcBalance(formatUnits(raw, USDC_DECIMALS)))
       .catch(console.error)
     publicClient.getBalance({ address })
       .then(raw => setEthBalance(formatEther(raw)))
@@ -138,32 +130,22 @@ export function AccountView() {
       </Section>
 
       {/* ── Wallet ───────────────────────────────────────────────────────── */}
+      {/* Casual-user view: a plain dollar balance + "add funds". Anything
+          crypto-flavoured (address, chain, gas, key export) lives under
+          Advanced below. */}
       <Section label="Wallet" trailing={address ? <Dot ok label={embeddedWallet ? 'embedded' : 'linked'} /> : <Dot label="none" />}>
         {address ? (
           <>
-            <Row label="Address">
-              <ValueWithAction
-                value={copied === 'addr' ? 'copied!' : truncateMiddle(address, 16)}
-                mono
-                actionLabel="copy"
-                onAction={() => copy('addr', address)}
-              />
-            </Row>
-            <Row label="USDC">
+            <Row label="Balance">
               <Value mono value={usdcBalance !== null ? `$${Number(usdcBalance).toFixed(2)}` : '…'} />
             </Row>
-            <Row label="ETH">
-              <Value mono value={ethBalance !== null ? Number(ethBalance).toFixed(5) : '…'} />
-            </Row>
             <Actions>
-              <button className="btn-ghost" style={{ flex: 1 }} onClick={() => fundWallet({ address })}>
+              <button
+                className="btn-ghost"
+                style={{ flex: 1 }}
+                onClick={() => fundWallet({ address, options: usdcFundingOptions() })}>
                 add funds
               </button>
-              {embeddedWallet && (
-                <button className="btn-ghost" style={{ flex: 1 }} onClick={() => exportWallet({ address: embeddedWallet.address })}>
-                  export key
-                </button>
-              )}
             </Actions>
           </>
         ) : (
@@ -179,6 +161,35 @@ export function AccountView() {
           </>
         )}
       </Section>
+
+      {/* ── Advanced (crypto details) ────────────────────────────────────── */}
+      {/* Collapsed by default on mainnet so casual users aren't shown raw
+          addresses / gas; expanded on testnet where only devs are looking. */}
+      {address && (
+        <CollapsibleSection label="Advanced" defaultOpen={NETWORK.testnet}>
+          <Row label="Address">
+            <ValueWithAction
+              value={copied === 'addr' ? 'copied!' : truncateMiddle(address, 16)}
+              mono
+              actionLabel="copy"
+              onAction={() => copy('addr', address)}
+            />
+          </Row>
+          <Row label="Network">
+            <Value value={NETWORK.testnet ? `${NETWORK.label} · testnet` : NETWORK.label} dim={NETWORK.testnet} />
+          </Row>
+          <Row label="ETH (gas)">
+            <Value mono value={ethBalance !== null ? Number(ethBalance).toFixed(5) : '…'} />
+          </Row>
+          {embeddedWallet && (
+            <Actions>
+              <button className="btn-ghost" style={{ flex: 1 }} onClick={() => exportWallet({ address: embeddedWallet.address })}>
+                export key
+              </button>
+            </Actions>
+          )}
+        </CollapsibleSection>
+      )}
 
       {/* ── Security ─────────────────────────────────────────────────────── */}
       <Section label="Security" trailing={<Dot ok={mfaMethods.length > 0} label={mfaMethods.length > 0 ? 'mfa on' : 'mfa off'} />}>
@@ -260,6 +271,34 @@ function Section({ label, trailing, children }: {
         {trailing}
       </div>
       {children}
+    </div>
+  )
+}
+
+function CollapsibleSection({ label, defaultOpen, trailing, children }: {
+  label: string; defaultOpen?: boolean; trailing?: React.ReactNode; children: React.ReactNode
+}) {
+  const [open, setOpen] = useState(defaultOpen ?? false)
+  return (
+    <div className="studio-section" style={{ marginBottom: 'var(--sp-4)' }}>
+      <div
+        className="studio-section-label"
+        onClick={() => setOpen(o => !o)}
+        style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: 'var(--sp-3) var(--sp-4)', cursor: 'pointer', userSelect: 'none',
+        }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{
+            display: 'inline-block', fontSize: 8, color: 'var(--fg3)',
+            transition: 'transform 120ms ease',
+            transform: open ? 'rotate(90deg)' : 'rotate(0deg)',
+          }}>▶</span>
+          {label}
+        </span>
+        {trailing}
+      </div>
+      {open && children}
     </div>
   )
 }

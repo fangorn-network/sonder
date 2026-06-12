@@ -1,17 +1,8 @@
 import { FangornX402Middleware } from '@fangorn-network/fetch'
-import { FangornConfig } from '@fangorn-network/sdk'
 import { useWallets } from '@privy-io/react-auth'
 import { useEffect, useState } from 'react'
 import { createWalletClient, custom, keccak256, toBytes, type Hex } from 'viem'
-
-
-const MIDDLEWARE_CONFIG = {
-    usdcContractAddress: '0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d' as const,
-    usdcDomainName: 'USD Coin',
-    facilitatorAddress: '0x147c24c5Ea2f1EE1ac42AD16820De23bBba45Ef6' as const,
-    config: FangornConfig.ArbitrumSepolia,
-    domain: window.location.host,
-}
+import { NETWORK } from '../lib/network'
 
 export function useFangornMiddleware() {
     const { wallets } = useWallets()
@@ -19,13 +10,16 @@ export function useFangornMiddleware() {
 
     useEffect(() => {
         const wallet = wallets[0]
-        if (!wallet) { setMiddleware(null); return }
+        // Fangorn protocol (x402 paywalls) is only deployed where `fangorn` +
+        // `facilitator` are configured — Arbitrum Sepolia today.
+        if (!wallet || !NETWORK.fangorn || !NETWORK.facilitator) { setMiddleware(null); return }
+        const { fangorn, facilitator } = NETWORK
 
         wallet.getEthereumProvider()
             .then(async provider => {
                 const walletClient = createWalletClient({
                     account: wallet.address as `0x${string}`,
-                    chain: FangornConfig.ArbitrumSepolia.chain,
+                    chain: fangorn.chain,
                     transport: custom(provider),
                 }) as any
 
@@ -53,7 +47,11 @@ export function useFangornMiddleware() {
                 return FangornX402Middleware.create({
                     walletClient: walletClient as any,
                     // identity,
-                    ...MIDDLEWARE_CONFIG,
+                    usdcContractAddress: NETWORK.usdc,
+                    usdcDomainName: NETWORK.usdcDomainName,
+                    facilitatorAddress: facilitator,
+                    config: fangorn,
+                    domain: window.location.host,
                 })
             })
             .then(setMiddleware)

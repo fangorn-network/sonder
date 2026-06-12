@@ -114,6 +114,10 @@ if (process.contextIsolated) {
       },
 
       isBackendReady: () => ipcRenderer.invoke('backend:is-ready'),
+
+      // Clears this device's storage for the renderer partition (Privy session
+      // + cached app data) and reloads. Escape hatch for a wedged login.
+      resetSession: () => ipcRenderer.invoke('session:reset'),
     })
 
     // ── Local on-disk music ──────────────────────────────────────────

@@ -11,6 +11,9 @@ export interface Sond3rBootApi {
   onBackendError: (cb: (msg: string) => void) => void
   offBootEvents: () => void
   isBackendReady: () => Promise<boolean>
+  /** Wipes the renderer partition's storage (Privy session + cached app data)
+   *  and reloads. Escape hatch for a wedged login; resolves just before reload. */
+  resetSession: () => Promise<{ success: boolean }>
 }
 
 declare global {

@@ -11,6 +11,7 @@ import { useCallback, useEffect, useState } from 'react'
 import {
   usePrivy,
   useWallets,
+  useCreateWallet,
   useFundWallet,
   useMfaEnrollment,
   useExportWallet,
@@ -29,7 +30,6 @@ export function AccountView() {
     ready, authenticated, user,
     login, logout,
     linkEmail, updateEmail,
-    createWallet,
   } = usePrivy()
   const { wallets } = useWallets()
   const { exportWallet } = useExportWallet()
@@ -58,6 +58,20 @@ export function AccountView() {
   useEffect(() => { refreshBalances() }, [refreshBalances])
 
   const { fundWallet } = useFundWallet({ onUserExited: refreshBalances })
+
+  // ── Embedded wallet creation ───────────────────────────────────────────────
+  // `createWallet()` rejects on failure; without surfacing it the button is a
+  // silent no-op. `onError` hands back a `PrivyErrorCode` (e.g.
+  // `allowlist_rejected` if this origin isn't allow-listed in the Privy
+  // dashboard, `embedded_wallet_already_exists`, etc.).
+  const [walletError, setWalletError] = useState<string | null>(null)
+  const { createWallet } = useCreateWallet({
+    onSuccess: () => { setWalletError(null); refreshBalances() },
+    onError: (error) => {
+      console.error('[privy] embedded wallet creation failed:', error)
+      setWalletError(String(error))
+    },
+  })
 
   // ── Copy-to-clipboard flash ────────────────────────────────────────────────
 
@@ -88,6 +102,11 @@ export function AccountView() {
         <button className="studio-submit" style={{ width: '100%' }} onClick={login}>
           connect
         </button>
+        {/* Reachable while signed out so a wedged login (e.g. a deleted account
+            whose dead session lingers locally) can be cleared without devtools. */}
+        <Section label="Trouble signing in?">
+          <ResetSessionControl />
+        </Section>
       </div>
     )
   }
@@ -154,10 +173,23 @@ export function AccountView() {
               No wallet linked to this account yet.
             </Note>
             <Actions>
-              <button className="btn-ghost" style={{ flex: 1 }} onClick={() => createWallet()}>
+              <button
+                className="btn-ghost"
+                style={{ flex: 1 }}
+                onClick={() => {
+                  setWalletError(null)
+                  // Rejection is surfaced via the useCreateWallet onError callback;
+                  // catch here only to avoid an unhandled promise rejection.
+                  createWallet().catch(() => {})
+                }}>
                 create embedded wallet
               </button>
             </Actions>
+            {walletError && (
+              <Note style={{ padding: 'var(--sp-4)', color: '#e57373' }}>
+                Couldn't create wallet: {walletError}
+              </Note>
+            )}
           </>
         )}
       </Section>
@@ -232,8 +264,72 @@ export function AccountView() {
             </button>
           )}
         </Actions>
+        <ResetSessionControl />
       </Section>
     </div>
+  )
+}
+
+// ─── Local session reset ──────────────────────────────────────────────────────
+// Clears this device's stored Privy session (+ cached app data) and reloads.
+// Recovers from a wedged login — e.g. the account was deleted server-side but
+// the dead session lingers locally, blocking re-login. Rendered both signed-in
+// (Session section) and signed-out (so a wedged login is recoverable in-app,
+// without devtools). Main reloads the window, so `resetSession()` typically
+// never resolves; the catch only handles the API being unavailable.
+function ResetSessionControl() {
+  const [confirm, setConfirm] = useState(false)
+  const [resetting, setResetting] = useState(false)
+
+  const run = useCallback(async () => {
+    setResetting(true)
+    try {
+      await window.sond3r?.resetSession()
+    } catch (e) {
+      console.error('[session] reset failed:', e)
+      setResetting(false)
+      setConfirm(false)
+    }
+  }, [])
+
+  return (
+    <>
+      <Actions noBorder>
+        {confirm ? (
+          <>
+            <button
+              className="btn-ghost"
+              style={{ flex: 1, color: 'var(--err)' }}
+              disabled={resetting}
+              onClick={run}>
+              {resetting ? 'clearing…' : 'confirm reset'}
+            </button>
+            <button
+              className="btn-ghost"
+              style={{ flex: 1 }}
+              disabled={resetting}
+              onClick={() => setConfirm(false)}>
+              cancel
+            </button>
+          </>
+        ) : (
+          <button
+            className="btn-ghost"
+            style={{ flex: 1 }}
+            onClick={() => setConfirm(true)}>
+            reset local session
+          </button>
+        )}
+      </Actions>
+      {confirm && (
+        <Note style={{ padding: 'var(--sp-4)' }}>
+          Clears this device’s stored Privy session and cached app data, then
+          reloads. Use this if login gets stuck (e.g. after deleting an
+          account). Your account and embedded wallet are recovered on next
+          sign-in.
+        </Note>
+      )}
+    </>
   )
 }
 

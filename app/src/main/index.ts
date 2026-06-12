@@ -488,8 +488,12 @@ function createWindow(): BrowserWindow {
     },
   })
 
-  mainWindow.webContents.openDevTools({ mode: 'detach' })
-  mainWindow.on('ready-to-show', () => mainWindow.show())
+  mainWindow.on('ready-to-show', () => {
+    mainWindow.show()
+    // Auto-open DevTools in development only (`yarn dev`); never in packaged
+    // builds. Docked (not detached) — detached can silently no-op on Linux.
+    if (is.dev) mainWindow.webContents.openDevTools()
+  })
   mainWindow.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url)
     return { action: 'deny' }
@@ -507,6 +511,17 @@ function createWindow(): BrowserWindow {
 // ─── IPC handlers ─────────────────────────────────────────────────────────────
 
 function registerIpcHandlers() {
+  // Escape hatch for a wedged client-side auth state (e.g. the Privy user was
+  // deleted server-side but this device still holds their session, blocking a
+  // clean re-login). Wipes all storage — cookies, localStorage, IndexedDB,
+  // cache — for the renderer's `persist:main` partition, then reloads. The
+  // account + embedded wallet live server-side and are restored on next login.
+  ipcMain.handle('session:reset', async (event) => {
+    await session.fromPartition('persist:main').clearStorageData()
+    BrowserWindow.fromWebContents(event.sender)?.webContents.reload()
+    return { success: true }
+  })
+
   ipcMain.handle('shell:open-external', (_event, url: string) => {
     if (typeof url === 'string' && (url.startsWith('https://') || url.startsWith('http://'))) {
       shell.openExternal(url)

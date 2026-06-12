@@ -63,7 +63,11 @@ export function StartupView({ onReady, children }: StartupViewProps) {
       zIndex: 9999,
       background: 'var(--bg)',
       color: 'var(--fg)',
-    }}>
+      // Frameless window: the loading screen has no OS titlebar, so make the
+      // whole splash a drag region (the main app's header does the same). The
+      // Enter affordance below opts back out with no-drag so it stays clickable.
+      WebkitAppRegion: 'drag',
+    } as React.CSSProperties}>
       {/* Hairline frame for the editorial "page" feel */}
       <div style={{ position: 'absolute', inset: 0, border: '1px solid var(--border2)', pointerEvents: 'none' }} />
 
@@ -132,7 +136,8 @@ export function StartupView({ onReady, children }: StartupViewProps) {
             transition: 'opacity 0.5s ease, transform 0.5s ease',
             pointerEvents: canEnter ? 'auto' : 'none',
             cursor: 'pointer',
-          }}
+            WebkitAppRegion: 'no-drag',
+          } as React.CSSProperties}
         >
           {children ?? (
             <button

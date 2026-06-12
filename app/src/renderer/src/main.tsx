@@ -14,7 +14,7 @@ const root = ReactDOM.createRoot(document.getElementById('root')!);
 root.render(
   <React.StrictMode>
     <PrivyProvider
-      appId="cmmmmq70j01du0djr5foaef5x"
+      appId="cmqad9j9b00i10cl7apzw6rq8"
       config={{
         // Embedded wallets for users who don't have one
         embeddedWallets: {

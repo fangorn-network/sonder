@@ -157,6 +157,12 @@ jobs:
         working-directory: app
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Azure Trusted Signing (Windows). Consumed by electron-builder's
+          # win.azureSignOptions via the Entra ID EnvironmentCredential.
+          # Unused on Linux/macOS builds.
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
         run: yarn run ${{ matrix.build_cmd }} --publish never ${{ matrix.arch == 'arm64' && '--arm64' || '' }}
 
       - name: Upload Electron build

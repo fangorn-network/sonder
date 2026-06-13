@@ -20,6 +20,7 @@ import { ToolboxConfigManager } from './agent/toolbox-config-manager'
 import { registerSpotifyAuth, handleSpotifyCallback } from './spotify/SpotifyAuth'
 import { registerPlaybackIpc } from './playback/ipc'
 import { registerLocalMusicIpc } from './local/ipc'
+import { installLogCapture, registerBugReportIpc } from './bug-report'
 
 // ─── Stream cache ─────────────────────────────────────────────────────────────
 interface StreamEntry {
@@ -614,6 +615,8 @@ function registerIpcHandlers() {
   ipcMain.handle('backend:is-ready', async () => {
     return net.fetch('http://127.0.0.1:8080/ready').then(r => r.ok).catch(() => false)
   })
+
+  registerBugReportIpc()   // bug:submit / bug:diagnostics (in-app problem reporter)
 }
 
 // ─── Arbitrum RPC proxy ───────────────────────────────────────────────────────
@@ -708,6 +711,7 @@ if (!gotLock) {
 // brought up afterwards, behind a boot screen the renderer renders.
 
 app.whenReady().then(async () => {
+  installLogCapture()   // tee console output into the bug-report ring buffer first
   electronApp.setAppUserModelId('com.electron')
 
   startQdrant()

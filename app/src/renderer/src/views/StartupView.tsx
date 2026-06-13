@@ -1,5 +1,6 @@
 import { useState, ReactNode } from 'react'
 import { useBoot } from '../providers/BootProvider'
+import { BugReportFab } from '../components/BugReportFab'
 
 // ── Boot sequence ─────────────────────────────────────────────────────────────
 // The backend boot lifecycle now lives in BootProvider (shared with the running
@@ -71,7 +72,7 @@ export function StartupView({ onReady, children }: StartupViewProps) {
       {/* Hairline frame for the editorial "page" feel */}
       <div style={{ position: 'absolute', inset: 0, border: '1px solid var(--border2)', pointerEvents: 'none' }} />
 
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '34px', userSelect: 'none', padding: '0 32px' }}>
+      <div style={{ position: 'relative', flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '34px', userSelect: 'none', padding: '0 32px' }}>
 
         {/* Wordmark + tagline */}
         <div style={{ textAlign: 'center' }}>
@@ -115,6 +116,7 @@ export function StartupView({ onReady, children }: StartupViewProps) {
                   ? `${warmup.indexed.toLocaleString()} / ${warmup.total.toLocaleString()} records`
                   :' '}
               </div>
+
             </>
           )}
 
@@ -123,6 +125,10 @@ export function StartupView({ onReady, children }: StartupViewProps) {
               {error}
             </div>
           )}
+        </div>
+        
+        <div style={{ textAlign: "center", marginTop: '10px', fontFamily: 'var(--font-mono)', fontSize: '9px', letterSpacing: '0.28em', textTransform: 'uppercase', color: 'var(--accent)' }}>
+            Early Access Preview
         </div>
 
         {/* Enter affordance — flat, sharp, ink. Hover inverts to ink fill.
@@ -158,12 +164,16 @@ export function StartupView({ onReady, children }: StartupViewProps) {
             </button>
           )}
         </div>
+
+        {/* Bug reporter — bottom-left of the content area, above the footer line
+            and aligned with "Built by Fangorn" (32px gutter). */}
+        <BugReportFab style={{ position: 'absolute', left: 32, bottom: 16, zIndex: 1 }} />
       </div>
 
       {/* Footer */}
       <div style={{ width: '100%', display: 'flex', justifyContent: 'space-between', padding: '16px 32px', borderTop: '1px solid var(--border2)', fontFamily: 'var(--font-mono)', fontSize: '10px', letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--fg3)' }}>
         <div>Built by Fangorn</div>
-        <div>v0.1.0</div>
+        <div>v0.0.1</div>
       </div>
 
       <style>{`

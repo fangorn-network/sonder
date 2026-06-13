@@ -17,6 +17,7 @@ import { IndexingBar } from './components/IndexingBar'
 import { useSessionKernel } from './hooks/useSessionKernel'
 import { ConnectorsView } from './views/ConnectorsView'
 import { AccountView } from './views/AccountView'
+import { BugReportFab } from './components/BugReportFab'
 import type { TasteSignal } from './types'
 import { type SessionEvent } from './kernel/Visualizer'
 import { useChromaSync } from './hooks/useChromaSync'
@@ -615,6 +616,9 @@ function Main() {
 
           {/* KernelDebugHUD — Ctrl+K accessible */}
           <KernelDebugHUD state={kernel.state} />
+
+          {/* Bug reporter — bottom-left corner, mirroring the HUD's anchor. */}
+          <BugReportFab style={{ position: 'fixed', left: 0, bottom: 0, zIndex: 200 }} />
         </div>
       </PlayerProvider >
       </LocalMusicProvider>

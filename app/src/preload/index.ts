@@ -24,6 +24,40 @@ const localMusic: LocalMusicApi = {
   scan: (dir?: string) => ipcRenderer.invoke('local:scan', dir),
 }
 
+// ── In-app bug reporter ────────────────────────────────────────────────
+export interface BugReportInput {
+  description: string
+  expected?: string
+  email?: string
+  userId?: string
+}
+export interface BugReportResult {
+  ok: boolean
+  /** How it was filed: silently via the proxy, or by opening the browser. */
+  via?: 'api' | 'browser'
+  /** Issue URL when filed via the proxy. */
+  url?: string
+  error?: string
+}
+export interface BugReportDiagnostics {
+  appVersion: string
+  platform: string
+  arch: string
+  os: string
+  electron: string
+  chrome: string
+  node: string
+}
+export interface BugReportApi {
+  submit(input: BugReportInput): Promise<BugReportResult>
+  getDiagnostics(): Promise<BugReportDiagnostics>
+}
+
+const bugReport: BugReportApi = {
+  submit: (input) => ipcRenderer.invoke('bug:submit', input),
+  getDiagnostics: () => ipcRenderer.invoke('bug:diagnostics'),
+}
+
 // Custom APIs for renderer
 const api = {
 
@@ -125,6 +159,11 @@ if (process.contextIsolated) {
     // from the catalog player — see main/local/* and LocalMusicProvider.
     contextBridge.exposeInMainWorld('localMusic', localMusic)
 
+    // ── In-app bug reporter ──────────────────────────────────────────
+    // Renderer collects a description; main attaches diagnostics + recent
+    // logs and files a GitHub issue. See main/bug-report.ts.
+    contextBridge.exposeInMainWorld('bugReport', bugReport)
+
   } catch (error) {
     console.error(error)
   }
@@ -135,6 +174,8 @@ if (process.contextIsolated) {
   window.api = api
   // @ts-ignore (define in dts)
   window.localMusic = localMusic
+  // @ts-ignore (define in dts)
+  window.bugReport = bugReport
 }
 
 

@@ -1,4 +1,4 @@
-import {FangornAgentApi} from "../preload"
+import {FangornAgentApi, BugReportApi} from "../preload"
 import type {Sond3rBootApi} from "../preload/index.d"
 
 // src/renderer/src/env.d.ts or global.d.ts
@@ -11,5 +11,7 @@ declare global {
     agentAPI: FangornAgentApi;
     // SOND3R backend boot lifecycle — drives StartupView's progress bar.
     sond3r?: Sond3rBootApi;
+    // In-app bug reporter — see components/BugReportModal.tsx.
+    bugReport?: BugReportApi;
   }
 }

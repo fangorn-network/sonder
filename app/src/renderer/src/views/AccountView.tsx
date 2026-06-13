@@ -18,6 +18,7 @@ import {
 } from '@privy-io/react-auth'
 import { formatUnits, formatEther } from 'viem'
 import { NETWORK, USDC_ABI, USDC_DECIMALS, publicClient, usdcFundingOptions } from '../lib/network'
+import { BugReportModal } from '../components/BugReportModal'
 
 const MFA_LABELS: Record<string, string> = {
   sms: 'SMS',
@@ -86,6 +87,10 @@ export function AccountView() {
 
   const [confirmLogout, setConfirmLogout] = useState(false)
 
+  // ── Bug reporter ────────────────────────────────────────────────────────────
+
+  const [showBugReport, setShowBugReport] = useState(false)
+
   // ─────────────────────────────────────────────────────────────────────────
 
   if (!ready) {
@@ -107,6 +112,8 @@ export function AccountView() {
         <Section label="Trouble signing in?">
           <ResetSessionControl />
         </Section>
+        <FeedbackSection onReport={() => setShowBugReport(true)} />
+        {showBugReport && <BugReportModal onClose={() => setShowBugReport(false)} />}
       </div>
     )
   }
@@ -240,6 +247,9 @@ export function AccountView() {
         </Actions>
       </Section>
 
+      {/* ── Feedback ─────────────────────────────────────────────────────── */}
+      <FeedbackSection onReport={() => setShowBugReport(true)} />
+
       {/* ── Session ──────────────────────────────────────────────────────── */}
       <Section label="Session">
         <Actions noBorder>
@@ -266,7 +276,28 @@ export function AccountView() {
         </Actions>
         <ResetSessionControl />
       </Section>
+
+      {showBugReport && <BugReportModal onClose={() => setShowBugReport(false)} />}
     </div>
+  )
+}
+
+// ─── Feedback / bug report ────────────────────────────────────────────────────
+// Early-access affordance: a always-available "report a problem" entry. Rendered
+// both signed-in and signed-out so a broken login is still reportable in-app.
+function FeedbackSection({ onReport }: { onReport: () => void }) {
+  return (
+    <Section label="Feedback">
+      <Note style={{ padding: 'var(--sp-4)' }}>
+        Hit a bug? This is an early access preview — tell us what broke and we’ll
+        get on it.
+      </Note>
+      <Actions>
+        <button className="btn-ghost" style={{ flex: 1 }} onClick={onReport}>
+          report a problem
+        </button>
+      </Actions>
+    </Section>
   )
 }
 

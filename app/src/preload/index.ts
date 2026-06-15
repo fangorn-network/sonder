@@ -3,7 +3,8 @@ import { electronAPI } from '@electron-toolkit/preload'
 import type { AgentProviderConfig, ProviderStatus } from "../main/agent/agent-provider-manager";
 import type { OllamaStatus } from "../main/agent/ollama-manager";
 import type { FangornAgentResponse } from "@fangorn-network/agent";
-import type { LocalTrack } from "../main/local/types";
+import type { ArtScope, LocalTrack, LocalTrackMeta } from "../main/local/types";
+import type { StoredMeta } from "../main/local/catalog";
 
 // ── Local on-disk music ────────────────────────────────────────────────
 export interface LocalMusicApi {
@@ -15,6 +16,25 @@ export interface LocalMusicApi {
   pickDir(): Promise<string | null>
   /** Recursively scan `dir` (defaults to the saved/default dir) for audio files. */
   scan(dir?: string): Promise<LocalTrack[]>
+
+  // ── Metadata library ──────────────────────────────────────────────────
+  /** Stored metadata for a track, or null if it hasn't been labeled. */
+  getMeta(localId: string): Promise<StoredMeta | null>
+  /** Insert/update a track's metadata (requires title + artist). */
+  saveMeta(localId: string, meta: LocalTrackMeta): Promise<StoredMeta>
+  /** Remove a track's metadata (returns it to Unlabeled). */
+  deleteMeta(localId: string): Promise<void>
+  /** Best-effort metadata read from the file's embedded tags (for prefill). */
+  readTags(localId: string): Promise<LocalTrackMeta>
+
+  // ── Album / artist artwork ────────────────────────────────────────────
+  /** Stored artwork for (scope, key) as a data URL, or null if none. */
+  getArt(scope: ArtScope, key: string): Promise<string | null>
+  /** Open the image picker and store the chosen image; returns its data URL,
+   *  or null if cancelled. */
+  pickArt(scope: ArtScope, key: string): Promise<string | null>
+  /** Remove the stored artwork for (scope, key). */
+  clearArt(scope: ArtScope, key: string): Promise<void>
 }
 
 const localMusic: LocalMusicApi = {
@@ -22,6 +42,13 @@ const localMusic: LocalMusicApi = {
   getDir: () => ipcRenderer.invoke('local:get-dir'),
   pickDir: () => ipcRenderer.invoke('local:pick-dir'),
   scan: (dir?: string) => ipcRenderer.invoke('local:scan', dir),
+  getMeta: (localId) => ipcRenderer.invoke('local:meta:get', localId),
+  saveMeta: (localId, meta) => ipcRenderer.invoke('local:meta:upsert', localId, meta),
+  deleteMeta: (localId) => ipcRenderer.invoke('local:meta:delete', localId),
+  readTags: (localId) => ipcRenderer.invoke('local:read-tags', localId),
+  getArt: (scope, key) => ipcRenderer.invoke('local:art:get', scope, key),
+  pickArt: (scope, key) => ipcRenderer.invoke('local:art:pick-set', scope, key),
+  clearArt: (scope, key) => ipcRenderer.invoke('local:art:clear', scope, key),
 }
 
 // ── In-app bug reporter ────────────────────────────────────────────────

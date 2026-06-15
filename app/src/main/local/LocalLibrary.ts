@@ -18,6 +18,7 @@ import path from 'path'
 import crypto from 'crypto'
 import mime from 'mime-types'
 import { AUDIO_EXTENSIONS, type LocalTrack } from './types'
+import { listMeta } from './catalog'
 
 // ─── File server ────────────────────────────────────────────────────────────
 
@@ -86,6 +87,12 @@ export function startLocalFileServer(): Promise<void> {
       resolve()
     })
   })
+}
+
+/** Resolve a served id back to its on-disk path. Only ids from the last scan
+ *  resolve, so metadata/tag IPC can't be pointed at arbitrary files. */
+export function pathForId(id: string): string | undefined {
+  return registry.get(id)?.path
 }
 
 // ─── Music directory (default + persisted override) ───────────────────────────
@@ -171,21 +178,42 @@ export async function scan(dir: string): Promise<LocalTrack[]> {
   await walk(dir, files)
   files.sort((a, b) => a.localeCompare(b))
 
+  // Stored metadata, loaded once and merged in below. A track with a row is
+  // "labeled" (its stored title/artist/album override the filename guess) and
+  // carries the extra schema fields; everything else is Unlabeled.
+  const stored = listMeta()
+
   registry.clear()
   return files.map((absPath) => {
     const id = fileId(absPath)
     const ext = path.extname(absPath).toLowerCase()
     const contentType = (mime.lookup(absPath) || 'application/octet-stream') as string
     registry.set(id, { path: absPath, contentType })
-    const meta = deriveMeta(absPath)
+    const streamUrl = `http://127.0.0.1:${port}/${id}`
+
+    const meta = stored.get(id)
+    if (meta) {
+      return {
+        id, path: absPath, ext, streamUrl,
+        title: meta.title,
+        artist: meta.byArtist,
+        album: meta.albumName,
+        labeled: true,
+        trackId: meta.trackId,
+        isrcCode: meta.isrcCode,
+        datePublished: meta.datePublished,
+        durationMs: meta.durationMs,
+        contributors: meta.contributors,
+      }
+    }
+
+    const derived = deriveMeta(absPath)
     return {
-      id,
-      path: absPath,
-      title: meta.title,
-      artist: meta.artist,
-      album: meta.album,
-      ext,
-      streamUrl: `http://127.0.0.1:${port}/${id}`,
+      id, path: absPath, ext, streamUrl,
+      title: derived.title,
+      artist: derived.artist,
+      album: derived.album,
+      labeled: false,
     }
   })
 }

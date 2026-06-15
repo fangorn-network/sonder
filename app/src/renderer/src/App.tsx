@@ -633,7 +633,7 @@ function Main() {
           <KernelDebugHUD state={kernel.state} />
 
           {/* Bug reporter — bottom-left corner, mirroring the HUD's anchor. */}
-          <BugReportFab style={{ position: 'fixed', left: 0, bottom: 0, zIndex: 200 }} />
+          <BugReportFab storageKey="app" style={{ position: 'fixed', left: 0, bottom: 0, zIndex: 200 }} />
         </div>
       </PlayerProvider >
       </LocalMusicProvider>

@@ -20,6 +20,43 @@ export interface LocalTrack {
   ext: string
   /** http://127.0.0.1:<port>/<id> — fed straight into <audio>.src. */
   streamUrl: string
+
+  // ── Metadata library (see ./catalog.ts) ────────────────────────────────────
+  /** True once structured metadata exists (title + artist). Drives the
+   *  Library vs Unlabeled split in the renderer. */
+  labeled: boolean
+  /** Canonical track id (computeTrackId) once labeled — matches PublishModal. */
+  trackId?: string | null
+  isrcCode?: string | null
+  datePublished?: string | null
+  durationMs?: number | null
+  contributors?: Contributor[]
+}
+
+/** What a piece of artwork is attached to. */
+export type ArtScope = 'album' | 'artist'
+
+/** A credited contributor — mirrors `contributors[]` in TrackInvariantSchema.json. */
+export interface Contributor {
+  role: string | null
+  name: string | null
+  id: string | null
+}
+
+/**
+ * Editable, schema-shaped metadata for a local track — what the metadata editor
+ * submits and what `local:meta:get` / tag-reads return. Mirrors the user-facing
+ * fields of schemas/TrackInvariantSchema.json (schemaVersion, trackId and
+ * timestamps are managed in main, not edited here).
+ */
+export interface LocalTrackMeta {
+  title: string
+  byArtist: string
+  albumName: string | null
+  datePublished: string | null
+  isrcCode: string | null
+  durationMs: number | null
+  contributors: Contributor[]
 }
 
 /**

@@ -1,5 +1,5 @@
 import { ElectronAPI } from '@electron-toolkit/preload'
-import { FangornAgentApi, BugReportApi } from '.';
+import { FangornAgentApi, BugReportApi, LocalMusicApi } from '.';
 
 // SOND3R backend boot lifecycle — first run fetches + recovers the catalog
 // snapshot; the renderer's StartupView drives a progress bar off these events.
@@ -33,5 +33,6 @@ declare global {
     agentAPI: FangornAgentApi;
     sond3r?: Sond3rBootApi;
     bugReport?: BugReportApi;
+    localMusic: LocalMusicApi;
   }
 }

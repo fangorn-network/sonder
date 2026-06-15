@@ -9,6 +9,9 @@
 
 import { ipcMain, dialog, BrowserWindow } from 'electron'
 import * as lib from './LocalLibrary'
+import * as catalog from './catalog'
+import * as art from './art'
+import type { ArtScope, LocalTrackMeta } from './types'
 
 export function registerLocalMusicIpc(): void {
   void lib.startLocalFileServer()
@@ -39,5 +42,47 @@ export function registerLocalMusicIpc(): void {
       console.error('[local-music] scan failed:', err)
       throw err
     }
+  })
+
+  // ── Track metadata library ──────────────────────────────────────────────────
+  // Tracks are addressed by their served id; the path is resolved from the last
+  // scan's registry so these can't touch files outside the scanned folder.
+
+  ipcMain.handle('local:meta:get', (_e, localId: string) => catalog.getMeta(localId))
+
+  ipcMain.handle('local:meta:upsert', (_e, localId: string, meta: LocalTrackMeta) => {
+    const filePath = lib.pathForId(localId)
+    if (!filePath) throw new Error('unknown track id')
+    return catalog.upsertMeta(localId, filePath, meta)
+  })
+
+  ipcMain.handle('local:meta:delete', (_e, localId: string) => {
+    catalog.deleteMeta(localId)
+  })
+
+  ipcMain.handle('local:read-tags', async (_e, localId: string) => {
+    const filePath = lib.pathForId(localId)
+    if (!filePath) throw new Error('unknown track id')
+    return catalog.readEmbeddedTags(filePath)
+  })
+
+  // ── Album / artist artwork ──────────────────────────────────────────────────
+  ipcMain.handle('local:art:get', (_e, scope: ArtScope, key: string) => art.getArt(scope, key))
+
+  ipcMain.handle('local:art:clear', (_e, scope: ArtScope, key: string) => { art.clearArt(scope, key) })
+
+  // Opens the native image picker, stores the chosen image, and returns it as a
+  // data URL. Returns null if the user cancels.
+  ipcMain.handle('local:art:pick-set', async (_e, scope: ArtScope, key: string) => {
+    const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
+    const opts = {
+      title: scope === 'artist' ? 'Choose artist image' : 'Choose album cover',
+      properties: ['openFile' as const],
+      filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'avif'] }],
+    }
+    const result = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts)
+    const file = result.filePaths[0]
+    if (result.canceled || !file) return null
+    return art.setArtFromFile(scope, key, file)
   })
 }

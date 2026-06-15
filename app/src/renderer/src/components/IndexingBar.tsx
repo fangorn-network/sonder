@@ -13,12 +13,12 @@
 import { useBoot } from '../providers/BootProvider'
 
 // Editorial light tokens — match App.tsx / TrackWikiView.
-const BG1     = '#f0ece5'
-const FG2     = '#4a4440'
-const FG3     = '#766e66'
-const FG4     = '#a09890'
-const ACCENT  = '#b83030'
-const BORDER2 = 'rgba(0,0,0,0.07)'
+const BG1     = 'var(--bg1)'
+const FG2     = 'var(--fg2)'
+const FG3     = 'var(--fg3)'
+const FG4     = 'var(--fg4)'
+const ACCENT  = 'var(--accent)'
+const BORDER2 = 'var(--border2)'
 const MONO    = 'var(--font-mono,"Fragment Mono","DM Mono",monospace)'
 
 function Bar({ pct, height }: { pct: number | null; height: number }) {

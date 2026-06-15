@@ -15,6 +15,7 @@ import { StartupView } from './views/StartupView'
 import { BootProvider, useBoot } from './providers/BootProvider'
 import { IndexingBar } from './components/IndexingBar'
 import { useSessionKernel } from './hooks/useSessionKernel'
+import { useTheme } from './hooks/useTheme'
 import { ConnectorsView } from './views/ConnectorsView'
 import { AccountView } from './views/AccountView'
 import { BugReportFab } from './components/BugReportFab'
@@ -35,16 +36,20 @@ import { DEFAULTS } from './kernel/constants'
 import type { KernelSnapshot } from './types/kernel'
 import type { TrackNeighborData } from './kernel/neighborhoodAnalysis'
 
-// ── Design tokens (light editorial) ──────────────────────────────────────────
-const BG1    = '#f0ece5'
-const BG2    = '#e8e3da'
-const FG     = '#1a1714'
-const FG2    = '#4a4440'
-const FG3    = '#766e66'
-const FG4    = '#a09890'
-const ACCENT = '#b83030'
-const BORDER = 'rgba(0,0,0,0.12)'
-const BORDER2 = 'rgba(0,0,0,0.07)'
+// ── Design tokens ─────────────────────────────────────────────────────────────
+// Read from the shared CSS variables (App.css :root + the data-theme="dark"
+// override) so the shell flips with the light/dark toggle. See hooks/useTheme.
+const BG1    = 'var(--bg1)'
+const BG2    = 'var(--bg2)'
+const FG     = 'var(--fg)'
+const FG2    = 'var(--fg2)'
+const FG3    = 'var(--fg3)'
+const FG4    = 'var(--fg4)'
+const ACCENT = 'var(--accent)'
+const ACCENT_DIM    = 'var(--accent-dim)'
+const ACCENT_BORDER = 'var(--accent-border)'
+const BORDER = 'var(--border)'
+const BORDER2 = 'var(--border2)'
 const MONO   = 'var(--font-mono,"Fragment Mono","DM Mono",monospace)'
 const SANS   = 'var(--font-body,"Geist","Inter",sans-serif)'
 const DISP   = 'var(--font-display,"Bebas Neue",sans-serif)'
@@ -95,6 +100,7 @@ function AppRoot() {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 function Main() {
+  const { theme, toggleTheme } = useTheme()
   const spotify = useSpotify(() => onTrackEndedRef.current())
 
   // Search is gated until the backend's text index is built; the IndexingBar
@@ -389,7 +395,7 @@ function Main() {
     <SpotifyProvider value={{ ...spotify }}>
       <LocalMusicProvider>
       <PlayerProvider tracks={tracks}>
-        <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#050309', overflow: 'hidden', fontFamily: SANS }}>
+        <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: 'var(--bg)', overflow: 'hidden', fontFamily: SANS }}>
 
           {/* ── Shell header (40px) ───────────────────────────────────────── */}
           <header style={{
@@ -480,9 +486,18 @@ function Main() {
             {/* Local music */}
             <button
               onClick={() => setShowLocal(true)}
-              style={{ background: showLocal ? `${ACCENT}18` : 'none', border: `1px solid ${showLocal ? ACCENT + '44' : BORDER2}`, color: showLocal ? ACCENT : FG4, fontFamily: MONO, fontSize: 12, lineHeight: 1, padding: '3px 8px', cursor: 'pointer', flexShrink: 0, WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+              style={{ background: showLocal ? ACCENT_DIM : 'none', border: `1px solid ${showLocal ? ACCENT_BORDER : BORDER2}`, color: showLocal ? ACCENT : FG4, fontFamily: MONO, fontSize: 12, lineHeight: 1, padding: '3px 8px', cursor: 'pointer', flexShrink: 0, WebkitAppRegion: 'no-drag' } as React.CSSProperties}
               title="Local music">
               ♪
+            </button>
+
+            {/* Theme toggle — light ⇄ dark */}
+            <button
+              onClick={toggleTheme}
+              style={{ background: 'none', border: `1px solid ${BORDER2}`, color: FG4, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '4px 8px', cursor: 'pointer', flexShrink: 0, WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+              title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+              aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
+              <ThemeIcon theme={theme} />
             </button>
 
             {/* Settings icon */}
@@ -492,7 +507,7 @@ function Main() {
                 else if (settingsSection === 'account') setSettingsSection('kernel')
                 else setShowSettings(false)
               }}
-              style={{ background: settingsActive ? `${ACCENT}18` : 'none', border: `1px solid ${settingsActive ? ACCENT + '44' : BORDER2}`, color: settingsActive ? ACCENT : FG4, fontFamily: MONO, fontSize: 11, padding: '3px 8px', cursor: 'pointer', flexShrink: 0, WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+              style={{ background: settingsActive ? ACCENT_DIM : 'none', border: `1px solid ${settingsActive ? ACCENT_BORDER : BORDER2}`, color: settingsActive ? ACCENT : FG4, fontFamily: MONO, fontSize: 11, padding: '3px 8px', cursor: 'pointer', flexShrink: 0, WebkitAppRegion: 'no-drag' } as React.CSSProperties}
               title="Settings">
               ⚙
             </button>
@@ -507,7 +522,7 @@ function Main() {
                 else if (settingsSection !== 'account') setSettingsSection('account')
                 else setShowSettings(false)
               }}
-              style={{ background: accountActive ? `${ACCENT}18` : 'none', border: `1px solid ${accountActive ? ACCENT + '44' : BORDER2}`, color: accountActive ? ACCENT : FG4, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '4px 8px', cursor: 'pointer', flexShrink: 0, WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+              style={{ background: accountActive ? ACCENT_DIM : 'none', border: `1px solid ${accountActive ? ACCENT_BORDER : BORDER2}`, color: accountActive ? ACCENT : FG4, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '4px 8px', cursor: 'pointer', flexShrink: 0, WebkitAppRegion: 'no-drag' } as React.CSSProperties}
               title="Account">
               <AccountIcon />
             </button>
@@ -518,7 +533,7 @@ function Main() {
 
             {/* Wiki — primary surface */}
             <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-              <KernelStrip {...kernelStrip} theme="light" />
+              <KernelStrip {...kernelStrip} theme={theme} />
               <div style={{ flex: 1, minHeight: 0 }}>
                 <TrackWikiView
                   view={wikiView}
@@ -647,6 +662,28 @@ function NowPlayingDot({ onOpen }: { onOpen: () => void }) {
       } as React.CSSProperties}
       title={active ? 'Now playing' : 'Nothing playing'}
     />
+  )
+}
+
+// ─── ThemeIcon ────────────────────────────────────────────────────────────────
+// Shows the mode you'll switch *to*: a moon while in light mode, a sun while in
+// dark mode.
+
+function ThemeIcon({ theme }: { theme: 'light' | 'dark' }) {
+  if (theme === 'dark') {
+    // Sun — click to go light.
+    return (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="4" />
+        <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
+      </svg>
+    )
+  }
+  // Moon — click to go dark.
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+    </svg>
   )
 }
 

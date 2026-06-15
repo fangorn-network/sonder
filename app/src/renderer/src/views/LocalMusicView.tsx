@@ -11,15 +11,16 @@ import { useEffect } from 'react'
 import { useLocalMusic, type LocalTrack } from '../providers/LocalMusicProvider'
 
 // ── Design tokens (light editorial — matches the app shell) ───────────────────
-const BG1 = '#f0ece5'
-const BG2 = '#e8e3da'
-const FG = '#1a1714'
-const FG2 = '#4a4440'
-const FG3 = '#766e66'
-const FG4 = '#a09890'
-const ACCENT = '#b83030'
-const BORDER = 'rgba(0,0,0,0.12)'
-const BORDER2 = 'rgba(0,0,0,0.07)'
+const BG1 = 'var(--bg1)'
+const BG2 = 'var(--bg2)'
+const FG = 'var(--fg)'
+const FG2 = 'var(--fg2)'
+const FG3 = 'var(--fg3)'
+const FG4 = 'var(--fg4)'
+const ACCENT = 'var(--accent)'
+const ACCENT_DIM = 'var(--accent-dim)'
+const BORDER = 'var(--border)'
+const BORDER2 = 'var(--border2)'
 const MONO = 'var(--font-mono,"Fragment Mono","DM Mono",monospace)'
 const SANS = 'var(--font-body,"Geist","Inter",sans-serif)'
 const DISP = 'var(--font-display,"Bebas Neue",sans-serif)'
@@ -149,7 +150,7 @@ function TrackRow({
       onClick={onPlay}
       style={{
         width: '100%', display: 'flex', alignItems: 'center', gap: 14,
-        padding: '9px 22px', background: active ? `${ACCENT}10` : 'none',
+        padding: '9px 22px', background: active ? ACCENT_DIM : 'none',
         border: 'none', borderBottom: `1px solid ${BORDER2}`, cursor: 'pointer',
         textAlign: 'left',
       }}

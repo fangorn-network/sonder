@@ -69,29 +69,34 @@ const N_NEIGHBORS = 40
 const N_RESULTS   = 60
 const MB_UA       = 'SOND3R/1.0.0 (https://fangorn.network)'
 
-const BG      = '#f7f4ef'
-const BG1     = '#f0ece5'
-const BG2     = '#e8e3da'
-const BG3     = '#ddd8ce'
-const FG      = '#1a1714'
-const FG2     = '#4a4440'
-const FG3     = '#766e66'
-const FG4     = '#a09890'
-const ACCENT  = '#b83030'
-const CYAN    = '#2878b0'
+// Neutral surfaces/text + accent read from the shared theme tokens (App.css)
+// so this view flips with the light/dark toggle. Saturated semantic accents
+// (TEAL/VIOLET/AMBER/LINK) stay as literals — they read on either backdrop.
+const BG      = 'var(--bg)'
+const BG1     = 'var(--bg1)'
+const BG2     = 'var(--bg2)'
+const BG3     = 'var(--bg3)'
+const FG      = 'var(--fg)'
+const FG2     = 'var(--fg2)'
+const FG3     = 'var(--fg3)'
+const FG4     = 'var(--fg4)'
+const ACCENT  = 'var(--accent)'
+const ACCENT_DIM    = 'var(--accent-dim)'
+const ACCENT_BORDER = 'var(--accent-border)'
+const CYAN    = 'var(--cyan)'
 const TEAL    = '#207860'
-const SUCCESS = '#2a7a48'
-const YELLOW  = '#a07828'
+const SUCCESS = 'var(--success)'
+const YELLOW  = 'var(--yellow)'
 const VIOLET  = '#5a3d9e'
 const AMBER   = '#9a6820'
 const LINK    = '#2a5ea8'          // Wikipedia-blue for light backgrounds
 
-const BORDER   = 'rgba(0,0,0,0.12)'
-const BORDER2  = 'rgba(0,0,0,0.07)'
-const DIM      = 'rgba(0,0,0,0.35)'
-const DIMMER   = 'rgba(0,0,0,0.20)'
-const GLASS    = 'rgba(0,0,0,0.03)'
-const GLASS_BD = 'rgba(0,0,0,0.07)'
+const BORDER   = 'var(--border)'
+const BORDER2  = 'var(--border2)'
+const DIM      = 'var(--ink-dim)'
+const DIMMER   = 'var(--ink-dimmer)'
+const GLASS    = 'var(--glass-fill)'
+const GLASS_BD = 'var(--border2)'
 
 // Canvas-specific dark colours for MiniSoundMap (always dark regardless of page theme)
 const CANVAS_BG  = '#111110'
@@ -758,7 +763,7 @@ function ResultsView({ query, mode, onNavigate, onSetMode }: {
                     </div>
                 )}
                 {error && (
-                    <div style={{ marginBottom: 18, padding: '8px 12px', background: `${ACCENT}12`, border: `1px solid ${ACCENT}30`, fontFamily: MONO, fontSize: 11, color: ACCENT }}>{error}</div>
+                    <div style={{ marginBottom: 18, padding: '8px 12px', background: ACCENT_DIM, border: `1px solid ${ACCENT_BORDER}`, fontFamily: MONO, fontSize: 11, color: ACCENT }}>{error}</div>
                 )}
 
                 {/* Genre facets — refine */}
@@ -796,8 +801,8 @@ function ResultsView({ query, mode, onNavigate, onSetMode }: {
                         onClick={() => onNavigate({ kind: 'artist', name: featuredArtist.artist })}
                         style={{
                             marginBottom: 24, padding: '16px 18px', cursor: 'pointer',
-                            background: `linear-gradient(135deg, ${ACCENT}14, ${VIOLET}0c)`,
-                            border: `1px solid ${ACCENT}40`, borderLeft: `3px solid ${ACCENT}`,
+                            background: `linear-gradient(135deg, ${ACCENT_DIM}, ${VIOLET}0c)`,
+                            border: `1px solid ${ACCENT_BORDER}`, borderLeft: `3px solid ${ACCENT}`,
                             display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16,
                         }}>
                         <div>

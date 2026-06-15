@@ -64,6 +64,12 @@
   --border2: rgba(0, 0, 0, 0.07);
   --border3: rgba(0, 0, 0, 0.20);
 
+  /* Ink overlays (muted text / subtle fills) — flip with theme so inline
+     styles that previously hardcoded rgba(0,0,0,…) read correctly on dark. */
+  --ink-dim: rgba(0, 0, 0, 0.35);
+  --ink-dimmer: rgba(0, 0, 0, 0.20);
+  --glass-fill: rgba(0, 0, 0, 0.03);
+
   /* No blur */
   --blur-sm: none;
   --blur-md: none;
@@ -94,6 +100,61 @@
   --t1: 80ms;
   --t2: 160ms;
   --t3: 280ms;
+}
+
+/* =============================================================================
+   DARK THEME — warm near-black mirror of the light editorial palette.
+   Applied by toggling <html data-theme="dark"> (see hooks/useTheme.ts).
+   Only the palette variables are overridden; everything downstream (these CSS
+   rules and the inline-styled views that read var(--…)) flips for free.
+   Immersive views that are dark by design (galaxy/soundtown, kernel terrain,
+   artist neighborhood) are unaffected — they don't read these neutrals.
+   ─────────────────────────────────────────────────────────────────────────── */
+:root[data-theme='dark'] {
+  --bg:  #14110e;
+  --bg1: #1b1714;
+  --bg2: #231e1a;
+  --bg3: #2c2621;
+  --bg4: #362f29;
+
+  --fg:  #f0ece5;
+  --fg2: #c9c2b8;
+  --fg3: #9a9088;
+  --fg4: #6b635b;
+
+  --accent: #e0564f;
+  --accent-hi: #f06a62;
+  --accent-dim: rgba(224, 86, 79, 0.16);
+  --accent-border: rgba(224, 86, 79, 0.40);
+
+  --cyan: #57a9dd;
+  --cyan-dim: rgba(87, 169, 221, 0.14);
+  --cyan-border: rgba(87, 169, 221, 0.34);
+
+  --yellow: #d2a24a;
+  --yellow-dim: rgba(210, 162, 74, 0.14);
+
+  --success: #4caf6e;
+  --success-dim: rgba(76, 175, 110, 0.14);
+  --orange: #e0792e;
+  --orange-dim: rgba(224, 121, 46, 0.14);
+  --pink: #d061a0;
+  --pink-dim: rgba(208, 97, 160, 0.14);
+
+  --err: #e05656;
+  --err-dim: rgba(224, 86, 86, 0.16);
+
+  --glass-edge: rgba(255, 255, 255, 0.12);
+  --glass-edge-hi: rgba(255, 255, 255, 0.22);
+  --glass-edge-top: rgba(255, 255, 255, 0.07);
+
+  --border: rgba(255, 255, 255, 0.12);
+  --border2: rgba(255, 255, 255, 0.07);
+  --border3: rgba(255, 255, 255, 0.20);
+
+  --ink-dim: rgba(255, 255, 255, 0.45);
+  --ink-dimmer: rgba(255, 255, 255, 0.28);
+  --glass-fill: rgba(255, 255, 255, 0.05);
 }
 
 /* =============================================================================

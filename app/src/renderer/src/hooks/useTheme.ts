@@ -22,6 +22,10 @@ function applyTheme(theme: Theme): void {
   root.dataset.theme = theme
   // Tells the UA to render form controls / scrollbars in the matching scheme.
   root.style.colorScheme = theme
+  // Re-tint the native window-controls overlay (min/max/close) to match. The
+  // bridge may be absent at module-load (preload still wiring up) or in a
+  // non-Electron context, so guard the call.
+  window.sond3r?.setWindowTheme?.(theme)
 }
 
 // Apply at module load — before React's first paint — so the initial render

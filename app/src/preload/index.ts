@@ -147,6 +147,11 @@ if (process.contextIsolated) {
         ipcRenderer.removeAllListeners('backend:error')
       },
 
+      // Re-tint the native window-controls overlay to match the light/dark
+      // theme. No-op on macOS (handled in main).
+      setWindowTheme: (theme: 'light' | 'dark') =>
+        ipcRenderer.invoke('window:set-theme', theme),
+
       isBackendReady: () => ipcRenderer.invoke('backend:is-ready'),
 
       // Clears this device's storage for the renderer partition (Privy session

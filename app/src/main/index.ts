@@ -470,6 +470,14 @@ function startRendererServer(): Promise<void> {
 
 // ─── Browser window ───────────────────────────────────────────────────────────
 
+// Native window-controls-overlay tint per theme. `color` is the overlay strip
+// background (matches the header --bg1), `symbolColor` the min/max/close glyphs
+// (matches --fg). Keep these in sync with the palettes in renderer App.css.
+const TITLEBAR_OVERLAY = {
+  light: { color: '#f0ece5', symbolColor: '#1a1714' },
+  dark:  { color: '#1b1714', symbolColor: '#f0ece5' },
+} as const
+
 function createWindow(): BrowserWindow {
   const mainWindow = new BrowserWindow({
     width: 1200, height: 800,
@@ -479,7 +487,7 @@ function createWindow(): BrowserWindow {
     // Native window-controls overlay tinted to match the light editorial header
     // (App.tsx BG1 background / FG symbols) so min/max/close read as part of the
     // app instead of black boxes. Height matches the 40px header.
-    titleBarOverlay: { color: '#f0ece5', symbolColor: '#1a1714', height: 40 },
+    titleBarOverlay: { ...TITLEBAR_OVERLAY.light, height: 40 },
     backgroundColor: '#1a1a1a', autoHideMenuBar: true,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -521,6 +529,19 @@ function registerIpcHandlers() {
     await session.fromPartition('persist:main').clearStorageData()
     BrowserWindow.fromWebContents(event.sender)?.webContents.reload()
     return { success: true }
+  })
+
+  // Re-tint the native window-controls overlay (min/max/close) to match the
+  // active light/dark theme. Windows/Linux only — macOS draws traffic lights
+  // the OS themes itself, and calling setTitleBarOverlay there throws.
+  ipcMain.handle('window:set-theme', (event, theme: 'light' | 'dark') => {
+    if (process.platform === 'darwin') return
+    const overlay = TITLEBAR_OVERLAY[theme] ?? TITLEBAR_OVERLAY.light
+    try {
+      BrowserWindow.fromWebContents(event.sender)?.setTitleBarOverlay({ ...overlay, height: 40 })
+    } catch (e) {
+      console.warn('[main] setTitleBarOverlay failed:', e)
+    }
   })
 
   ipcMain.handle('shell:open-external', (_event, url: string) => {

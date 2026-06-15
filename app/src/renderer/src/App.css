@@ -117,10 +117,10 @@
   --bg3: #2c2621;
   --bg4: #362f29;
 
-  --fg:  #f0ece5;
-  --fg2: #c9c2b8;
-  --fg3: #9a9088;
-  --fg4: #6b635b;
+  --fg:  #f4f1ea;
+  --fg2: #ddd6cb;
+  --fg3: #b4aca1;
+  --fg4: #8c8278;
 
   --accent: #e0564f;
   --accent-hi: #f06a62;
@@ -148,9 +148,9 @@
   --glass-edge-hi: rgba(255, 255, 255, 0.22);
   --glass-edge-top: rgba(255, 255, 255, 0.07);
 
-  --border: rgba(255, 255, 255, 0.12);
-  --border2: rgba(255, 255, 255, 0.07);
-  --border3: rgba(255, 255, 255, 0.20);
+  --border: rgba(255, 255, 255, 0.14);
+  --border2: rgba(255, 255, 255, 0.10);
+  --border3: rgba(255, 255, 255, 0.22);
 
   --ink-dim: rgba(255, 255, 255, 0.45);
   --ink-dimmer: rgba(255, 255, 255, 0.28);

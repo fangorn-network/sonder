@@ -44,6 +44,28 @@ export interface ArtCandidate {
 /** What can be favorited. Mirror of main/local/favorites.ts `FavKind`. */
 export type FavKind = 'track' | 'artist' | 'album'
 
+/** Bulk-import file handling. Mirror of main/local/types.ts `ImportMode`. */
+export type ImportMode = 'copy' | 'reference'
+
+/** Copy-import progress. Mirror of main/local/types.ts `ImportProgress`. */
+export interface ImportProgress {
+  total: number
+  processed: number
+  file: string
+}
+
+/** Import outcome. Mirror of main/local/types.ts `ImportSummary`. */
+export interface ImportSummary {
+  mode: ImportMode
+  source: string
+  dest?: string
+  total: number
+  copied: number
+  skipped: number
+  failed: number
+  referenced: boolean
+}
+
 /** Favorited refs grouped by kind, held as Sets for O(1) membership checks. */
 export interface FavState {
   track: Set<string>
@@ -124,6 +146,20 @@ interface LocalMusicContextValue {
   rescan: () => Promise<void>
   /** Open the native folder picker, then scan the chosen folder. */
   chooseFolder: () => Promise<void>
+
+  // ── Bulk import ───────────────────────────────────────────────────────────
+  /** Referenced-in-place folders (besides the primary `dir`). */
+  extraRoots: string[]
+  /** True while a copy import is running. */
+  importing: boolean
+  /** Live copy-import progress, or null when idle. */
+  importProgress: ImportProgress | null
+  /** Native folder picker for an import source (+ its audio count). */
+  pickImportSource: () => Promise<{ path: string; audioCount: number } | null>
+  /** Import a folder (copy in or reference), then re-scan. Returns the summary. */
+  importMusic: (source: string, mode: ImportMode) => Promise<ImportSummary>
+  /** Remove a referenced-in-place folder, then re-scan. */
+  removeRoot: (path: string) => Promise<void>
 
   /** Best-effort metadata from the file's embedded tags, for prefilling the editor. */
   readTags: (localId: string) => Promise<LocalTrackMeta>
@@ -316,6 +352,44 @@ export function LocalMusicProvider({ children }: { children: ReactNode }) {
     if (!picked) return
     await scanDir(picked)
   }, [scanDir])
+
+  // ── Bulk import ───────────────────────────────────────────────────────────
+  const [extraRoots, setExtraRoots] = useState<string[]>([])
+  const [importing, setImporting] = useState(false)
+  const [importProgress, setImportProgress] = useState<ImportProgress | null>(null)
+
+  const refreshRoots = useCallback(async () => {
+    try {
+      const roots = await window.localMusic.listRoots()
+      setExtraRoots(roots.extra)
+    } catch { /* leave as-is */ }
+  }, [])
+
+  // Load referenced roots once, and stream copy-import progress into state.
+  useEffect(() => { void refreshRoots() }, [refreshRoots])
+  useEffect(() => window.localMusic?.onImportProgress(setImportProgress), [])
+
+  const pickImportSource = useCallback(() => window.localMusic.importPickSource(), [])
+
+  const importMusic = useCallback(async (source: string, mode: ImportMode): Promise<ImportSummary> => {
+    setImporting(true)
+    setImportProgress(null)
+    try {
+      const summary = await window.localMusic.importRun(source, mode)
+      await refreshRoots()
+      await scanDir() // surface the new tracks (Unlabeled) across all roots
+      return summary
+    } finally {
+      setImporting(false)
+      setImportProgress(null)
+    }
+  }, [refreshRoots, scanDir])
+
+  const removeRoot = useCallback(async (root: string) => {
+    await window.localMusic.removeRoot(root)
+    await refreshRoots()
+    await scanDir()
+  }, [refreshRoots, scanDir])
 
   // ── Metadata library ──────────────────────────────────────────────────
   const libraryTracks = useMemo(() => tracks.filter((t) => t.labeled), [tracks])
@@ -587,6 +661,7 @@ export function LocalMusicProvider({ children }: { children: ReactNode }) {
     current, isPlaying, currentTime, duration,
     progress: duration ? currentTime / duration : 0,
     ensureLoaded, rescan, chooseFolder,
+    extraRoots, importing, importProgress, pickImportSource, importMusic, removeRoot,
     readTags, saveMeta, saveMetaMany, removeMeta,
     trackTagsById, getTrackTags, saveTrackTags, deleteTrackTags,
     discoverableIds, refreshDiscoverable,

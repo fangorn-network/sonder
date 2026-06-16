@@ -1690,7 +1690,7 @@ interface Props extends WikiNavState {
 export function TrackWikiView({ view, stack: _stack, searchBox: _searchBox, onNavigate, onBack: _onBack, onGoTo: _onGoTo, onSearchBoxChange: _onSearchBoxChange, kernelState, onPlayTrack, kernelTopGenres, allGenres, kernelEntropy, kernelSessionLength, kernelMutedCount, onConceptExplore }: Props) {
     return (
         <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: BG, color: FG, fontFamily: SANS, overflow: 'hidden' }}>
-            {view.kind === 'home' && <Home onNavigate={onNavigate} kernelTopGenres={kernelTopGenres} allGenres={allGenres} kernelEntropy={kernelEntropy} />}
+            {view.kind === 'search' && <Home onNavigate={onNavigate} kernelTopGenres={kernelTopGenres} allGenres={allGenres} kernelEntropy={kernelEntropy} />}
             {view.kind === 'results' && (
                 <ResultsView
                     key={`${view.query}|${view.mode}`}

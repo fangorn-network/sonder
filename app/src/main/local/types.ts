@@ -62,6 +62,41 @@ export interface ArtCandidate {
   height?: number | null
 }
 
+/** How a bulk import treats the source files: copy them into the library folder
+ *  (survives the source being disconnected) or reference them where they are. */
+export type ImportMode = 'copy' | 'reference'
+
+/** Per-file progress for a copy import. */
+export interface ImportProgress {
+  total: number
+  processed: number
+  /** Basename of the file currently being copied. */
+  file: string
+}
+
+/** Outcome of a bulk import. */
+export interface ImportSummary {
+  mode: ImportMode
+  source: string
+  /** Destination root for copy imports. */
+  dest?: string
+  total: number
+  copied: number
+  /** Files already present at the destination (copy) — left untouched. */
+  skipped: number
+  failed: number
+  /** True when a reference-in-place root was newly added (false if it was a
+   *  duplicate / overlapped an existing root). */
+  referenced: boolean
+}
+
+/** The library's scan roots: the primary folder (where copies land) plus any
+ *  referenced-in-place folders. */
+export interface LibraryRoots {
+  primary: string
+  extra: string[]
+}
+
 /** A credited contributor — mirrors `contributors[]` in TrackInvariantSchema.json. */
 export interface Contributor {
   role: string | null

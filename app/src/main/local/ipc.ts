@@ -16,7 +16,7 @@ import * as art from './art'
 import * as artSearch from './artSearch'
 import * as favorites from './favorites'
 import * as playlists from './playlists'
-import type { ArtQuery, ArtScope, LocalTrackMeta, LocalTrackTags } from './types'
+import type { ArtQuery, ArtScope, ImportMode, ImportProgress, LocalTrackMeta, LocalTrackTags } from './types'
 import type { FavKind } from './favorites'
 
 export function registerLocalMusicIpc(): void {
@@ -40,15 +40,44 @@ export function registerLocalMusicIpc(): void {
   })
 
   ipcMain.handle('local:scan', async (_e, dir?: string) => {
-    const target = dir || lib.getSavedDir()
-    lib.saveDir(target)
+    // lib.scan persists `dir` as the primary folder when given, then scans every
+    // root (primary + referenced).
     try {
-      return await lib.scan(target)
+      return await lib.scan(dir || undefined)
     } catch (err) {
       console.error('[local-music] scan failed:', err)
       throw err
     }
   })
+
+  // ── Bulk import (external folders / drives) ──────────────────────────────────
+  // Pick a source folder and report how many audio files it holds, so the import
+  // dialog can preview before the user commits to copy vs reference.
+  ipcMain.handle('local:import:pick-source', async () => {
+    const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
+    const opts = { title: 'Choose a folder to import', properties: ['openDirectory' as const] }
+    const result = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts)
+    const dir = result.filePaths[0]
+    if (result.canceled || !dir) return null
+    return { path: dir, audioCount: await lib.countAudioFiles(dir) }
+  })
+
+  // Run the import, streaming throttled progress back to the caller's window.
+  ipcMain.handle('local:import:run', async (e, source: string, mode: ImportMode) => {
+    let last = 0
+    const onProgress = (p: ImportProgress) => {
+      const now = Date.now()
+      if (p.processed >= p.total || now - last > 120) {
+        last = now
+        if (!e.sender.isDestroyed()) e.sender.send('local:import:progress', p)
+      }
+    }
+    return lib.importFolder(source, mode, onProgress)
+  })
+
+  // ── Library roots (primary + referenced folders) ─────────────────────────────
+  ipcMain.handle('local:roots:list', () => lib.getRoots())
+  ipcMain.handle('local:roots:remove', (_e, p: string) => { lib.removeExtraRoot(p) })
 
   // ── Track metadata library ──────────────────────────────────────────────────
   // Tracks are addressed by their served id; the path is resolved from the last

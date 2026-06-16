@@ -3,7 +3,10 @@ import { electronAPI } from '@electron-toolkit/preload'
 import type { AgentProviderConfig, ProviderStatus } from "../main/agent/agent-provider-manager";
 import type { OllamaStatus } from "../main/agent/ollama-manager";
 import type { FangornAgentResponse } from "@fangorn-network/agent";
-import type { ArtCandidate, ArtQuery, ArtScope, LocalTrack, LocalTrackMeta, LocalTrackTags } from "../main/local/types";
+import type {
+  ArtCandidate, ArtQuery, ArtScope, ImportMode, ImportProgress, ImportSummary, LibraryRoots,
+  LocalTrack, LocalTrackMeta, LocalTrackTags,
+} from "../main/local/types";
 import type { StoredMeta } from "../main/local/catalog";
 import type { StoredTags } from "../main/local/taxonomy";
 import type { FavKind, Favorites } from "../main/local/favorites";
@@ -19,6 +22,19 @@ export interface LocalMusicApi {
   pickDir(): Promise<string | null>
   /** Recursively scan `dir` (defaults to the saved/default dir) for audio files. */
   scan(dir?: string): Promise<LocalTrack[]>
+
+  // ── Bulk import + library roots ────────────────────────────────────────
+  /** Native folder picker for an import source; returns the path plus how many
+   *  audio files it contains, or null if cancelled. */
+  importPickSource(): Promise<{ path: string; audioCount: number } | null>
+  /** Import `source` by copying into the library or referencing it in place. */
+  importRun(source: string, mode: ImportMode): Promise<ImportSummary>
+  /** Subscribe to copy-import progress; returns an unsubscribe function. */
+  onImportProgress(cb: (p: ImportProgress) => void): () => void
+  /** The library's primary folder plus any referenced-in-place folders. */
+  listRoots(): Promise<LibraryRoots>
+  /** Remove a referenced-in-place folder. */
+  removeRoot(path: string): Promise<void>
 
   // ── Metadata library ──────────────────────────────────────────────────
   /** Stored metadata for a track, or null if it hasn't been labeled. */
@@ -93,6 +109,15 @@ const localMusic: LocalMusicApi = {
   getDir: () => ipcRenderer.invoke('local:get-dir'),
   pickDir: () => ipcRenderer.invoke('local:pick-dir'),
   scan: (dir?: string) => ipcRenderer.invoke('local:scan', dir),
+  importPickSource: () => ipcRenderer.invoke('local:import:pick-source'),
+  importRun: (source, mode) => ipcRenderer.invoke('local:import:run', source, mode),
+  onImportProgress: (cb) => {
+    const handler = (_e: unknown, p: ImportProgress) => cb(p)
+    ipcRenderer.on('local:import:progress', handler)
+    return () => ipcRenderer.removeListener('local:import:progress', handler)
+  },
+  listRoots: () => ipcRenderer.invoke('local:roots:list'),
+  removeRoot: (path) => ipcRenderer.invoke('local:roots:remove', path),
   getMeta: (localId) => ipcRenderer.invoke('local:meta:get', localId),
   saveMeta: (localId, meta) => ipcRenderer.invoke('local:meta:upsert', localId, meta),
   deleteMeta: (localId) => ipcRenderer.invoke('local:meta:delete', localId),

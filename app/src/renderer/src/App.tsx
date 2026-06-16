@@ -142,7 +142,7 @@ function Main() {
   const [genreWeights, setGenreWeights] = useState<Record<string, number>>({})
 
   // ── Wiki navigation state (lifted from TrackWikiView) ─────────────────────
-  const [wikiView, setWikiView] = useState<View>({ kind: 'home' })
+  const [wikiView, setWikiView] = useState<View>({ kind: 'search' })
   const [wikiStack, setWikiStack] = useState<View[]>([])
   const [wikiSearchBox, setWikiSearchBox] = useState('')
 
@@ -502,8 +502,8 @@ function Main() {
                 {/* Search input — hidden on the wiki's own home (it has its own
                     prominent search). While the index is building, the search is
                     replaced by a progress bar so it can't be used until queries are fast. */}
-                {wikiView.kind !== 'home' && indexing && <IndexingBar variant="header" />}
-                {wikiView.kind !== 'home' && !indexing && (
+                {wikiView.kind !== 'search' && indexing && <IndexingBar variant="header" />}
+                {wikiView.kind !== 'search' && !indexing && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 0, flexShrink: 0, WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
                     <input
                       value={wikiSearchBox}

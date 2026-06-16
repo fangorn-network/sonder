@@ -19,6 +19,7 @@ import { LocalBatchEditor } from '../components/LocalBatchEditor'
 import { LocalTrackTagEditor } from '../components/LocalTrackTagEditor'
 import { LocalArtThumb } from '../components/LocalArtThumb'
 import { LocalArtViewer } from '../components/LocalArtViewer'
+import { LocalImportDialog } from '../components/LocalImportDialog'
 import { artistArtKey, albumArtKeyOf } from '../lib/artKeys'
 
 // ── Design tokens (shared theme vars — respects light/dark) ───────────────────
@@ -99,6 +100,7 @@ export function LocalMusicView() {
   const [batch, setBatch] = useState<{ name: string; tracks: LocalTrack[] } | null>(null)
   const [preview, setPreview] = useState<{ scope: ArtScope; key: string; label: string } | null>(null)
   const [bulkRunning, setBulkRunning] = useState(false)
+  const [importing, setImporting] = useState(false)
 
   // Scan lazily the first time the view is shown.
   useEffect(() => { lm.ensureLoaded() }, [lm.ensureLoaded]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -172,6 +174,7 @@ export function LocalMusicView() {
             </div> */}
           </div>
 
+          <HeaderBtn label="Import" onClick={() => setImporting(true)} />
           <HeaderBtn label="Change folder" onClick={lm.chooseFolder} />
           <HeaderBtn label={lm.loading ? 'Scanning…' : 'Rescan'} onClick={lm.rescan} disabled={lm.loading} />
         </div>
@@ -246,6 +249,14 @@ export function LocalMusicView() {
       {/* ── Full-resolution art viewer ─────────────────────────────────── */}
       {preview && (
         <LocalArtViewer scope={preview.scope} artKey={preview.key} label={preview.label} onClose={() => setPreview(null)} />
+      )}
+
+      {/* ── Bulk import ─────────────────────────────────────────────────── */}
+      {importing && (
+        <LocalImportDialog
+          onClose={() => setImporting(false)}
+          onImported={() => setTab('unlabeled')}
+        />
       )}
     </div>
   )

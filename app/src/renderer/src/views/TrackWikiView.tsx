@@ -495,14 +495,14 @@ const ZONE_TITLE: Record<KernelAttitude['zone'], string> = {
 export type SearchMode = 'lexical' | 'semantic'
 
 export type View =
-    | { kind: 'home' }
+    | { kind: 'search' }
     | { kind: 'results'; query: string; mode: SearchMode }
     | { kind: 'track'; artist: string; title: string; embedding?: Float32Array }
     | { kind: 'artist'; name: string }
 
 export function viewLabel(v: View): string {
     switch (v.kind) {
-        case 'home': return 'Home'
+        case 'search': return 'Search'
         case 'results': return `”${v.query}”`
         case 'track': return v.title
         case 'artist': return v.name

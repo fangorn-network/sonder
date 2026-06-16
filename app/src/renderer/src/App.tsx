@@ -62,6 +62,26 @@ const onTrackEndedRef = { current: () => { } }
 type AnalyzeTab = 'wiki' | 'neighborhood' | 'galaxy'
 type DrawerSection = 'kernel' | 'account' | 'connectors' | 'agent'
 
+/** Warmup status pip shown on the Search tab: a spinning ring while the vector DB
+ *  warms up on startup, swapped for a green check once search is ready. */
+function SearchStatus({ ready }: { ready: boolean }) {
+  if (ready) {
+    return (
+      <span aria-label="Search ready" style={{ color: 'var(--success)', fontSize: 12, lineHeight: 1, fontFamily: 'var(--font-mono, monospace)' }}>✓</span>
+    )
+  }
+  return (
+    <span
+      aria-label="Warming up search"
+      style={{
+        width: 10, height: 10, boxSizing: 'border-box', borderRadius: '50%',
+        border: '1.5px solid var(--border2)', borderTopColor: 'var(--accent)',
+        display: 'inline-block', animation: 'spin 0.8s linear infinite',
+      }}
+    />
+  )
+}
+
 // ─── Root ──────────────────────────────────────────────────────────────────────
 
 export default function App() {
@@ -105,7 +125,7 @@ function Main() {
 
   // Search is gated until the backend's text index is built; the IndexingBar
   // stands in for the search field meanwhile.
-  const { indexing } = useBoot()
+  const { indexing, ready: searchReady } = useBoot()
 
   const [sessionHistory, setSessionHistory] = useState<SessionEvent[]>([])
   const [entropy, setEntropy] = useState(0.2)
@@ -158,7 +178,8 @@ function Main() {
   const [settingsSection, setSettingsSection] = useState<DrawerSection>('kernel')
   const [nowPlayingOpen, setNowPlayingOpen] = useState(false)
   const [showGalaxy, setShowGalaxy] = useState(false)
-  const [showLocal, setShowLocal] = useState(false)
+  // Home tab = Local Music (the default landing); Search tab = the catalog wiki.
+  const [showLocal, setShowLocal] = useState(true)
 
   const openSettings = useCallback((section: DrawerSection) => {
     setSettingsSection(section)
@@ -414,9 +435,9 @@ function Main() {
             WebkitAppRegion: 'drag',
           } as React.CSSProperties}>
 
-            {/* SOND3R wordmark */}
+            {/* SOND3R wordmark — brand; also returns to Home (Local Music) */}
             <button
-              onClick={() => { setWikiView({ kind: 'home' }); setWikiStack([]); setWikiSearchBox('') }}
+              onClick={() => setShowLocal(true)}
               style={{ fontFamily: DISP, fontSize: 20, color: FG, letterSpacing: '0.08em', background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0, WebkitAppRegion: 'no-drag', lineHeight: 1 } as React.CSSProperties}>
               SOND3R
             </button>
@@ -424,72 +445,86 @@ function Main() {
             {/* Separator */}
             <span style={{ color: BORDER, fontSize: 14, flexShrink: 0 }}>|</span>
 
-            {/* Back button — only when there's history */}
-            {wikiStack.length > 0 && (
-              <button
-                onClick={wikiBack}
-                style={{ background: 'none', border: `1px solid ${BORDER2}`, color: FG3, fontFamily: MONO, fontSize: 11, padding: '2px 8px', cursor: 'pointer', flexShrink: 0, WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
-                ←
-              </button>
-            )}
-
-            {/* Breadcrumb trail — inherits drag from header; buttons individually opt out */}
-            <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 5, overflow: 'hidden', whiteSpace: 'nowrap' }}>
-              {wikiCrumbs.slice(-5).map((c, i, arr) => {
-                const realIndex = wikiCrumbs.length - arr.length + i
-                const isLast = i === arr.length - 1
-                return (
-                  <span key={realIndex} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, minWidth: 0, flexShrink: isLast ? 1 : 0 }}>
-                    {i > 0 && <span style={{ color: FG4, fontSize: 9 }}>›</span>}
-                    {isLast
-                      ? <span style={{ fontFamily: MONO, fontSize: 10, color: FG2, letterSpacing: '0.04em', overflow: 'hidden', textOverflow: 'ellipsis' }}>{viewLabel(c)}</span>
-                      : <button onClick={() => wikiGoTo(realIndex)}
-                          style={{ background: 'none', border: 'none', color: FG4, fontFamily: MONO, fontSize: 10, cursor: 'pointer', padding: 0, letterSpacing: '0.04em', flexShrink: 0, WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
-                          {viewLabel(c)}
-                        </button>}
-                  </span>
-                )
-              })}
-            </div>
-
-            {/* Search input — hidden on home (the home page has its own prominent
-                search). While the index is building, the search is replaced by a
-                progress bar so it can't be used until queries are fast. */}
-            {wikiView.kind !== 'home' && indexing && <IndexingBar variant="header" />}
-            {wikiView.kind !== 'home' && !indexing && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 0, flexShrink: 0, WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
-                <input
-                  value={wikiSearchBox}
-                  onChange={e => setWikiSearchBox(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter') wikiRunSearch(wikiSearchBox) }}
-                  placeholder="artist, track, or vibe…"
-                  style={{
-                    width: 220, background: BG2, border: `1px solid ${BORDER2}`,
-                    borderRight: 'none', color: FG, fontSize: 11, padding: '5px 9px',
-                    outline: 'none', fontFamily: MONO, letterSpacing: '0.02em',
-                  }} />
-                <button
-                  onClick={() => wikiRunSearch(wikiSearchBox)}
-                  disabled={!wikiSearchBox.trim()}
-                  style={{
-                    background: wikiSearchBox.trim() ? ACCENT : 'transparent',
-                    border: `1px solid ${wikiSearchBox.trim() ? ACCENT : BORDER2}`,
-                    color: wikiSearchBox.trim() ? '#fff' : FG4,
-                    fontFamily: MONO, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase',
-                    padding: '6px 10px', cursor: wikiSearchBox.trim() ? 'pointer' : 'default',
-                  }}>
-                  ↵
-                </button>
-              </div>
-            )}
-
-            {/* Local music */}
+            {/* Primary tabs: Home (local music) ⇄ Search (catalog wiki). */}
             <button
               onClick={() => setShowLocal(true)}
-              style={{ background: showLocal ? ACCENT_DIM : 'none', border: `1px solid ${showLocal ? ACCENT_BORDER : BORDER2}`, color: showLocal ? ACCENT : FG4, fontFamily: MONO, fontSize: 12, lineHeight: 1, padding: '3px 8px', cursor: 'pointer', flexShrink: 0, WebkitAppRegion: 'no-drag' } as React.CSSProperties}
-              title="Local music">
-              ♪
+              style={{ background: showLocal ? ACCENT_DIM : 'none', border: `1px solid ${showLocal ? ACCENT_BORDER : 'transparent'}`, color: showLocal ? ACCENT : FG3, fontFamily: MONO, fontSize: 11, letterSpacing: '0.10em', textTransform: 'uppercase', padding: '4px 12px', cursor: 'pointer', flexShrink: 0, lineHeight: 1, WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+              Home
             </button>
+            <button
+              onClick={() => setShowLocal(false)}
+              title={searchReady ? 'Search ready' : 'Warming up search…'}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: !showLocal ? ACCENT_DIM : 'none', border: `1px solid ${!showLocal ? ACCENT_BORDER : 'transparent'}`, color: !showLocal ? ACCENT : FG3, fontFamily: MONO, fontSize: 11, letterSpacing: '0.10em', textTransform: 'uppercase', padding: '4px 12px', cursor: 'pointer', flexShrink: 0, lineHeight: 1, WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+              Search
+              <SearchStatus ready={searchReady} />
+            </button>
+
+            {/* Wiki navigation (back / breadcrumb / search box) — Search tab only.
+                On Home, a flex spacer keeps the right-side controls right-aligned. */}
+            {!showLocal ? (
+              <>
+                {/* Back button — only when there's history */}
+                {wikiStack.length > 0 && (
+                  <button
+                    onClick={wikiBack}
+                    style={{ background: 'none', border: `1px solid ${BORDER2}`, color: FG3, fontFamily: MONO, fontSize: 11, padding: '2px 8px', cursor: 'pointer', flexShrink: 0, WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+                    ←
+                  </button>
+                )}
+
+                {/* Breadcrumb trail — inherits drag from header; buttons individually opt out */}
+                <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 5, overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                  {wikiCrumbs.slice(-5).map((c, i, arr) => {
+                    const realIndex = wikiCrumbs.length - arr.length + i
+                    const isLast = i === arr.length - 1
+                    return (
+                      <span key={realIndex} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, minWidth: 0, flexShrink: isLast ? 1 : 0 }}>
+                        {i > 0 && <span style={{ color: FG4, fontSize: 9 }}>›</span>}
+                        {isLast
+                          ? <span style={{ fontFamily: MONO, fontSize: 10, color: FG2, letterSpacing: '0.04em', overflow: 'hidden', textOverflow: 'ellipsis' }}>{viewLabel(c)}</span>
+                          : <button onClick={() => wikiGoTo(realIndex)}
+                              style={{ background: 'none', border: 'none', color: FG4, fontFamily: MONO, fontSize: 10, cursor: 'pointer', padding: 0, letterSpacing: '0.04em', flexShrink: 0, WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+                              {viewLabel(c)}
+                            </button>}
+                      </span>
+                    )
+                  })}
+                </div>
+
+                {/* Search input — hidden on the wiki's own home (it has its own
+                    prominent search). While the index is building, the search is
+                    replaced by a progress bar so it can't be used until queries are fast. */}
+                {wikiView.kind !== 'home' && indexing && <IndexingBar variant="header" />}
+                {wikiView.kind !== 'home' && !indexing && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 0, flexShrink: 0, WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+                    <input
+                      value={wikiSearchBox}
+                      onChange={e => setWikiSearchBox(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') wikiRunSearch(wikiSearchBox) }}
+                      placeholder="artist, track, or vibe…"
+                      style={{
+                        width: 220, background: BG2, border: `1px solid ${BORDER2}`,
+                        borderRight: 'none', color: FG, fontSize: 11, padding: '5px 9px',
+                        outline: 'none', fontFamily: MONO, letterSpacing: '0.02em',
+                      }} />
+                    <button
+                      onClick={() => wikiRunSearch(wikiSearchBox)}
+                      disabled={!wikiSearchBox.trim()}
+                      style={{
+                        background: wikiSearchBox.trim() ? ACCENT : 'transparent',
+                        border: `1px solid ${wikiSearchBox.trim() ? ACCENT : BORDER2}`,
+                        color: wikiSearchBox.trim() ? '#fff' : FG4,
+                        fontFamily: MONO, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase',
+                        padding: '6px 10px', cursor: wikiSearchBox.trim() ? 'pointer' : 'default',
+                      }}>
+                      ↵
+                    </button>
+                  </div>
+                )}
+              </>
+            ) : (
+              <span style={{ flex: 1 }} />
+            )}
 
             {/* Theme toggle — light ⇄ dark */}
             <button
@@ -534,7 +569,10 @@ function Main() {
             {/* Wiki — primary surface */}
             <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
               <KernelStrip {...kernelStrip} theme={theme} />
-              <div style={{ flex: 1, minHeight: 0 }}>
+              {/* Content region below the Kernel view. LocalMusicView overlays
+                  just this area (position:absolute inset:0), so the shell header
+                  and KernelStrip stay visible — same chrome as the wiki. */}
+              <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
                 <TrackWikiView
                   view={wikiView}
                   stack={wikiStack}
@@ -551,6 +589,7 @@ function Main() {
                   kernelSessionLength={kernel.state.t}
                   kernelMutedCount={kernelStrip.mutedCount}
                 />
+                {showLocal && <LocalMusicView />}
               </div>
             </div>
 
@@ -592,14 +631,6 @@ function Main() {
                 }}
                 onBack={() => setShowGalaxy(false)}
               />
-            </div>,
-            document.body,
-          )}
-
-          {/* ── Local music overlay ───────────────────────────────────────── */}
-          {showLocal && createPortal(
-            <div style={{ position: 'fixed', inset: 0, zIndex: 70 }}>
-              <LocalMusicView onClose={() => setShowLocal(false)} />
             </div>,
             document.body,
           )}

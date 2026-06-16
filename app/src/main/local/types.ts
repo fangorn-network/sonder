@@ -36,6 +36,32 @@ export interface LocalTrack {
 /** What a piece of artwork is attached to. */
 export type ArtScope = 'album' | 'artist'
 
+/** A query for third-party artwork. `album` is required for album lookups and
+ *  ignored for artist lookups. */
+export interface ArtQuery {
+  artist: string
+  album?: string | null
+}
+
+/**
+ * A third-party artwork candidate (e.g. from Deezer). `thumbDataUrl` is a small
+ * preview inlined as a data URL so the renderer can show it under the app's CSP
+ * (which blocks remote <img>); `fullUrl` is the full-resolution image, fetched in
+ * main only when the user commits the pick.
+ */
+export interface ArtCandidate {
+  /** Human label for the provider, e.g. "Deezer". */
+  source: string
+  /** What this image depicts, e.g. "Daft Punk — Discovery" or "Daft Punk". */
+  label: string
+  /** Small inline preview (data URL), safe to render under CSP. */
+  thumbDataUrl: string
+  /** Full-resolution image URL, downloaded + stored on commit. */
+  fullUrl: string
+  width?: number | null
+  height?: number | null
+}
+
 /** A credited contributor — mirrors `contributors[]` in TrackInvariantSchema.json. */
 export interface Contributor {
   role: string | null

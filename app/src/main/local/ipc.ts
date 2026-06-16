@@ -13,9 +13,10 @@ import * as catalog from './catalog'
 import * as taxonomy from './taxonomy'
 import * as discovery from './discovery'
 import * as art from './art'
+import * as artSearch from './artSearch'
 import * as favorites from './favorites'
 import * as playlists from './playlists'
-import type { ArtScope, LocalTrackMeta, LocalTrackTags } from './types'
+import type { ArtQuery, ArtScope, LocalTrackMeta, LocalTrackTags } from './types'
 import type { FavKind } from './favorites'
 
 export function registerLocalMusicIpc(): void {
@@ -102,9 +103,9 @@ export function registerLocalMusicIpc(): void {
 
   ipcMain.handle('local:art:clear', (_e, scope: ArtScope, key: string) => { art.clearArt(scope, key) })
 
-  // Opens the native image picker, stores the chosen image, and returns it as a
-  // data URL. Returns null if the user cancels.
-  ipcMain.handle('local:art:pick-set', async (_e, scope: ArtScope, key: string) => {
+  // Opens the native image picker; resolves to the chosen path, or null if the
+  // user cancels. The dialog title is tailored to the scope being set.
+  const pickImageFile = async (scope: ArtScope): Promise<string | null> => {
     const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
     const opts = {
       title: scope === 'artist' ? 'Choose artist image' : 'Choose album cover',
@@ -113,9 +114,35 @@ export function registerLocalMusicIpc(): void {
     }
     const result = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts)
     const file = result.filePaths[0]
-    if (result.canceled || !file) return null
-    return art.setArtFromFile(scope, key, file)
+    return result.canceled || !file ? null : file
+  }
+
+  // Opens the native image picker, stores the chosen image, and returns it as a
+  // data URL. Returns null if the user cancels.
+  ipcMain.handle('local:art:pick-set', async (_e, scope: ArtScope, key: string) => {
+    const file = await pickImageFile(scope)
+    return file ? art.setArtFromFile(scope, key, file) : null
   })
+
+  // Pick-only: open the image picker and return { path, dataUrl } without storing
+  // anything. The editors use this to stage artwork, then commit it under the
+  // final artist/album key on save (so renaming before save doesn't orphan art).
+  ipcMain.handle('local:art:pick', async (_e, scope: ArtScope) => {
+    const file = await pickImageFile(scope)
+    return file ? { path: file, dataUrl: art.imageFileToDataUrl(file) } : null
+  })
+
+  // Commit a previously picked image (by path) as the artwork for (scope, key).
+  ipcMain.handle('local:art:set-file', (_e, scope: ArtScope, key: string, filePath: string) =>
+    art.setArtFromFile(scope, key, filePath))
+
+  // Third-party artwork search (Deezer). Returns candidates with inline thumbnail
+  // data URLs (CSP-safe) plus a full-res URL to commit later.
+  ipcMain.handle('local:art:search', (_e, scope: ArtScope, q: ArtQuery) => artSearch.searchArt(scope, q))
+
+  // Commit a third-party image (by URL) as the artwork for (scope, key).
+  ipcMain.handle('local:art:set-url', (_e, scope: ArtScope, key: string, url: string) =>
+    art.setArtFromUrl(scope, key, url))
 
   // ── Favorites (artists / albums / songs) ─────────────────────────────────────
   ipcMain.handle('local:fav:list', () => favorites.listFavorites())

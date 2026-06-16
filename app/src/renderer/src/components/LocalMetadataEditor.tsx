@@ -13,6 +13,8 @@ import {
   useLocalMusic, type Contributor, type LocalTrack, type LocalTrackMeta,
 } from '../providers/LocalMusicProvider'
 import { searchRecordings, type MetaCandidate } from '../lib/musicbrainz'
+import { StagedArtSlot, type StagedArt } from './StagedArtSlot'
+import { artistArtKey, albumArtKeyOf } from '../lib/artKeys'
 
 const BG1 = 'var(--bg1)'
 const BG2 = 'var(--bg2)'
@@ -38,6 +40,9 @@ export function LocalMetadataEditor({ track, onClose }: { track: LocalTrack; onC
   const [isrc, setIsrc] = useState(track.isrcCode ?? '')
   const [durationMs, setDurationMs] = useState<number | null>(track.durationMs ?? null)
   const [contributors, setContributors] = useState<Contributor[]>(track.contributors ?? [])
+  // Staged artwork — committed under the final artist/album key on save.
+  const [artistArt, setArtistArt] = useState<StagedArt | null>(null)
+  const [albumArt, setAlbumArt] = useState<StagedArt | null>(null)
 
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -106,12 +111,22 @@ export function LocalMetadataEditor({ track, onClose }: { track: LocalTrack; onC
     }
     try {
       await lm.saveMeta(track.id, meta)
+      // Commit any staged artwork under the now-final keys. Best-effort: don't
+      // undo a successful save just because an image couldn't be stored.
+      const a = artist.trim()
+      const al = album.trim()
+      const commit = (scope: 'artist' | 'album', key: string, s: StagedArt) =>
+        s.source === 'local' ? lm.setArtFromPath(scope, key, s.path) : lm.setArtFromUrl(scope, key, s.url)
+      try {
+        if (artistArt && a) await commit('artist', artistArtKey(a), artistArt)
+        if (albumArt && a && al) await commit('album', albumArtKeyOf(a, al), albumArt)
+      } catch { /* art is optional — leave the metadata in place */ }
       onClose()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not save')
       setSaving(false)
     }
-  }, [canSave, title, artist, album, date, isrc, durationMs, contributors, lm, track.id, onClose])
+  }, [canSave, title, artist, album, date, isrc, durationMs, contributors, artistArt, albumArt, lm, track.id, onClose])
 
   return (
     <div
@@ -172,6 +187,33 @@ export function LocalMetadataEditor({ track, onClose }: { track: LocalTrack; onC
           <Field label="Title" required value={title} onChange={setTitle} />
           <Field label="Artist" required value={artist} onChange={setArtist} />
           <Field label="Album" value={album} onChange={setAlbum} />
+
+          {/* Artwork — staged here, saved under the final artist/album keys. */}
+          <div>
+            <Label>Artwork</Label>
+            <div style={{ marginTop: 6, display: 'flex', alignItems: 'flex-start', gap: 18 }}>
+              <StagedArtSlot
+                scope="album" shape="square" label="Album cover" size={64}
+                artKey={albumArtKeyOf(artist.trim(), album.trim())}
+                staged={albumArt} onPick={setAlbumArt} onClear={() => setAlbumArt(null)}
+                onSearch={() => lm.searchArt('album', { artist: artist.trim(), album: album.trim() })}
+                disabled={!artist.trim() || !album.trim()}
+                disabledHint="Enter an artist and album first"
+              />
+              <StagedArtSlot
+                scope="artist" shape="circle" label="Artist image" size={64}
+                artKey={artistArtKey(artist.trim())}
+                staged={artistArt} onPick={setArtistArt} onClear={() => setArtistArt(null)}
+                onSearch={() => lm.searchArt('artist', { artist: artist.trim() })}
+                disabled={!artist.trim()}
+                disabledHint="Enter an artist first"
+              />
+              <span style={{ flex: 1, fontFamily: MONO, fontSize: 10, color: FG4, lineHeight: 1.5, paddingTop: 4 }}>
+                Optional. Choose a file or search online. Shown as the album cover and artist image throughout your library.
+              </span>
+            </div>
+          </div>
+
           <div style={{ display: 'flex', gap: 12 }}>
             <div style={{ flex: 1 }}><Field label="Date published" value={date} onChange={setDate} placeholder="YYYY or YYYY-MM-DD" /></div>
             <div style={{ flex: 1 }}><Field label="ISRC" value={isrc} onChange={setIsrc} placeholder="e.g. USRC17607839" /></div>

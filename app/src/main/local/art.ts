@@ -14,6 +14,7 @@
 
 import fs from 'fs'
 import mime from 'mime-types'
+import { net } from 'electron'
 import { getDb } from '../db'
 import type { ArtScope } from './types'
 
@@ -27,6 +28,14 @@ function toDataUrl(row: ArtRow): string {
   return `data:${row.mime};base64,${row.data.toString('base64')}`
 }
 
+/** Read an image off disk and return it as a `data:` URL, without storing it.
+ *  Used to preview a freshly picked image before it's committed under a key. */
+export function imageFileToDataUrl(filePath: string): string {
+  const data = fs.readFileSync(filePath)
+  const m = (mime.lookup(filePath) || 'image/png') as string
+  return toDataUrl({ mime: m, data })
+}
+
 /** The stored artwork as a data URL, or null if none is set. */
 export function getArt(scope: ArtScope, key: string): string | null {
   const row = getDb()
@@ -35,10 +44,8 @@ export function getArt(scope: ArtScope, key: string): string | null {
   return row ? toDataUrl(row) : null
 }
 
-/** Read an image off disk and store it as the artwork for (scope, key). */
-export function setArtFromFile(scope: ArtScope, key: string, filePath: string): string {
-  const data = fs.readFileSync(filePath)
-  const m = (mime.lookup(filePath) || 'image/png') as string
+/** Persist image bytes as the artwork for (scope, key); returns its data URL. */
+function storeArt(scope: ArtScope, key: string, m: string, data: Buffer): string {
   getDb()
     .prepare(
       `INSERT INTO local_art (scope, art_key, mime, data, updated_at)
@@ -48,6 +55,36 @@ export function setArtFromFile(scope: ArtScope, key: string, filePath: string): 
     )
     .run({ scope, key: normKey(key), mime: m, data, now: Date.now() })
   return toDataUrl({ mime: m, data })
+}
+
+/** Read an image off disk and store it as the artwork for (scope, key). */
+export function setArtFromFile(scope: ArtScope, key: string, filePath: string): string {
+  const data = fs.readFileSync(filePath)
+  const m = (mime.lookup(filePath) || 'image/png') as string
+  return storeArt(scope, key, m, data)
+}
+
+/** Download an image over the network (via Electron's net stack, so it isn't
+ *  subject to the renderer CSP) and return its bytes + content type. */
+async function fetchImage(url: string): Promise<{ mime: string; data: Buffer }> {
+  const res = await net.fetch(url)
+  if (!res.ok) throw new Error(`Image fetch failed (${res.status})`)
+  const buf = Buffer.from(await res.arrayBuffer())
+  const ct = res.headers.get('content-type')?.split(';')[0]?.trim()
+  const m = ct && ct.startsWith('image/') ? ct : (mime.lookup(url) || 'image/jpeg') as string
+  return { mime: m, data: buf }
+}
+
+/** Fetch a remote image and return it as a `data:` URL, without storing it. */
+export async function imageUrlToDataUrl(url: string): Promise<string> {
+  const { mime: m, data } = await fetchImage(url)
+  return toDataUrl({ mime: m, data })
+}
+
+/** Download a remote image and store it as the artwork for (scope, key). */
+export async function setArtFromUrl(scope: ArtScope, key: string, url: string): Promise<string> {
+  const { mime: m, data } = await fetchImage(url)
+  return storeArt(scope, key, m, data)
 }
 
 export function clearArt(scope: ArtScope, key: string): void {

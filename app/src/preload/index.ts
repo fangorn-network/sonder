@@ -3,7 +3,7 @@ import { electronAPI } from '@electron-toolkit/preload'
 import type { AgentProviderConfig, ProviderStatus } from "../main/agent/agent-provider-manager";
 import type { OllamaStatus } from "../main/agent/ollama-manager";
 import type { FangornAgentResponse } from "@fangorn-network/agent";
-import type { ArtScope, LocalTrack, LocalTrackMeta, LocalTrackTags } from "../main/local/types";
+import type { ArtCandidate, ArtQuery, ArtScope, LocalTrack, LocalTrackMeta, LocalTrackTags } from "../main/local/types";
 import type { StoredMeta } from "../main/local/catalog";
 import type { StoredTags } from "../main/local/taxonomy";
 import type { FavKind, Favorites } from "../main/local/favorites";
@@ -51,6 +51,19 @@ export interface LocalMusicApi {
   /** Open the image picker and store the chosen image; returns its data URL,
    *  or null if cancelled. */
   pickArt(scope: ArtScope, key: string): Promise<string | null>
+  /** Open the image picker WITHOUT storing; returns the chosen file path plus a
+   *  data URL for preview, or null if cancelled. Pair with setArtFile to commit
+   *  it once the artist/album key is final. */
+  pickImage(scope: ArtScope): Promise<{ path: string; dataUrl: string } | null>
+  /** Store a previously picked image (by path) as the artwork for (scope, key);
+   *  returns its data URL. */
+  setArtFile(scope: ArtScope, key: string, path: string): Promise<string | null>
+  /** Search a third party (Deezer) for album covers / artist photos. Returns
+   *  candidates with inline thumbnail data URLs and a full-res URL to commit. */
+  searchArt(scope: ArtScope, query: ArtQuery): Promise<ArtCandidate[]>
+  /** Download a third-party image (by URL) and store it as the artwork for
+   *  (scope, key); returns its data URL. */
+  setArtFromUrl(scope: ArtScope, key: string, url: string): Promise<string | null>
   /** Remove the stored artwork for (scope, key). */
   clearArt(scope: ArtScope, key: string): Promise<void>
 
@@ -91,6 +104,10 @@ const localMusic: LocalMusicApi = {
   listDiscoverable: () => ipcRenderer.invoke('local:discoverable:list'),
   getArt: (scope, key) => ipcRenderer.invoke('local:art:get', scope, key),
   pickArt: (scope, key) => ipcRenderer.invoke('local:art:pick-set', scope, key),
+  pickImage: (scope) => ipcRenderer.invoke('local:art:pick', scope),
+  setArtFile: (scope, key, path) => ipcRenderer.invoke('local:art:set-file', scope, key, path),
+  searchArt: (scope, query) => ipcRenderer.invoke('local:art:search', scope, query),
+  setArtFromUrl: (scope, key, url) => ipcRenderer.invoke('local:art:set-url', scope, key, url),
   clearArt: (scope, key) => ipcRenderer.invoke('local:art:clear', scope, key),
   listFavorites: () => ipcRenderer.invoke('local:fav:list'),
   toggleFavorite: (kind, ref) => ipcRenderer.invoke('local:fav:toggle', kind, ref),

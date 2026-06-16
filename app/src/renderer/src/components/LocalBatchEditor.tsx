@@ -11,6 +11,8 @@
 
 import { useCallback, useMemo, useState } from 'react'
 import { useLocalMusic, type LocalTrack, type LocalTrackMeta } from '../providers/LocalMusicProvider'
+import { StagedArtSlot, type StagedArt } from './StagedArtSlot'
+import { artistArtKey, albumArtKeyOf } from '../lib/artKeys'
 
 const BG1 = 'var(--bg1)'
 const BG2 = 'var(--bg2)'
@@ -42,6 +44,9 @@ export function LocalBatchEditor({
   const [artist, setArtist] = useState('')
   const [album, setAlbum] = useState(folderName)
   const [date, setDate] = useState('')
+  // Staged artwork — committed under the final artist/album key on save.
+  const [artistArt, setArtistArt] = useState<StagedArt | null>(null)
+  const [albumArt, setAlbumArt] = useState<StagedArt | null>(null)
   const [rows, setRows] = useState<Row[]>(() =>
     tracks.map((t) => ({ id: t.id, title: t.title, include: true, filename: baseName(t.path) })))
 
@@ -98,12 +103,22 @@ export function LocalBatchEditor({
     }))
     try {
       await lm.saveMetaMany(entries)
+      // Commit any staged artwork under the now-final keys. Best-effort: a tagged
+      // folder shouldn't fail to label just because an image couldn't be stored.
+      const a = artist.trim()
+      const al = album.trim()
+      const commit = (scope: 'artist' | 'album', key: string, s: StagedArt) =>
+        s.source === 'local' ? lm.setArtFromPath(scope, key, s.path) : lm.setArtFromUrl(scope, key, s.url)
+      try {
+        if (artistArt && a) await commit('artist', artistArtKey(a), artistArt)
+        if (albumArt && a && al) await commit('album', albumArtKeyOf(a, al), albumArt)
+      } catch { /* art is optional — leave the label in place */ }
       onClose()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not save')
       setSaving(false)
     }
-  }, [canSave, rows, artist, album, date, lm, onClose])
+  }, [canSave, rows, artist, album, date, artistArt, albumArt, lm, onClose])
 
   return (
     <div
@@ -142,6 +157,29 @@ export function LocalBatchEditor({
             <SmallBtn label={reading ? 'Reading…' : 'Read tags'} onClick={readAll} disabled={reading} />
             <span style={{ fontFamily: MONO, fontSize: 10, color: FG4 }}>
               Applies Artist / Album / Date to every checked track.
+            </span>
+          </div>
+
+          {/* Artwork — staged here, saved under the final artist/album keys. */}
+          <div style={{ marginTop: 16, display: 'flex', alignItems: 'flex-start', gap: 18 }}>
+            <StagedArtSlot
+              scope="album" shape="square" label="Album cover" size={64}
+              artKey={albumArtKeyOf(artist.trim(), album.trim())}
+              staged={albumArt} onPick={setAlbumArt} onClear={() => setAlbumArt(null)}
+              onSearch={() => lm.searchArt('album', { artist: artist.trim(), album: album.trim() })}
+              disabled={!artist.trim() || !album.trim()}
+              disabledHint="Enter an artist and album first"
+            />
+            <StagedArtSlot
+              scope="artist" shape="circle" label="Artist image" size={64}
+              artKey={artistArtKey(artist.trim())}
+              staged={artistArt} onPick={setArtistArt} onClear={() => setArtistArt(null)}
+              onSearch={() => lm.searchArt('artist', { artist: artist.trim() })}
+              disabled={!artist.trim()}
+              disabledHint="Enter an artist first"
+            />
+            <span style={{ flex: 1, fontFamily: MONO, fontSize: 10, color: FG4, lineHeight: 1.5, paddingTop: 4 }}>
+              Optional. Choose a file or search online. Shown as the album cover and artist image throughout your library.
             </span>
           </div>
         </div>

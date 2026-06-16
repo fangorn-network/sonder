@@ -1,7 +1,8 @@
 import { app, shell, BrowserWindow, ipcMain, net, session } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
-import { spawn } from 'child_process'
+import { spawn, execSync } from 'child_process'
+import { Socket as NetSocket } from 'net'
 import path from 'path'
 import fs, { createWriteStream, createReadStream } from 'fs'
 import http from 'http'
@@ -244,6 +245,10 @@ function resolveYt(query: string): Promise<YtResolveResult> {
 let qdrantProc: ReturnType<typeof spawn> | null = null
 let pyProcess: ReturnType<typeof spawn> | null = null
 let rendererServer: http.Server | null = null
+// Set once we're shutting down so the qdrant exit handler doesn't try to respawn
+// a sidecar we just deliberately killed.
+let quitting = false
+let qdrantRetries = 0
 
 if (app.isPackaged) {
   dotenv.config({ path: path.join(process.resourcesPath, '.env') })
@@ -272,6 +277,74 @@ function qdrantBin(): string {
   return path.join(app.getAppPath(), 'resources', 'qdrant', dir, `qdrant${ext}`)
 }
 
+// Localhost ports owned exclusively by our sidecars: Qdrant HTTP/gRPC and the
+// Python query server. If one is busy at boot it's an orphan from a previous run
+// that didn't exit cleanly (a crash, a SIGKILL, or a `yarn dev` restart that
+// raced its own teardown). A busy 6333 makes a freshly-spawned Qdrant die
+// instantly with "Address already in use", which wedges the whole boot.
+const SIDECAR_PORTS = [6333, 6334, 8080]
+
+const delay = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
+
+// Is anything accepting connections on this localhost port?
+function probePortInUse(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const sock = new NetSocket()
+    const finish = (inUse: boolean): void => { sock.destroy(); resolve(inUse) }
+    sock.setTimeout(500)
+    sock.once('connect', () => finish(true))
+    sock.once('timeout', () => finish(false))
+    sock.once('error', () => finish(false))   // ECONNREFUSED ⇒ free
+    sock.connect(port, '127.0.0.1')
+  })
+}
+
+// Kill whatever is listening on `port` (best-effort, cross-platform). Only ever
+// used to reclaim our own orphaned sidecars at boot.
+function killPort(port: number): void {
+  try {
+    if (process.platform === 'win32') {
+      const out = execSync('netstat -ano -p tcp', { encoding: 'utf8' })
+      const pids = new Set<string>()
+      for (const line of out.split('\n')) {
+        if (line.includes(`:${port} `) && /LISTENING/i.test(line)) {
+          const pid = line.trim().split(/\s+/).pop()
+          if (pid && pid !== '0') pids.add(pid)
+        }
+      }
+      for (const pid of pids) { try { execSync(`taskkill /PID ${pid} /F /T`) } catch { /* gone */ } }
+    } else {
+      let pids: string[] = []
+      try {
+        pids = execSync(`lsof -ti tcp:${port}`, { encoding: 'utf8' }).split('\n').map((s) => s.trim()).filter(Boolean)
+      } catch { /* lsof missing, or nothing on the port */ }
+      if (pids.length) {
+        for (const pid of pids) { try { process.kill(Number(pid), 'SIGKILL') } catch { /* gone */ } }
+      } else {
+        try { execSync(`fuser -k ${port}/tcp`) } catch { /* fuser missing, or nothing on the port */ }
+      }
+    }
+  } catch { /* best effort — startQdrant's retry is the backstop */ }
+}
+
+// Pre-flight before spawning Qdrant: guarantee our sidecar ports are free. Give a
+// still-tearing-down orphan a brief grace period to release the port on its own
+// (the common restart-race case), then kill it, then wait for the OS to actually
+// release the socket before we let Qdrant try to bind.
+async function reclaimSidecarPorts(): Promise<void> {
+  for (const port of SIDECAR_PORTS) {
+    if (!(await probePortInUse(port))) continue
+    console.warn(`[boot] port ${port} busy — a previous sidecar didn't exit cleanly`)
+    for (let i = 0; i < 5 && (await probePortInUse(port)); i++) await delay(200)   // grace
+    if (await probePortInUse(port)) {
+      console.warn(`[boot] reclaiming port ${port}`)
+      killPort(port)
+    }
+    for (let i = 0; i < 25 && (await probePortInUse(port)); i++) await delay(200)   // wait for release
+    if (await probePortInUse(port)) console.error(`[boot] port ${port} still busy after reclaim — Qdrant may fail to start`)
+  }
+}
+
 function startQdrant() {
   const storage = path.join(app.getPath('userData'), 'qdrant_storage')
   const snapshotsDir = path.join(app.getPath('userData'), 'qdrant_snapshots')
@@ -290,10 +363,21 @@ function startQdrant() {
       QDRANT__TELEMETRY_DISABLED: 'true',   // no phone-home; matches the ethos
     },
   })
+  const spawnedAt = Date.now()
   qdrantProc.stdout?.on('data', (d) => console.log('[qdrant]', d.toString().trimEnd()))
   qdrantProc.stderr?.on('data', (d) => console.error('[qdrant]', d.toString().trimEnd()))
   qdrantProc.on('error', (err) => console.error('[qdrant] failed to start:', err))
-  qdrantProc.on('exit', (code) => console.log('[qdrant] exited with code', code))
+  qdrantProc.on('exit', (code) => {
+    console.log('[qdrant] exited with code', code)
+    // Died almost immediately and we're not shutting down → something grabbed the
+    // port between our pre-flight and bind (e.g. an orphan that outraced reclaim).
+    // Reclaim and respawn a few times before letting the boot surface the failure.
+    if (!quitting && code !== 0 && Date.now() - spawnedAt < 5000 && qdrantRetries < 3) {
+      qdrantRetries++
+      console.warn(`[qdrant] died on startup; reclaiming ports and retrying (${qdrantRetries}/3)`)
+      void reclaimSidecarPorts().then(() => { if (!quitting) startQdrant() })
+    }
+  })
 }
 
 async function waitForReady(url: string, timeoutMs = 60000): Promise<void> {
@@ -784,6 +868,9 @@ app.whenReady().then(async () => {
   installLogCapture()   // tee console output into the bug-report ring buffer first
   electronApp.setAppUserModelId('com.electron')
 
+  // Reclaim any sidecar ports an unclean previous exit left orphaned, so the new
+  // Qdrant doesn't die on "Address already in use" and wedge the boot.
+  await reclaimSidecarPorts()
   startQdrant()
   startYtStreamProxy()
   updateYtDlp()
@@ -890,6 +977,7 @@ function killSidecars(): void {
 }
 
 app.on('before-quit', async () => {
+  quitting = true
   killSidecars()
   if (rendererServer) {
     await new Promise<void>((resolve) => rendererServer?.close(() => resolve()))
@@ -903,5 +991,5 @@ app.on('before-quit', async () => {
 // the previous Qdrant + Python pair, which keep running and pile up until they
 // saturate the CPU. `exit` is the last-ditch synchronous safety net.
 process.on('exit', killSidecars)
-process.on('SIGINT', () => { killSidecars(); process.exit(0) })
-process.on('SIGTERM', () => { killSidecars(); process.exit(0) })
+process.on('SIGINT', () => { quitting = true; killSidecars(); process.exit(0) })
+process.on('SIGTERM', () => { quitting = true; killSidecars(); process.exit(0) })

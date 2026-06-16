@@ -63,8 +63,14 @@ type AnalyzeTab = 'wiki' | 'neighborhood' | 'galaxy'
 type DrawerSection = 'kernel' | 'account' | 'connectors' | 'agent'
 
 /** Warmup status pip shown on the Search tab: a spinning ring while the vector DB
- *  warms up on startup, swapped for a green check once search is ready. */
-function SearchStatus({ ready }: { ready: boolean }) {
+ *  warms up on startup, swapped for a green check once search is ready — or a
+ *  small × if the snapshot download / index build failed. */
+function SearchStatus({ ready, failed }: { ready: boolean; failed?: boolean }) {
+  if (failed) {
+    return (
+      <span aria-label="Search unavailable" style={{ color: 'var(--err)', fontSize: 12, lineHeight: 1, fontFamily: 'var(--font-mono, monospace)' }}>×</span>
+    )
+  }
   if (ready) {
     return (
       <span aria-label="Search ready" style={{ color: 'var(--success)', fontSize: 12, lineHeight: 1, fontFamily: 'var(--font-mono, monospace)' }}>✓</span>
@@ -125,7 +131,9 @@ function Main() {
 
   // Search is gated until the backend's text index is built; the IndexingBar
   // stands in for the search field meanwhile.
-  const { indexing, ready: searchReady } = useBoot()
+  const { indexing, ready: searchReady, stage: bootStage } = useBoot()
+  // Snapshot download / index build failed — show an × on the Search tab.
+  const searchFailed = bootStage === 'error'
 
   const [sessionHistory, setSessionHistory] = useState<SessionEvent[]>([])
   const [entropy, setEntropy] = useState(0.2)
@@ -453,10 +461,10 @@ function Main() {
             </button>
             <button
               onClick={() => setShowLocal(false)}
-              title={searchReady ? 'Search ready' : 'Warming up search…'}
+              title={searchFailed ? 'Search unavailable — catalog failed to load' : searchReady ? 'Search ready' : 'Warming up search…'}
               style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: !showLocal ? ACCENT_DIM : 'none', border: `1px solid ${!showLocal ? ACCENT_BORDER : 'transparent'}`, color: !showLocal ? ACCENT : FG3, fontFamily: MONO, fontSize: 11, letterSpacing: '0.10em', textTransform: 'uppercase', padding: '4px 12px', cursor: 'pointer', flexShrink: 0, lineHeight: 1, WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
               Search
-              <SearchStatus ready={searchReady} />
+              <SearchStatus ready={searchReady} failed={searchFailed} />
             </button>
 
             {/* Wiki navigation (back / breadcrumb / search box) — Search tab only.

@@ -24,6 +24,23 @@ export interface Contributor {
 /** What a piece of artwork is attached to. Mirror of main/local/types.ts. */
 export type ArtScope = 'album' | 'artist'
 
+/** A query for third-party artwork. Mirror of main/local/types.ts `ArtQuery`. */
+export interface ArtQuery {
+  artist: string
+  album?: string | null
+}
+
+/** A third-party artwork candidate. Mirror of main/local/types.ts `ArtCandidate`.
+ *  `thumbDataUrl` is an inline preview (CSP-safe); `fullUrl` is committed later. */
+export interface ArtCandidate {
+  source: string
+  label: string
+  thumbDataUrl: string
+  fullUrl: string
+  width?: number | null
+  height?: number | null
+}
+
 /** What can be favorited. Mirror of main/local/favorites.ts `FavKind`. */
 export type FavKind = 'track' | 'artist' | 'album'
 
@@ -140,6 +157,17 @@ interface LocalMusicContextValue {
   getArt: (scope: ArtScope, key: string) => Promise<string | null>
   /** Open the image picker and set artwork for (scope, key); returns its URL. */
   setArt: (scope: ArtScope, key: string) => Promise<string | null>
+  /** Open the image picker WITHOUT storing — returns the picked file path and a
+   *  preview data URL (or null if cancelled). Used to stage art in the metadata
+   *  editors before the artist/album name is final; commit later via
+   *  setArtFromPath. */
+  pickImage: (scope: ArtScope) => Promise<{ path: string; dataUrl: string } | null>
+  /** Commit a previously picked image (by path) as artwork for (scope, key). */
+  setArtFromPath: (scope: ArtScope, key: string, path: string) => Promise<string | null>
+  /** Search a third party (Deezer) for album covers / artist photos. */
+  searchArt: (scope: ArtScope, query: ArtQuery) => Promise<ArtCandidate[]>
+  /** Commit a third-party image (by URL) as artwork for (scope, key). */
+  setArtFromUrl: (scope: ArtScope, key: string, url: string) => Promise<string | null>
   /** Remove the stored artwork for (scope, key). */
   clearArt: (scope: ArtScope, key: string) => Promise<void>
 
@@ -387,6 +415,22 @@ export function LocalMusicProvider({ children }: { children: ReactNode }) {
     return url
   }, [])
 
+  const pickImage = useCallback((scope: ArtScope) => window.localMusic.pickImage(scope), [])
+
+  const setArtFromPath = useCallback(async (scope: ArtScope, key: string, path: string): Promise<string | null> => {
+    const url = await window.localMusic.setArtFile(scope, key, path)
+    if (url) { artCache.current.set(`${scope}:${key}`, url); setArtRev((r) => r + 1) }
+    return url
+  }, [])
+
+  const searchArt = useCallback((scope: ArtScope, query: ArtQuery) => window.localMusic.searchArt(scope, query), [])
+
+  const setArtFromUrl = useCallback(async (scope: ArtScope, key: string, remoteUrl: string): Promise<string | null> => {
+    const url = await window.localMusic.setArtFromUrl(scope, key, remoteUrl)
+    if (url) { artCache.current.set(`${scope}:${key}`, url); setArtRev((r) => r + 1) }
+    return url
+  }, [])
+
   const clearArt = useCallback(async (scope: ArtScope, key: string): Promise<void> => {
     await window.localMusic.clearArt(scope, key)
     artCache.current.set(`${scope}:${key}`, null)
@@ -546,7 +590,7 @@ export function LocalMusicProvider({ children }: { children: ReactNode }) {
     readTags, saveMeta, saveMetaMany, removeMeta,
     trackTagsById, getTrackTags, saveTrackTags, deleteTrackTags,
     discoverableIds, refreshDiscoverable,
-    artRev, getArt, setArt, clearArt,
+    artRev, getArt, setArt, pickImage, setArtFromPath, searchArt, setArtFromUrl, clearArt,
     favorites, isFavorite, toggleFavorite,
     playlists, createPlaylist, renamePlaylist, deletePlaylist, addToPlaylist, removeFromPlaylist,
     playTrack, togglePlay, next, prev, seek,

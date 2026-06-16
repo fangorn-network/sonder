@@ -11,6 +11,7 @@ import { ipcMain, dialog, BrowserWindow } from 'electron'
 import * as lib from './LocalLibrary'
 import * as catalog from './catalog'
 import * as taxonomy from './taxonomy'
+import * as discovery from './discovery'
 import * as art from './art'
 import * as favorites from './favorites'
 import * as playlists from './playlists'
@@ -90,6 +91,11 @@ export function registerLocalMusicIpc(): void {
   ipcMain.handle('local:tags:delete', (_e, localId: string) => {
     taxonomy.deleteTags(localId)
   })
+
+  // ── Catalog discoverability ───────────────────────────────────────────────────
+  // Which labeled tracks have a vector in the local Qdrant catalog (read-only).
+  // Drives the "semantically discoverable" indicator in the renderer.
+  ipcMain.handle('local:discoverable:list', () => discovery.listDiscoverableLocalIds())
 
   // ── Album / artist artwork ──────────────────────────────────────────────────
   ipcMain.handle('local:art:get', (_e, scope: ArtScope, key: string) => art.getArt(scope, key))

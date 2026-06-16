@@ -12,6 +12,7 @@ import {
   createContext, useCallback, useContext, useEffect, useMemo, useRef, useState,
   type ReactNode,
 } from 'react'
+import { useBoot } from './BootProvider'
 
 /** A credited contributor — mirrors `contributors[]` in TrackInvariantSchema.json. */
 export interface Contributor {
@@ -126,6 +127,13 @@ interface LocalMusicContextValue {
   /** Remove a track's taxonomy tags. */
   deleteTrackTags: (localId: string) => Promise<void>
 
+  /** Local ids of labeled tracks that have a vector in the SOND3R catalog —
+   *  drives the "semantically discoverable" indicator. Artist/album rows derive
+   *  their badge from whether any of their tracks is in here. */
+  discoverableIds: Set<string>
+  /** Re-check catalog discoverability (after a scan or new labels). */
+  refreshDiscoverable: () => void
+
   /** Bumps whenever artwork changes — consumers re-read to refresh. */
   artRev: number
   /** Stored album/artist artwork as a data URL (cached), or null. */
@@ -191,6 +199,13 @@ export function useLocalMusic(): LocalMusicContextValue {
 export function LocalMusicProvider({ children }: { children: ReactNode }) {
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
+  // Catalog readiness. The vector DB warms up on every startup; until the backend
+  // reports ready, discoverability checks would race the warmup, so we gate on it.
+  // Held in a ref too, so refreshDiscoverable can read it without churning its
+  // identity (scanDir depends on that callback being stable).
+  const { ready: backendReady } = useBoot()
+  const readyRef = useRef(backendReady)
+
   const [dir, setDir] = useState<string | null>(null)
   const [tracks, setTracks] = useState<LocalTrack[]>([])
   const [loading, setLoading] = useState(false)
@@ -201,6 +216,40 @@ export function LocalMusicProvider({ children }: { children: ReactNode }) {
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
+
+  // Catalog discoverability — local ids of labeled tracks that have a vector in
+  // Qdrant. Loaded once and re-checked after scans/labels; the check is gated on
+  // a coalescing flag so a burst of label saves collapses into one extra refresh
+  // instead of one network round-trip per track.
+  const [discoverableIds, setDiscoverableIds] = useState<Set<string>>(new Set())
+  const discRunning = useRef(false)
+  const discAgain = useRef(false)
+  const refreshDiscoverable = useCallback(() => {
+    // Don't probe the catalog while it's still warming up on startup — wait for
+    // the backend-ready signal. The effect below re-runs us once it flips on.
+    if (!readyRef.current) return
+    if (discRunning.current) { discAgain.current = true; return }
+    discRunning.current = true
+    void (async () => {
+      try {
+        do {
+          discAgain.current = false
+          const ids = await window.localMusic.listDiscoverable()
+          setDiscoverableIds(new Set(ids))
+        } while (discAgain.current)
+      } catch { /* catalog unavailable — leave as-is */ } finally {
+        discRunning.current = false
+      }
+    })()
+  }, [])
+
+  // Run the check once the backend is warm, and again whenever readiness flips on
+  // (e.g. the user opened Local Music before warmup finished). Updating the ref
+  // here keeps the other callers (scan/label) honest between renders too.
+  useEffect(() => {
+    readyRef.current = backendReady
+    if (backendReady) refreshDiscoverable()
+  }, [backendReady, refreshDiscoverable])
 
   // Show the saved/default folder path on mount; scanning stays lazy.
   useEffect(() => {
@@ -215,6 +264,8 @@ export function LocalMusicProvider({ children }: { children: ReactNode }) {
       setTracks(found)
       if (target) setDir(target)
       else window.localMusic.getDir().then(setDir).catch(() => {})
+      // Newly scanned (and possibly newly labeled) tracks — re-check the catalog.
+      refreshDiscoverable()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not scan folder')
     } finally {
@@ -223,7 +274,7 @@ export function LocalMusicProvider({ children }: { children: ReactNode }) {
       loadedRef.current = true
       setLoading(false)
     }
-  }, [])
+  }, [refreshDiscoverable])
 
   const ensureLoaded = useCallback(() => {
     if (loadedRef.current || loading) return
@@ -249,7 +300,9 @@ export function LocalMusicProvider({ children }: { children: ReactNode }) {
     // Patch the track in place so it flips into the Library bucket without a
     // full re-scan (keeps bulk auto-labeling snappy).
     setTracks((prev) => prev.map((t) => (t.id === localId ? applyStored(t, stored) : t)))
-  }, [])
+    // A freshly labeled track now has a trackId — it may be in the catalog.
+    refreshDiscoverable()
+  }, [refreshDiscoverable])
 
   const saveMetaMany = useCallback(async (entries: { localId: string; meta: LocalTrackMeta }[]) => {
     const stored = await Promise.all(entries.map((e) => window.localMusic.saveMeta(e.localId, e.meta)))
@@ -257,7 +310,8 @@ export function LocalMusicProvider({ children }: { children: ReactNode }) {
       const s = stored.find((r) => r.localId === t.id)
       return s ? applyStored(t, s) : t
     }))
-  }, [])
+    refreshDiscoverable()
+  }, [refreshDiscoverable])
 
   const removeMeta = useCallback(async (localId: string) => {
     await window.localMusic.deleteMeta(localId)
@@ -491,6 +545,7 @@ export function LocalMusicProvider({ children }: { children: ReactNode }) {
     ensureLoaded, rescan, chooseFolder,
     readTags, saveMeta, saveMetaMany, removeMeta,
     trackTagsById, getTrackTags, saveTrackTags, deleteTrackTags,
+    discoverableIds, refreshDiscoverable,
     artRev, getArt, setArt, clearArt,
     favorites, isFavorite, toggleFavorite,
     playlists, createPlaylist, renamePlaylist, deletePlaylist, addToPlaylist, removeFromPlaylist,

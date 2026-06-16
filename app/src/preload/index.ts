@@ -40,6 +40,11 @@ export interface LocalMusicApi {
   /** Remove a track's taxonomy tags. */
   deleteTrackTags(localId: string): Promise<void>
 
+  // ── Catalog discoverability ───────────────────────────────────────────
+  /** Local ids of labeled tracks that have a vector in the SOND3R catalog
+   *  (the local Qdrant collection). Empty if the catalog isn't ready. */
+  listDiscoverable(): Promise<string[]>
+
   // ── Album / artist artwork ────────────────────────────────────────────
   /** Stored artwork for (scope, key) as a data URL, or null if none. */
   getArt(scope: ArtScope, key: string): Promise<string | null>
@@ -83,6 +88,7 @@ const localMusic: LocalMusicApi = {
   listTrackTags: () => ipcRenderer.invoke('local:tags:list'),
   saveTrackTags: (localId, tags) => ipcRenderer.invoke('local:tags:upsert', localId, tags),
   deleteTrackTags: (localId) => ipcRenderer.invoke('local:tags:delete', localId),
+  listDiscoverable: () => ipcRenderer.invoke('local:discoverable:list'),
   getArt: (scope, key) => ipcRenderer.invoke('local:art:get', scope, key),
   pickArt: (scope, key) => ipcRenderer.invoke('local:art:pick-set', scope, key),
   clearArt: (scope, key) => ipcRenderer.invoke('local:art:clear', scope, key),

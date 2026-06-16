@@ -33,6 +33,8 @@ export interface LocalMusicApi {
   // ── Semantic taxonomy tags (local-only; not published/embedded) ───────
   /** Stored taxonomy tags for a track, or null if none have been set. */
   getTrackTags(localId: string): Promise<StoredTags | null>
+  /** Every track that carries taxonomy tags — for showing a "tagged" indicator. */
+  listTrackTags(): Promise<StoredTags[]>
   /** Insert/update a track's taxonomy tags (genres/moods/themes/contexts). */
   saveTrackTags(localId: string, tags: LocalTrackTags): Promise<StoredTags>
   /** Remove a track's taxonomy tags. */
@@ -78,6 +80,7 @@ const localMusic: LocalMusicApi = {
   deleteMeta: (localId) => ipcRenderer.invoke('local:meta:delete', localId),
   readTags: (localId) => ipcRenderer.invoke('local:read-tags', localId),
   getTrackTags: (localId) => ipcRenderer.invoke('local:tags:get', localId),
+  listTrackTags: () => ipcRenderer.invoke('local:tags:list'),
   saveTrackTags: (localId, tags) => ipcRenderer.invoke('local:tags:upsert', localId, tags),
   deleteTrackTags: (localId) => ipcRenderer.invoke('local:tags:delete', localId),
   getArt: (scope, key) => ipcRenderer.invoke('local:art:get', scope, key),

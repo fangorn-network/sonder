@@ -116,6 +116,9 @@ interface LocalMusicContextValue {
   /** Remove a track's metadata; returns it to Unlabeled (re-scans to re-derive). */
   removeMeta: (localId: string) => Promise<void>
 
+  /** Taxonomy tags keyed by local id, for every track that carries any — drives
+   *  the "tagged" indicator in track lists without a per-row IPC round-trip. */
+  trackTagsById: Map<string, LocalTrackTags>
   /** Stored taxonomy tags for a track (genres/moods/themes/contexts), or null. */
   getTrackTags: (localId: string) => Promise<LocalTrackTags | null>
   /** Save (insert/update) a track's taxonomy tags. Local-only — not published. */
@@ -265,6 +268,18 @@ export function LocalMusicProvider({ children }: { children: ReactNode }) {
   // ── Taxonomy tags ─────────────────────────────────────────────────────────
   // Local-only enrichment; doesn't change a track's labeled/title state, so there's
   // nothing to patch into `tracks` — the editor reads on open and writes on save.
+  // We do keep a lightweight id→tags map loaded once, so track rows can show a
+  // "tagged" badge; it's kept in sync on save/delete rather than re-fetched.
+  const [trackTagsById, setTrackTagsById] = useState<Map<string, LocalTrackTags>>(new Map())
+
+  useEffect(() => {
+    window.localMusic.listTrackTags().then((all) => {
+      setTrackTagsById(new Map(all.map((t) => [t.localId, {
+        genres: t.genres, moods: t.moods, themes: t.themes, contexts: t.contexts,
+      }])))
+    }).catch(() => {})
+  }, [])
+
   const getTrackTags = useCallback(async (localId: string): Promise<LocalTrackTags | null> => {
     const stored = await window.localMusic.getTrackTags(localId)
     if (!stored) return null
@@ -278,10 +293,17 @@ export function LocalMusicProvider({ children }: { children: ReactNode }) {
 
   const saveTrackTags = useCallback(async (localId: string, tags: LocalTrackTags) => {
     await window.localMusic.saveTrackTags(localId, tags)
+    setTrackTagsById((prev) => new Map(prev).set(localId, tags))
   }, [])
 
   const deleteTrackTags = useCallback(async (localId: string) => {
     await window.localMusic.deleteTrackTags(localId)
+    setTrackTagsById((prev) => {
+      if (!prev.has(localId)) return prev
+      const next = new Map(prev)
+      next.delete(localId)
+      return next
+    })
   }, [])
 
   // ── Album / artist artwork ──────────────────────────────────────────────
@@ -468,7 +490,7 @@ export function LocalMusicProvider({ children }: { children: ReactNode }) {
     progress: duration ? currentTime / duration : 0,
     ensureLoaded, rescan, chooseFolder,
     readTags, saveMeta, saveMetaMany, removeMeta,
-    getTrackTags, saveTrackTags, deleteTrackTags,
+    trackTagsById, getTrackTags, saveTrackTags, deleteTrackTags,
     artRev, getArt, setArt, clearArt,
     favorites, isFavorite, toggleFavorite,
     playlists, createPlaylist, renamePlaylist, deletePlaylist, addToPlaylist, removeFromPlaylist,

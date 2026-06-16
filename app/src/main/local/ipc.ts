@@ -77,6 +77,10 @@ export function registerLocalMusicIpc(): void {
 
   ipcMain.handle('local:tags:get', (_e, localId: string) => taxonomy.getTags(localId))
 
+  // All stored tag rows in one shot — lets the renderer flag which tracks carry
+  // taxonomy without a per-row round-trip. Maps don't survive IPC, so send values.
+  ipcMain.handle('local:tags:list', () => Array.from(taxonomy.listTags().values()))
+
   ipcMain.handle('local:tags:upsert', (_e, localId: string, tags: LocalTrackTags) => {
     if (!lib.pathForId(localId)) throw new Error('unknown track id')
     const trackId = catalog.getMeta(localId)?.trackId ?? null

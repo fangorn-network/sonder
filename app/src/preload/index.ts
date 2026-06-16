@@ -5,6 +5,8 @@ import type { OllamaStatus } from "../main/agent/ollama-manager";
 import type { FangornAgentResponse } from "@fangorn-network/agent";
 import type { ArtScope, LocalTrack, LocalTrackMeta } from "../main/local/types";
 import type { StoredMeta } from "../main/local/catalog";
+import type { FavKind, Favorites } from "../main/local/favorites";
+import type { LocalPlaylist } from "../main/local/playlists";
 
 // ── Local on-disk music ────────────────────────────────────────────────
 export interface LocalMusicApi {
@@ -35,6 +37,26 @@ export interface LocalMusicApi {
   pickArt(scope: ArtScope, key: string): Promise<string | null>
   /** Remove the stored artwork for (scope, key). */
   clearArt(scope: ArtScope, key: string): Promise<void>
+
+  // ── Favorites (artists / albums / songs) ──────────────────────────────
+  /** All favorited refs, grouped by kind. */
+  listFavorites(): Promise<Favorites>
+  /** Flip a favorite on/off; resolves to the new state (true = now favorited). */
+  toggleFavorite(kind: FavKind, ref: string): Promise<boolean>
+
+  // ── Playlists ─────────────────────────────────────────────────────────
+  /** All playlists with their ordered track ids. */
+  listPlaylists(): Promise<LocalPlaylist[]>
+  /** Create a new (empty) playlist; returns it. */
+  createPlaylist(name: string): Promise<LocalPlaylist>
+  /** Rename a playlist. */
+  renamePlaylist(id: string, name: string): Promise<void>
+  /** Delete a playlist and its track membership. */
+  deletePlaylist(id: string): Promise<void>
+  /** Append a track to a playlist (no-op if already present). */
+  addToPlaylist(id: string, localId: string): Promise<void>
+  /** Remove a track from a playlist. */
+  removeFromPlaylist(id: string, localId: string): Promise<void>
 }
 
 const localMusic: LocalMusicApi = {
@@ -49,6 +71,14 @@ const localMusic: LocalMusicApi = {
   getArt: (scope, key) => ipcRenderer.invoke('local:art:get', scope, key),
   pickArt: (scope, key) => ipcRenderer.invoke('local:art:pick-set', scope, key),
   clearArt: (scope, key) => ipcRenderer.invoke('local:art:clear', scope, key),
+  listFavorites: () => ipcRenderer.invoke('local:fav:list'),
+  toggleFavorite: (kind, ref) => ipcRenderer.invoke('local:fav:toggle', kind, ref),
+  listPlaylists: () => ipcRenderer.invoke('local:playlist:list'),
+  createPlaylist: (name) => ipcRenderer.invoke('local:playlist:create', name),
+  renamePlaylist: (id, name) => ipcRenderer.invoke('local:playlist:rename', id, name),
+  deletePlaylist: (id) => ipcRenderer.invoke('local:playlist:delete', id),
+  addToPlaylist: (id, localId) => ipcRenderer.invoke('local:playlist:add', id, localId),
+  removeFromPlaylist: (id, localId) => ipcRenderer.invoke('local:playlist:remove', id, localId),
 }
 
 // ── In-app bug reporter ────────────────────────────────────────────────

@@ -11,7 +11,10 @@ import { ipcMain, dialog, BrowserWindow } from 'electron'
 import * as lib from './LocalLibrary'
 import * as catalog from './catalog'
 import * as art from './art'
+import * as favorites from './favorites'
+import * as playlists from './playlists'
 import type { ArtScope, LocalTrackMeta } from './types'
+import type { FavKind } from './favorites'
 
 export function registerLocalMusicIpc(): void {
   void lib.startLocalFileServer()
@@ -85,4 +88,16 @@ export function registerLocalMusicIpc(): void {
     if (result.canceled || !file) return null
     return art.setArtFromFile(scope, key, file)
   })
+
+  // ── Favorites (artists / albums / songs) ─────────────────────────────────────
+  ipcMain.handle('local:fav:list', () => favorites.listFavorites())
+  ipcMain.handle('local:fav:toggle', (_e, kind: FavKind, ref: string) => favorites.toggleFavorite(kind, ref))
+
+  // ── Playlists ────────────────────────────────────────────────────────────────
+  ipcMain.handle('local:playlist:list', () => playlists.listPlaylists())
+  ipcMain.handle('local:playlist:create', (_e, name: string) => playlists.createPlaylist(name))
+  ipcMain.handle('local:playlist:rename', (_e, id: string, name: string) => { playlists.renamePlaylist(id, name) })
+  ipcMain.handle('local:playlist:delete', (_e, id: string) => { playlists.deletePlaylist(id) })
+  ipcMain.handle('local:playlist:add', (_e, id: string, localId: string) => { playlists.addToPlaylist(id, localId) })
+  ipcMain.handle('local:playlist:remove', (_e, id: string, localId: string) => { playlists.removeFromPlaylist(id, localId) })
 }

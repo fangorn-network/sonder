@@ -23,6 +23,26 @@ export interface Contributor {
 /** What a piece of artwork is attached to. Mirror of main/local/types.ts. */
 export type ArtScope = 'album' | 'artist'
 
+/** What can be favorited. Mirror of main/local/favorites.ts `FavKind`. */
+export type FavKind = 'track' | 'artist' | 'album'
+
+/** Favorited refs grouped by kind, held as Sets for O(1) membership checks. */
+export interface FavState {
+  track: Set<string>
+  artist: Set<string>
+  album: Set<string>
+}
+
+/** A user playlist. Mirror of main/local/playlists.ts `LocalPlaylist`. */
+export interface LocalPlaylist {
+  id: string
+  name: string
+  /** Ordered local file ids. */
+  trackIds: string[]
+  createdAt: number
+  updatedAt: number
+}
+
 /** Mirror of main/local/types.ts `LocalTrack` (structurally identical). */
 export interface LocalTrack {
   id: string
@@ -95,7 +115,25 @@ interface LocalMusicContextValue {
   /** Remove the stored artwork for (scope, key). */
   clearArt: (scope: ArtScope, key: string) => Promise<void>
 
-  playTrack: (track: LocalTrack) => void
+  // ── Favorites ───────────────────────────────────────────────────────────
+  /** Favorited refs by kind. */
+  favorites: FavState
+  /** Whether (kind, ref) is currently favorited. */
+  isFavorite: (kind: FavKind, ref: string) => boolean
+  /** Flip a favorite on/off (optimistic, persisted in main). */
+  toggleFavorite: (kind: FavKind, ref: string) => Promise<void>
+
+  // ── Playlists ───────────────────────────────────────────────────────────
+  playlists: LocalPlaylist[]
+  createPlaylist: (name: string) => Promise<LocalPlaylist>
+  renamePlaylist: (id: string, name: string) => Promise<void>
+  deletePlaylist: (id: string) => Promise<void>
+  addToPlaylist: (id: string, localId: string) => Promise<void>
+  removeFromPlaylist: (id: string, localId: string) => Promise<void>
+
+  /** Play a track. An optional `queue` makes next/prev step through that list
+   *  (e.g. a playlist) instead of the full scanned library. */
+  playTrack: (track: LocalTrack, queue?: LocalTrack[]) => void
   togglePlay: () => void
   next: () => void
   prev: () => void
@@ -240,9 +278,82 @@ export function LocalMusicProvider({ children }: { children: ReactNode }) {
     setArtRev((r) => r + 1)
   }, [])
 
-  const playTrack = useCallback((track: LocalTrack) => {
+  // ── Favorites ───────────────────────────────────────────────────────────
+  const [favorites, setFavorites] = useState<FavState>({
+    track: new Set(), artist: new Set(), album: new Set(),
+  })
+
+  useEffect(() => {
+    window.localMusic.listFavorites().then((f) => setFavorites({
+      track: new Set(f.track), artist: new Set(f.artist), album: new Set(f.album),
+    })).catch(() => {})
+  }, [])
+
+  const isFavorite = useCallback(
+    (kind: FavKind, ref: string) => favorites[kind].has(ref),
+    [favorites],
+  )
+
+  const toggleFavorite = useCallback(async (kind: FavKind, ref: string) => {
+    // Optimistic flip — clone the affected Set so React sees a new reference.
+    const flip = () => setFavorites((prev) => {
+      const next = { ...prev, [kind]: new Set(prev[kind]) } as FavState
+      if (next[kind].has(ref)) next[kind].delete(ref)
+      else next[kind].add(ref)
+      return next
+    })
+    flip()
+    try {
+      await window.localMusic.toggleFavorite(kind, ref)
+    } catch {
+      flip() // revert on failure
+    }
+  }, [])
+
+  // ── Playlists ───────────────────────────────────────────────────────────
+  const [playlists, setPlaylists] = useState<LocalPlaylist[]>([])
+
+  const refreshPlaylists = useCallback(async () => {
+    try { setPlaylists(await window.localMusic.listPlaylists()) } catch { /* ignore */ }
+  }, [])
+
+  useEffect(() => { void refreshPlaylists() }, [refreshPlaylists])
+
+  const createPlaylist = useCallback(async (name: string) => {
+    const pl = await window.localMusic.createPlaylist(name)
+    await refreshPlaylists()
+    return pl
+  }, [refreshPlaylists])
+
+  const renamePlaylist = useCallback(async (id: string, name: string) => {
+    await window.localMusic.renamePlaylist(id, name)
+    await refreshPlaylists()
+  }, [refreshPlaylists])
+
+  const deletePlaylist = useCallback(async (id: string) => {
+    await window.localMusic.deletePlaylist(id)
+    await refreshPlaylists()
+  }, [refreshPlaylists])
+
+  const addToPlaylist = useCallback(async (id: string, localId: string) => {
+    await window.localMusic.addToPlaylist(id, localId)
+    await refreshPlaylists()
+  }, [refreshPlaylists])
+
+  const removeFromPlaylist = useCallback(async (id: string, localId: string) => {
+    await window.localMusic.removeFromPlaylist(id, localId)
+    await refreshPlaylists()
+  }, [refreshPlaylists])
+
+  // Playback queue for next/prev. Null → step through the full library; set to a
+  // specific list (e.g. a playlist) to sequence within it. A ref so changing it
+  // doesn't re-wire the <audio> event effect.
+  const queueRef = useRef<LocalTrack[] | null>(null)
+
+  const playTrack = useCallback((track: LocalTrack, queue?: LocalTrack[]) => {
     const audio = audioRef.current
     if (!audio) return
+    queueRef.current = queue && queue.length ? queue : null
     // Toggle when re-selecting the current track.
     if (current?.id === track.id) {
       if (audio.paused) void audio.play()
@@ -264,9 +375,10 @@ export function LocalMusicProvider({ children }: { children: ReactNode }) {
 
   const step = useCallback((delta: number) => {
     if (!current) return
-    const idx = tracks.findIndex((t) => t.id === current.id)
-    const nextTrack = tracks[idx + delta]
-    if (nextTrack) playTrack(nextTrack)
+    const list = queueRef.current ?? tracks
+    const idx = list.findIndex((t) => t.id === current.id)
+    const nextTrack = list[idx + delta]
+    if (nextTrack) playTrack(nextTrack, queueRef.current ?? undefined)
   }, [current, tracks, playTrack])
 
   const next = useCallback(() => step(1), [step])
@@ -318,6 +430,8 @@ export function LocalMusicProvider({ children }: { children: ReactNode }) {
     ensureLoaded, rescan, chooseFolder,
     readTags, saveMeta, saveMetaMany, removeMeta,
     artRev, getArt, setArt, clearArt,
+    favorites, isFavorite, toggleFavorite,
+    playlists, createPlaylist, renamePlaylist, deletePlaylist, addToPlaylist, removeFromPlaylist,
     playTrack, togglePlay, next, prev, seek,
   }
 

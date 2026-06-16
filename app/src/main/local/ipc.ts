@@ -10,10 +10,11 @@
 import { ipcMain, dialog, BrowserWindow } from 'electron'
 import * as lib from './LocalLibrary'
 import * as catalog from './catalog'
+import * as taxonomy from './taxonomy'
 import * as art from './art'
 import * as favorites from './favorites'
 import * as playlists from './playlists'
-import type { ArtScope, LocalTrackMeta } from './types'
+import type { ArtScope, LocalTrackMeta, LocalTrackTags } from './types'
 import type { FavKind } from './favorites'
 
 export function registerLocalMusicIpc(): void {
@@ -67,6 +68,23 @@ export function registerLocalMusicIpc(): void {
     const filePath = lib.pathForId(localId)
     if (!filePath) throw new Error('unknown track id')
     return catalog.readEmbeddedTags(filePath)
+  })
+
+  // ── Semantic taxonomy tags ────────────────────────────────────────────────────
+  // Local-only enrichment (genres/moods/themes/contexts) per TrackTaxonomySchema.
+  // Stored, never published or embedded. The canonical trackId is taken from the
+  // track's saved metadata so it stays consistent with the labeled library.
+
+  ipcMain.handle('local:tags:get', (_e, localId: string) => taxonomy.getTags(localId))
+
+  ipcMain.handle('local:tags:upsert', (_e, localId: string, tags: LocalTrackTags) => {
+    if (!lib.pathForId(localId)) throw new Error('unknown track id')
+    const trackId = catalog.getMeta(localId)?.trackId ?? null
+    return taxonomy.upsertTags(localId, trackId, tags)
+  })
+
+  ipcMain.handle('local:tags:delete', (_e, localId: string) => {
+    taxonomy.deleteTags(localId)
   })
 
   // ── Album / artist artwork ──────────────────────────────────────────────────

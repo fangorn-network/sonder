@@ -3,8 +3,9 @@ import { electronAPI } from '@electron-toolkit/preload'
 import type { AgentProviderConfig, ProviderStatus } from "../main/agent/agent-provider-manager";
 import type { OllamaStatus } from "../main/agent/ollama-manager";
 import type { FangornAgentResponse } from "@fangorn-network/agent";
-import type { ArtScope, LocalTrack, LocalTrackMeta } from "../main/local/types";
+import type { ArtScope, LocalTrack, LocalTrackMeta, LocalTrackTags } from "../main/local/types";
 import type { StoredMeta } from "../main/local/catalog";
+import type { StoredTags } from "../main/local/taxonomy";
 import type { FavKind, Favorites } from "../main/local/favorites";
 import type { LocalPlaylist } from "../main/local/playlists";
 
@@ -28,6 +29,14 @@ export interface LocalMusicApi {
   deleteMeta(localId: string): Promise<void>
   /** Best-effort metadata read from the file's embedded tags (for prefill). */
   readTags(localId: string): Promise<LocalTrackMeta>
+
+  // ── Semantic taxonomy tags (local-only; not published/embedded) ───────
+  /** Stored taxonomy tags for a track, or null if none have been set. */
+  getTrackTags(localId: string): Promise<StoredTags | null>
+  /** Insert/update a track's taxonomy tags (genres/moods/themes/contexts). */
+  saveTrackTags(localId: string, tags: LocalTrackTags): Promise<StoredTags>
+  /** Remove a track's taxonomy tags. */
+  deleteTrackTags(localId: string): Promise<void>
 
   // ── Album / artist artwork ────────────────────────────────────────────
   /** Stored artwork for (scope, key) as a data URL, or null if none. */
@@ -68,6 +77,9 @@ const localMusic: LocalMusicApi = {
   saveMeta: (localId, meta) => ipcRenderer.invoke('local:meta:upsert', localId, meta),
   deleteMeta: (localId) => ipcRenderer.invoke('local:meta:delete', localId),
   readTags: (localId) => ipcRenderer.invoke('local:read-tags', localId),
+  getTrackTags: (localId) => ipcRenderer.invoke('local:tags:get', localId),
+  saveTrackTags: (localId, tags) => ipcRenderer.invoke('local:tags:upsert', localId, tags),
+  deleteTrackTags: (localId) => ipcRenderer.invoke('local:tags:delete', localId),
   getArt: (scope, key) => ipcRenderer.invoke('local:art:get', scope, key),
   pickArt: (scope, key) => ipcRenderer.invoke('local:art:pick-set', scope, key),
   clearArt: (scope, key) => ipcRenderer.invoke('local:art:clear', scope, key),

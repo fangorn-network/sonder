@@ -60,6 +60,19 @@ export interface LocalTrackMeta {
 }
 
 /**
+ * Semantic taxonomy tags for a local track — what the tag editor submits and what
+ * `local:tags:get` returns. Shaped to schemas/TrackTaxonomySchema.json
+ * (schemaVersion + trackId are managed in main, not edited here). Persisted
+ * locally; not published or embedded yet.
+ */
+export interface LocalTrackTags {
+  genres: string[]
+  moods: string[]
+  themes: string[]
+  contexts: string[]
+}
+
+/**
  * Extensions we surface. Restricted to formats Chromium's <audio> can decode, so
  * a listed track actually plays. (WMA/AIFF are intentionally omitted — Chromium
  * can't decode them, and listing unplayable files is worse than hiding them.)

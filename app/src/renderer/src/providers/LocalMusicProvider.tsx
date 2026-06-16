@@ -74,6 +74,16 @@ export interface LocalTrackMeta {
   contributors: Contributor[]
 }
 
+/** Semantic taxonomy tags — what the tag editor submits. Shaped to
+ *  schemas/TrackTaxonomySchema.json. Mirror of main/local/types.ts
+ *  `LocalTrackTags`. Stored locally only; not published or embedded yet. */
+export interface LocalTrackTags {
+  genres: string[]
+  moods: string[]
+  themes: string[]
+  contexts: string[]
+}
+
 interface LocalMusicContextValue {
   dir: string | null
   tracks: LocalTrack[]
@@ -105,6 +115,13 @@ interface LocalMusicContextValue {
   saveMetaMany: (entries: { localId: string; meta: LocalTrackMeta }[]) => Promise<void>
   /** Remove a track's metadata; returns it to Unlabeled (re-scans to re-derive). */
   removeMeta: (localId: string) => Promise<void>
+
+  /** Stored taxonomy tags for a track (genres/moods/themes/contexts), or null. */
+  getTrackTags: (localId: string) => Promise<LocalTrackTags | null>
+  /** Save (insert/update) a track's taxonomy tags. Local-only — not published. */
+  saveTrackTags: (localId: string, tags: LocalTrackTags) => Promise<void>
+  /** Remove a track's taxonomy tags. */
+  deleteTrackTags: (localId: string) => Promise<void>
 
   /** Bumps whenever artwork changes — consumers re-read to refresh. */
   artRev: number
@@ -244,6 +261,28 @@ export function LocalMusicProvider({ children }: { children: ReactNode }) {
     // Re-scan so the track's title/artist revert to the filename-derived guess.
     await scanDir(dir ?? undefined)
   }, [scanDir, dir])
+
+  // ── Taxonomy tags ─────────────────────────────────────────────────────────
+  // Local-only enrichment; doesn't change a track's labeled/title state, so there's
+  // nothing to patch into `tracks` — the editor reads on open and writes on save.
+  const getTrackTags = useCallback(async (localId: string): Promise<LocalTrackTags | null> => {
+    const stored = await window.localMusic.getTrackTags(localId)
+    if (!stored) return null
+    return {
+      genres: stored.genres,
+      moods: stored.moods,
+      themes: stored.themes,
+      contexts: stored.contexts,
+    }
+  }, [])
+
+  const saveTrackTags = useCallback(async (localId: string, tags: LocalTrackTags) => {
+    await window.localMusic.saveTrackTags(localId, tags)
+  }, [])
+
+  const deleteTrackTags = useCallback(async (localId: string) => {
+    await window.localMusic.deleteTrackTags(localId)
+  }, [])
 
   // ── Album / artist artwork ──────────────────────────────────────────────
   // Data URLs are cached by `${scope}:${key}` (with in-flight de-dupe) so the
@@ -429,6 +468,7 @@ export function LocalMusicProvider({ children }: { children: ReactNode }) {
     progress: duration ? currentTime / duration : 0,
     ensureLoaded, rescan, chooseFolder,
     readTags, saveMeta, saveMetaMany, removeMeta,
+    getTrackTags, saveTrackTags, deleteTrackTags,
     artRev, getArt, setArt, clearArt,
     favorites, isFavorite, toggleFavorite,
     playlists, createPlaylist, renamePlaylist, deletePlaylist, addToPlaylist, removeFromPlaylist,

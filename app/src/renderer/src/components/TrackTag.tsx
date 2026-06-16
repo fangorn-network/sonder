@@ -1,64 +1,11 @@
 import { useEffect, useRef, useState, KeyboardEvent } from 'react'
 import { usePrivy } from '@privy-io/react-auth'
 import type { Fangorn } from '@fangorn-network/sdk'
+import {
+  TAXONOMY, DIMENSION_LABELS, DIMENSION_ORDER, MAX_PER_DIM, type Dimension,
+} from '../constants/taxonomy'
 
 const CHROMA_URL = (import.meta as any).env.VITE_CHROMA_URL ?? 'http://localhost:8080'
-
-// ── Taxonomy ──────────────────────────────────────────────────────────────────
-
-const TAXONOMY = {
-  genres: [
-    'ambient', 'art rock', 'avant-garde', 'black metal', 'bluegrass',
-    'blues', 'bossa nova', 'chiptune', 'classical', 'darkwave',
-    'death metal', 'disco', 'doom metal', 'dream pop', 'drone',
-    'dub', 'electronic', 'emo', 'experimental', 'field recordings',
-    'folk', 'footwork', 'funk', 'garage rock', 'gothic rock',
-    'grunge', 'hardcore', 'hip-hop', 'house', 'industrial',
-    'jazz', 'krautrock', 'lo-fi', 'math-rock', 'metalcore',
-    'minimal techno', 'new wave', 'noise rock', 'post-metal', 'post-punk',
-    'post-rock', 'power electronics', 'progressive rock', 'psychedelic', 'punk',
-    'r&b', 'reggae', 'shoegaze', 'slowcore', 'soul',
-    'space rock', 'spiritual jazz', 'stoner rock', 'synthwave', 'techno',
-    'thrash metal', 'trip-hop', 'vaporwave', 'witch house',
-  ],
-  moods: [
-    'aggressive', 'anxious', 'bitter', 'cathartic', 'cinematic',
-    'cold', 'dark', 'defiant', 'dissonant', 'dreamy',
-    'ecstatic', 'euphoric', 'frantic', 'hopeful', 'hypnotic',
-    'introspective', 'lonely', 'meditative', 'melancholic', 'mournful',
-    'nostalgic', 'otherworldly', 'peaceful', 'playful', 'raw',
-    'restless', 'serene', 'solemn', 'tender', 'tense',
-    'triumphant', 'unsettling', 'warm', 'weary', 'wistful',
-  ],
-  contexts: [
-    'background', 'commute', 'creative work', 'deep focus', 'driving',
-    'exploration', 'gaming', 'heartbreak', 'insomnia', 'late night',
-    'meditation', 'movement', 'party', 'pre-show', 'ritual',
-    'running', 'social', 'solitude', 'study', 'walking', 'workout',
-  ],
-  themes: [
-    'absurdity', 'body', 'chaos', 'class', 'community',
-    'death', 'dreams', 'empire', 'excess', 'faith',
-    'fear', 'freedom', 'grief', 'home', 'hunger',
-    'identity', 'isolation', 'love', 'memory', 'myth',
-    'nature', 'obsession', 'place', 'power', 'rage',
-    'resistance', 'ritual', 'shadow', 'spirituality', 'technology',
-    'time', 'urban', 'war', 'work', 'youth',
-  ],
-} as const
-
-type Dimension = keyof typeof TAXONOMY
-
-const DIMENSION_LABELS: Record<Dimension, string> = {
-  genres:   'Genres',
-  moods:    'Moods',
-  contexts: 'Contexts',
-  themes:   'Themes',
-}
-
-const DIMENSION_ORDER: Dimension[] = ['genres', 'moods', 'contexts', 'themes']
-
-const MAX_PER_DIM = 3
 
 // ── Schema ────────────────────────────────────────────────────────────────────
 

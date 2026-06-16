@@ -27,6 +27,8 @@ import aiohttp
 import random
 import hashlib
 import json
+import pickle
+import glob
 import logging
 import math
 import uuid
@@ -86,6 +88,17 @@ def parse_args():
     parser.add_argument(
         "--bundle-cid", default=None, metavar="CID",
         help="IPFS CID of an NDJSON bundle to seed from on first startup (skipped if collection already has points)",
+    )
+    parser.add_argument(
+        "--cache-dir", default="", metavar="DIR",
+        help="Directory for the persisted lexical-index cache. Empty disables caching "
+             "(the index is then rebuilt by scanning the collection on every startup).",
+    )
+    parser.add_argument(
+        "--snapshot-id", default="", metavar="ID",
+        help="Identifier (catalog snapshot CID) the recovered collection came from. "
+             "Keys the lexical-index cache so it's reused while the snapshot is unchanged "
+             "and invalidated when a new snapshot is recovered.",
     )
     return parser.parse_args()
 
@@ -466,16 +479,80 @@ def _score_rec(rec: dict, q_l: str, tokens: list[str]) -> float:
         score += 12 * (sum(1 for tok in tokens if tok in tags) / len(tokens))
     return score
 
+# ── Lexical-index disk cache ───────────────────────────────────────────────────
+# Building the lexical index scans the whole collection (the dominant warmup cost),
+# and it's rebuilt from scratch every process start because it lives in memory. To
+# avoid re-doing that work on every launch, we persist it to disk keyed by the
+# snapshot CID it was built from: reused while the snapshot is unchanged, and
+# naturally invalidated (a different filename) when a new snapshot is recovered.
+
+def _index_cache_path() -> str | None:
+    """Cache file path, or None when caching is disabled (no --cache-dir/--snapshot-id)."""
+    cache_dir = getattr(cfg, "cache_dir", "") or ""
+    snap_id   = getattr(cfg, "snapshot_id", "") or ""
+    if not cache_dir or not snap_id:
+        return None
+    return os.path.join(cache_dir, f"lexical-index.{snap_id}.pkl")
+
+def _load_cached_index() -> list[dict] | None:
+    path = _index_cache_path()
+    if not path or not os.path.exists(path):
+        return None
+    try:
+        with open(path, "rb") as f:
+            data = pickle.load(f)
+        if not isinstance(data, list):
+            return None
+        # Guard against a stale/partial cache (e.g. an interrupted recover): if its
+        # size doesn't match the live collection, rebuild rather than trust it.
+        count = _collection_count()
+        if count and len(data) != count:
+            print(f"[search/text] cached index size {len(data)} != collection {count} — rebuilding")
+            return None
+        print(f"[search/text] loaded lexical index from cache ({len(data)} records): {path}")
+        return data
+    except Exception as e:
+        print(f"[search/text] cache load failed ({e}) — rebuilding")
+        return None
+
+def _save_cached_index(index: list[dict]) -> None:
+    path = _index_cache_path()
+    if not path or not index:
+        return
+    try:
+        os.makedirs(cfg.cache_dir, exist_ok=True)
+        tmp = f"{path}.tmp"
+        with open(tmp, "wb") as f:
+            pickle.dump(index, f, protocol=pickle.HIGHEST_PROTOCOL)
+        os.replace(tmp, path)  # atomic swap so a crash mid-write can't leave a partial cache
+        # Drop caches from older snapshots so they don't pile up in userData.
+        for old in glob.glob(os.path.join(cfg.cache_dir, "lexical-index.*.pkl")):
+            if old != path:
+                try:
+                    os.remove(old)
+                except OSError:
+                    pass
+        print(f"[search/text] saved lexical index cache → {path}")
+    except Exception as e:
+        print(f"[search/text] cache save failed ({e}) — continuing without persisting")
+
 def _ensure_text_index() -> list[dict]:
-    """Build the lexical index once, lazily, under a lock + double-check so two
+    """Provide the lexical index once, lazily, under a lock + double-check so two
     concurrent callers (each on its own executor thread) don't both scroll the
     full 860k-record collection. Pre-called from warmup so the user's first text
-    search does only scoring, not the build."""
+    search does only scoring, not the build. Loads a persisted cache when one
+    exists for the current snapshot; otherwise builds it and saves it for next time."""
     global _text_index
     if _text_index is None:
         with _text_index_lock:
             if _text_index is None:
-                _text_index = _build_text_index_sync()
+                cached = _load_cached_index()
+                if cached is not None:
+                    _text_index = cached
+                else:
+                    built = _build_text_index_sync()
+                    _save_cached_index(built)
+                    _text_index = built
     return _text_index
 
 def _search_text_sync(q: str, limit: int, owner: str | None) -> list[dict]:

@@ -368,13 +368,54 @@ async function gunzipVerify(gzPath: string, outPath: string, sha256: string): Pr
   }
 }
 
-// First run: fetch + decompress + recover. Later runs: collection exists → skip.
-async function ensureCollection(win: BrowserWindow): Promise<void> {
+// Records which snapshot CID is currently recovered into qdrant_storage, so a
+// later launch can tell "same snapshot" (reuse everything, including the query
+// server's on-disk lexical-index cache → no re-warm) from "new snapshot" (wipe +
+// re-download + re-warm). Lives in userData alongside qdrant_storage.
+function snapshotMarkerPath(): string {
+  return path.join(app.getPath('userData'), 'catalog-snapshot.json')
+}
+function readSnapshotMarker(): { cid: string } | null {
+  try {
+    const m = JSON.parse(fs.readFileSync(snapshotMarkerPath(), 'utf8'))
+    return m && typeof m.cid === 'string' ? m : null
+  } catch {
+    return null
+  }
+}
+function writeSnapshotMarker(cid: string): void {
+  try {
+    fs.writeFileSync(snapshotMarkerPath(), JSON.stringify({ cid }))
+  } catch (e) {
+    console.error('[snapshot] marker write failed:', e)
+  }
+}
+
+// Ensure the catalog for `snapshot` is recovered. Unchanged snapshot → no-op (the
+// query server reuses its cached lexical index, so warmup is near-instant). New
+// snapshot → remove the stale collection first, then fetch + decompress + recover
+// the new one and stamp the marker so the next launch knows it's current.
+async function ensureCollection(win: BrowserWindow, snapshot: { cid: string; sha256: string }): Promise<void> {
+  const { cid, sha256 } = snapshot
   const exists = await net.fetch('http://127.0.0.1:6333/collections/fangorn')
     .then((r) => r.ok).catch(() => false)
-  if (exists) return
+  const marker = readSnapshotMarker()
 
-  const { cid, sha256 } = await resolveSnapshot()
+  // Already on this snapshot — or a pre-existing collection from before snapshot
+  // tracking, which we adopt as current. Either way nothing to fetch.
+  if (exists && (!marker || marker.cid === cid)) {
+    if (!marker) writeSnapshotMarker(cid)
+    return
+  }
+
+  // A different snapshot is live → drop the old collection's data before pulling
+  // the new one, so stale vectors don't linger in qdrant_storage.
+  if (exists && marker && marker.cid !== cid) {
+    console.log(`[snapshot] new catalog ${cid} (was ${marker.cid}) — removing old collection`)
+    await net.fetch('http://127.0.0.1:6333/collections/fangorn', { method: 'DELETE' })
+      .catch((e) => console.error('[snapshot] failed to delete old collection:', e))
+  }
+
   const userData = app.getPath('userData')
   const gzPath = path.join(userData, 'fangorn.snapshot.gz')
 
@@ -399,9 +440,12 @@ async function ensureCollection(win: BrowserWindow): Promise<void> {
   if (!res.ok) throw new Error(`recover failed: ${res.status} ${await res.text()}`)
 
   try { fs.unlinkSync(snapPath) } catch { }
+
+  // Stamp only after a successful recover, so an interrupted upgrade retries.
+  writeSnapshotMarker(cid)
 }
 
-function startQueryServer() {
+function startQueryServer(cacheDir: string, snapshotId: string) {
   const root = is.dev ? app.getAppPath() : process.resourcesPath
   const serverName = process.platform === 'win32' ? 'server.exe' : 'server'
 
@@ -409,10 +453,13 @@ function startQueryServer() {
   // no chroma path, no checkpoint, no graph key — that all moved to the builder.
   // The vector dim is read from the recovered snapshot's collection (and query
   // embeddings are Matryoshka-truncated to match), so nothing is hardcoded here.
+  // --cache-dir + --snapshot-id let the server persist its lexical index to
+  // userData keyed by the recovered snapshot, so warmup reloads it instead of
+  // rescanning the whole collection on every launch.
   const [bin, args, cwd]: [string, string[], string] = app.isPackaged
     ? [
       path.join(root, serverName),
-      ['--collection', 'fangorn'],
+      ['--collection', 'fangorn', '--cache-dir', cacheDir, '--snapshot-id', snapshotId],
       root,
     ]
     : [
@@ -420,6 +467,8 @@ function startQueryServer() {
       [
         path.join(root, 'vectordb/server.py'),
         '--collection', 'fangorn',
+        '--cache-dir', cacheDir,
+        '--snapshot-id', snapshotId,
       ],
       path.join(root, 'vectordb'),
     ]
@@ -778,9 +827,10 @@ app.whenReady().then(async () => {
   // Backend comes up behind the window: Qdrant ready → collection present
   // (download + decompress + recover on first run, skip if cached) → query server.
   try {
+    const snapshot = await resolveSnapshot()
     await waitForReady('http://127.0.0.1:6333/readyz')
-    await ensureCollection(mainWindow)
-    startQueryServer()
+    await ensureCollection(mainWindow, snapshot)
+    startQueryServer(app.getPath('userData'), snapshot.cid)
     await waitForReady('http://127.0.0.1:8080/health')
     // Hold the splash through warmup. /health is up as soon as the server binds,
     // but its lexical index + embedding model + vector index aren't hot yet —

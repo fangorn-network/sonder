@@ -22,6 +22,7 @@ import { registerSpotifyAuth, handleSpotifyCallback } from './spotify/SpotifyAut
 import { registerPlaybackIpc } from './playback/ipc'
 import { registerLocalMusicIpc } from './local/ipc'
 import { installLogCapture, registerBugReportIpc } from './bug-report'
+import snapshotManifest from './snapshot-manifest.json'
 
 // ─── Stream cache ─────────────────────────────────────────────────────────────
 interface StreamEntry {
@@ -260,14 +261,61 @@ const SNAPSHOT_GATEWAY = "https://green-reasonable-heron-957.mypinata.cloud/ipfs
 // (import.meta as any).env?.VITE_PINATA_GATEWAY ?? 'https://gateway.pinata.cloud/ipfs'
 
 // For now a pinned constant. Later: read the latest sond3r.embeddings.snapshot
-// record off Fangorn and return its cid + checksum, so a new catalog ships
-// without an app update. Keep this the single source of truth for the artifact.
-async function resolveSnapshot(): Promise<{ cid: string; sha256: string }> {
+// record off Fangorn and return its checksum, so a new catalog ships without an
+// app update. Keep this the single source of truth for the artifact identity.
+//
+// The .gz is too big for a single Pinata object (14 GB), so it was split into N
+// parts with `pinata upload-split`, each part pinned separately. The reassembled
+// .gz exceeds Pinata's limits too, so the MANIFEST listing the part CIDs is NOT
+// pinned — it ships as a bundled local resource (`resources/snapshot.manifest.json`,
+// rebuilt with `embeddings/src/rebuild-manifest.mjs`). downloadGz reads that local
+// manifest, then streams each part back-to-back into one .gz (the runtime
+// equivalent of `cat ...part* > ...gz`).
+//
+// `sha256` (of the DECOMPRESSED .snapshot) is the catalog's identity: it gates
+// the snapshot marker and keys the query server's cache, so a new catalog = a new
+// sha256. ('' skips verification while testing.)
+async function resolveSnapshot(): Promise<{ sha256: string }> {
   return {
-    cid: 'bafybeifn2ddof4aasmvg2mf3ufc67tkxphf2w5jqucmkev4newmf7okg3u',
-    // sha256 of the DECOMPRESSED .snapshot ('' skips verification while testing)
-    sha256: '957de00bfc8df0ab1388b7556889ef924c7a7136164389ce0db2d312b8f083dd',
+    sha256: '',
   }
+}
+
+// One entry from the `parts` array of a `pinata upload-split` manifest. Only
+// `index` (ordering) and `cid` (where to fetch the bytes) are load-bearing here;
+// `size` lets us report accurate aggregate download progress.
+interface SnapshotPart {
+  index: number
+  name: string
+  id: string
+  cid: string
+  size: number
+}
+interface SnapshotManifest {
+  name: string
+  total_size: number
+  part_size: number
+  parts: SnapshotPart[]
+}
+
+// Load and validate the committed split-upload manifest (the part-CID list).
+// `snapshot-manifest.json` is checked into this repo next to this file and bundled
+// into the build automatically, so the app ships with the CIDs and never needs a
+// Pinata key at runtime — it fetches each part from the public gateway by CID.
+// When a new catalog ships, regenerate this file from the part names with
+// `node scripts/build-snapshot-manifest.mjs <name-prefix>` (needs PINATA_JWT).
+// Returns the parts sorted into index order and sanity-checked for completeness,
+// so a partial or reordered manifest fails loudly here rather than producing a
+// corrupt .gz.
+function loadManifest(): SnapshotPart[] {
+  const manifest = snapshotManifest as SnapshotManifest
+  const parts = [...(manifest.parts ?? [])].sort((a, b) => a.index - b.index)
+  if (!parts.length) throw new Error('snapshot manifest has no parts')
+  parts.forEach((p, i) => {
+    if (p.index !== i) throw new Error(`snapshot manifest missing part ${i} (got index ${p.index})`)
+    if (!p.cid) throw new Error(`snapshot manifest part ${i} has no cid`)
+  })
+  return parts
 }
 
 function qdrantBin(): string {
@@ -419,22 +467,41 @@ async function waitForWarmup(url: string, win: BrowserWindow, timeoutMs = 300000
 }
 
 // Download the gzipped snapshot from IPFS, streaming progress to the window.
-async function downloadGz(cid: string, dest: string, win: BrowserWindow): Promise<void> {
-  const res = await fetch(`${SNAPSHOT_GATEWAY}/${cid}`)   // global Node fetch
-  if (!res.ok || !res.body) throw new Error(`snapshot download failed: ${res.status}`)
+// Reads the bundled split-upload manifest, then streams every part back-to-back
+// into one .gz — the runtime equivalent of `cat ...part* > ...gz`. Aggregate
+// progress is reported against the manifest's known total size, so the bar
+// reflects the whole reassembled file rather than restarting per part.
+async function downloadGz(dest: string, win: BrowserWindow): Promise<void> {
+  const parts = loadManifest()
+  const total = parts.reduce((sum, p) => sum + (p.size || 0), 0)
 
-  const total = Number(res.headers.get('content-length')) || 0
   const out = createWriteStream(dest)
   let received = 0
 
-  const reader = (res.body as any).getReader()
-  for (; ;) {
-    const { done, value } = await reader.read()
-    if (done) break
-    received += value.length
-    out.write(Buffer.from(value))
-    win.webContents.send('snapshot:progress', { received, total })
+  try {
+    for (const part of parts) {
+      const res = await fetch(`${SNAPSHOT_GATEWAY}/${part.cid}`)   // global Node fetch
+      if (!res.ok || !res.body) {
+        throw new Error(`snapshot part ${part.index} download failed: ${res.status}`)
+      }
+
+      const reader = (res.body as any).getReader()
+      for (; ;) {
+        const { done, value } = await reader.read()
+        if (done) break
+        received += value.length
+        // Respect stream backpressure so a fast gateway can't outrun the disk.
+        if (!out.write(Buffer.from(value))) {
+          await new Promise<void>((r) => out.once('drain', () => r()))
+        }
+        win.webContents.send('snapshot:progress', { received, total })
+      }
+    }
+  } catch (e) {
+    out.destroy()
+    throw e
   }
+
   out.end()
   await new Promise<void>((r) => out.on('finish', () => r()))
 }
@@ -452,24 +519,26 @@ async function gunzipVerify(gzPath: string, outPath: string, sha256: string): Pr
   }
 }
 
-// Records which snapshot CID is currently recovered into qdrant_storage, so a
-// later launch can tell "same snapshot" (reuse everything, including the query
-// server's on-disk lexical-index cache → no re-warm) from "new snapshot" (wipe +
-// re-download + re-warm). Lives in userData alongside qdrant_storage.
+// Records which snapshot is currently recovered into qdrant_storage, so a later
+// launch can tell "same snapshot" (reuse everything, including the query server's
+// on-disk lexical-index cache → no re-warm) from "new snapshot" (wipe +
+// re-download + re-warm). The identity is the decompressed snapshot's sha256.
+// Lives in userData alongside qdrant_storage. (`cid` is read for backward compat
+// with markers written before the manifest stopped being pinned.)
 function snapshotMarkerPath(): string {
   return path.join(app.getPath('userData'), 'catalog-snapshot.json')
 }
-function readSnapshotMarker(): { cid: string } | null {
+function readSnapshotMarker(): { sha256?: string; cid?: string } | null {
   try {
     const m = JSON.parse(fs.readFileSync(snapshotMarkerPath(), 'utf8'))
-    return m && typeof m.cid === 'string' ? m : null
+    return m && typeof m === 'object' ? m : null
   } catch {
     return null
   }
 }
-function writeSnapshotMarker(cid: string): void {
+function writeSnapshotMarker(sha256: string): void {
   try {
-    fs.writeFileSync(snapshotMarkerPath(), JSON.stringify({ cid }))
+    fs.writeFileSync(snapshotMarkerPath(), JSON.stringify({ sha256 }))
   } catch (e) {
     console.error('[snapshot] marker write failed:', e)
   }
@@ -479,23 +548,26 @@ function writeSnapshotMarker(cid: string): void {
 // query server reuses its cached lexical index, so warmup is near-instant). New
 // snapshot → remove the stale collection first, then fetch + decompress + recover
 // the new one and stamp the marker so the next launch knows it's current.
-async function ensureCollection(win: BrowserWindow, snapshot: { cid: string; sha256: string }): Promise<void> {
-  const { cid, sha256 } = snapshot
+async function ensureCollection(win: BrowserWindow, snapshot: { sha256: string }): Promise<void> {
+  const { sha256 } = snapshot
   const exists = await net.fetch('http://127.0.0.1:6333/collections/fangorn')
     .then((r) => r.ok).catch(() => false)
   const marker = readSnapshotMarker()
+  // Old markers (pre-unpinned-manifest) keyed on cid and have no sha256; treat
+  // such a collection as current rather than forcing a needless 14 GB re-fetch.
+  const markedId = marker?.sha256
 
-  // Already on this snapshot — or a pre-existing collection from before snapshot
-  // tracking, which we adopt as current. Either way nothing to fetch.
-  if (exists && (!marker || marker.cid === cid)) {
-    if (!marker) writeSnapshotMarker(cid)
+  // Already on this snapshot — or a pre-existing/legacy collection we adopt as
+  // current. Either way nothing to fetch.
+  if (exists && (!marker || !markedId || markedId === sha256)) {
+    if (!markedId) writeSnapshotMarker(sha256)
     return
   }
 
   // A different snapshot is live → drop the old collection's data before pulling
   // the new one, so stale vectors don't linger in qdrant_storage.
-  if (exists && marker && marker.cid !== cid) {
-    console.log(`[snapshot] new catalog ${cid} (was ${marker.cid}) — removing old collection`)
+  if (exists && markedId && markedId !== sha256) {
+    console.log(`[snapshot] new catalog ${sha256} (was ${markedId}) — removing old collection`)
     await net.fetch('http://127.0.0.1:6333/collections/fangorn', { method: 'DELETE' })
       .catch((e) => console.error('[snapshot] failed to delete old collection:', e))
   }
@@ -509,7 +581,7 @@ async function ensureCollection(win: BrowserWindow, snapshot: { cid: string; sha
   const snapPath = path.join(snapDir, 'fangorn.snapshot')
 
   win.webContents.send('snapshot:status', 'downloading')
-  await downloadGz(cid, gzPath, win)
+  await downloadGz(gzPath, win)
 
   win.webContents.send('snapshot:status', 'decompressing')
   await gunzipVerify(gzPath, snapPath, sha256)
@@ -526,7 +598,7 @@ async function ensureCollection(win: BrowserWindow, snapshot: { cid: string; sha
   try { fs.unlinkSync(snapPath) } catch { }
 
   // Stamp only after a successful recover, so an interrupted upgrade retries.
-  writeSnapshotMarker(cid)
+  writeSnapshotMarker(sha256)
 }
 
 function startQueryServer(cacheDir: string, snapshotId: string) {
@@ -917,7 +989,7 @@ app.whenReady().then(async () => {
     const snapshot = await resolveSnapshot()
     await waitForReady('http://127.0.0.1:6333/readyz')
     await ensureCollection(mainWindow, snapshot)
-    startQueryServer(app.getPath('userData'), snapshot.cid)
+    startQueryServer(app.getPath('userData'), snapshot.sha256)
     await waitForReady('http://127.0.0.1:8080/health')
     // Hold the splash through warmup. /health is up as soon as the server binds,
     // but its lexical index + embedding model + vector index aren't hot yet —

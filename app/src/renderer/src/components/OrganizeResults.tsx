@@ -36,6 +36,7 @@ const FG4 = 'var(--fg4)'
 const ACCENT = 'var(--accent)'
 const ACCENT_DIM = 'var(--accent-dim)'
 const ACCENT_BORDER = 'var(--accent-border)'
+const ERR = 'var(--err)'
 const BORDER = 'var(--border)'
 const BORDER2 = 'var(--border2)'
 const MONO = 'var(--font-mono,"Fragment Mono","DM Mono",monospace)'
@@ -108,11 +109,11 @@ export function OrganizeResults({
               <div style={{ borderTop: `1px solid ${BORDER2}`, paddingTop: 16 }}>
                 <Label>Auto-organize</Label>
                 <div style={{ marginTop: 10 }}>
-                  <ReportBody report={report} organizing={organizing} progress={organizeProgress} />
+                  <ReportBody report={report} organizing={organizing} progress={organizeProgress} onMerge={lm.mergeArtist} />
                 </div>
               </div>
             ) : (
-              <ReportBody report={report} organizing={organizing} progress={organizeProgress} />
+              <ReportBody report={report} organizing={organizing} progress={organizeProgress} onMerge={lm.mergeArtist} />
             )}
 
             {/* Finish up: optional artwork + manual review of what couldn't resolve. */}
@@ -163,13 +164,14 @@ export function OrganizeResults({
 
 /** The report card, or a progress/placeholder line while the pass is still running. */
 function ReportBody({
-  report, organizing, progress,
+  report, organizing, progress, onMerge,
 }: {
   report: OrganizeReport | null
   organizing: boolean
   progress?: OrganizeProgress | null
+  onMerge: (canonical: string, variants: string[]) => Promise<number>
 }) {
-  if (report) return <OrganizeReportCard report={report} />
+  if (report) return <OrganizeReportCard report={report} onMerge={onMerge} />
   return (
     <div style={{ fontFamily: MONO, fontSize: 11, color: FG3 }}>
       {organizing ? `Organizing ${progress?.processed ?? 0} / ${progress?.total ?? 0}…` : 'Preparing…'}
@@ -190,7 +192,8 @@ function StepBody({ title, subtitle, children }: { title: string; subtitle: stri
   )
 }
 
-/** The unresolved (still-Unlabeled) tracks, each with a way to open the editor. */
+/** The unresolved (still-Unlabeled) tracks. Each row can be played (to identify
+ *  what it is), labeled, or dropped from the library. */
 function ReviewList({ tracks, onEdit }: { tracks: LocalTrack[]; onEdit: (t: LocalTrack) => void }) {
   if (tracks.length === 0) {
     return <div style={{ fontFamily: MONO, fontSize: 11, color: FG3 }}>Everything is labeled. 🎉</div>
@@ -198,19 +201,79 @@ function ReviewList({ tracks, onEdit }: { tracks: LocalTrack[]; onEdit: (t: Loca
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
       {tracks.map((t) => (
-        <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 8px', background: BG2, border: `1px solid ${BORDER2}` }}>
-          <span style={{ minWidth: 0, flex: 1 }}>
-            <span style={{ display: 'block', fontFamily: SANS, fontSize: 12.5, color: FG, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {t.artist ? `${t.artist} — ${t.title}` : t.title || baseName(t.path)}
-            </span>
-            <span title={t.path} style={{ display: 'block', fontFamily: MONO, fontSize: 9.5, color: FG4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {t.path}
-            </span>
-          </span>
-          <SmallBtn label="Label" onClick={() => onEdit(t)} />
-        </div>
+        <ReviewRow key={t.id} track={t} queue={tracks} onEdit={onEdit} />
       ))}
     </div>
+  )
+}
+
+/** A single review row: play/pause + name + Label + Drop (with inline confirm). */
+function ReviewRow({ track, queue, onEdit }: { track: LocalTrack; queue: LocalTrack[]; onEdit: (t: LocalTrack) => void }) {
+  const lm = useLocalMusic()
+  const [confirming, setConfirming] = useState(false)
+  const [dropping, setDropping] = useState(false)
+  const isCurrent = lm.current?.id === track.id
+  const playing = isCurrent && lm.isPlaying
+
+  // On success the row unmounts (the track leaves lm.tracks), so we only reset
+  // state on failure.
+  const drop = async () => {
+    setDropping(true)
+    try {
+      await lm.dropTrack(track.id)
+    } catch {
+      setDropping(false)
+      setConfirming(false)
+    }
+  }
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 8px', background: BG2, border: `1px solid ${isCurrent ? ACCENT_BORDER : BORDER2}` }}>
+      <button
+        onClick={() => lm.playTrack(track, queue)}
+        title={playing ? 'Pause' : 'Play'}
+        style={{
+          flexShrink: 0, width: 26, height: 26, borderRadius: '50%', padding: 0,
+          background: 'none', border: `1px solid ${isCurrent ? ACCENT_BORDER : BORDER}`,
+          color: isCurrent ? ACCENT : FG2, cursor: 'pointer',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}
+      >{playing ? <PauseIcon /> : <PlayIcon />}</button>
+      <span style={{ minWidth: 0, flex: 1 }}>
+        <span style={{ display: 'block', fontFamily: SANS, fontSize: 12.5, color: FG, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {track.artist ? `${track.artist} — ${track.title}` : track.title || baseName(track.path)}
+        </span>
+        <span title={track.path} style={{ display: 'block', fontFamily: MONO, fontSize: 9.5, color: FG4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {track.path}
+        </span>
+      </span>
+      <SmallBtn label="Label" onClick={() => onEdit(track)} />
+      {confirming ? (
+        <SmallBtn label={dropping ? 'Dropping…' : 'Confirm'} onClick={drop} disabled={dropping} danger />
+      ) : (
+        <SmallBtn label="Drop" onClick={() => setConfirming(true)} danger />
+      )}
+    </div>
+  )
+}
+
+// Play/pause glyphs as SVGs — the unicode triangle has asymmetric side bearings
+// that no amount of flex-centering fixes, so it always looks shoved left. The
+// triangle path is centroid-centered in the viewBox (a right-pointing triangle's
+// visual center sits left of its bounding box, hence the offset coordinates).
+function PlayIcon() {
+  return (
+    <svg width="9" height="9" viewBox="0 0 12 12" fill="currentColor" aria-hidden>
+      <path d="M4 2.5 L10 6 L4 9.5 Z" />
+    </svg>
+  )
+}
+function PauseIcon() {
+  return (
+    <svg width="9" height="9" viewBox="0 0 12 12" fill="currentColor" aria-hidden>
+      <rect x="3.2" y="2.5" width="2" height="7" />
+      <rect x="6.8" y="2.5" width="2" height="7" />
+    </svg>
   )
 }
 
@@ -263,13 +326,13 @@ function Label({ children }: { children: React.ReactNode }) {
   return <div style={{ fontFamily: MONO, fontSize: 9, color: FG4, letterSpacing: '0.16em', textTransform: 'uppercase' }}>{children}</div>
 }
 
-function SmallBtn({ label, onClick, disabled }: { label: string; onClick: () => void; disabled?: boolean }) {
+function SmallBtn({ label, onClick, disabled, danger }: { label: string; onClick: () => void; disabled?: boolean; danger?: boolean }) {
   return (
     <button
       onClick={onClick}
       disabled={disabled}
       style={{
-        background: 'none', border: `1px solid ${BORDER}`, color: FG2, fontFamily: MONO,
+        background: 'none', border: `1px solid ${danger ? ERR : BORDER}`, color: danger ? ERR : FG2, fontFamily: MONO,
         fontSize: 10, letterSpacing: '0.10em', textTransform: 'uppercase', padding: '7px 12px',
         cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.5 : 1, whiteSpace: 'nowrap',
       }}

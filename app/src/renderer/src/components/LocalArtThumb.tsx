@@ -86,10 +86,6 @@ export function LocalArtThumb({
       >
         {glyph}
       </span>
-      <style>{`
-        .local-art-thumb:hover .local-art-thumb__hint,
-        .local-art-thumb:focus-visible .local-art-thumb__hint { opacity: 1; }
-      `}</style>
     </button>
   )
 }

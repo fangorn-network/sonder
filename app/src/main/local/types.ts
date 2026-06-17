@@ -62,6 +62,33 @@ export interface ArtCandidate {
   height?: number | null
 }
 
+/** One artwork lookup in a "Best try" batch: the scope plus the query to run. */
+export interface ArtRequest {
+  scope: ArtScope
+  query: ArtQuery
+}
+
+/** Progress for a "Best try" batch — one tick per request resolved. */
+export interface ArtBestTryProgress {
+  done: number
+  total: number
+}
+
+/** One artwork to commit in a bulk save. `src` is a local file path (source
+ *  'local') or a remote image URL (source 'remote'). */
+export interface ArtSaveItem {
+  scope: ArtScope
+  key: string
+  source: 'local' | 'remote'
+  src: string
+}
+
+/** Outcome of a bulk artwork save. */
+export interface ArtSaveResult {
+  saved: number
+  failed: number
+}
+
 /** How a bulk import treats the source files: copy them into the library folder
  *  (survives the source being disconnected) or reference them where they are. */
 export type ImportMode = 'copy' | 'reference'

@@ -41,6 +41,32 @@ export interface ArtCandidate {
   height?: number | null
 }
 
+/** One lookup in a "Best try" batch. Mirror of main/local/types.ts `ArtRequest`. */
+export interface ArtRequest {
+  scope: ArtScope
+  query: ArtQuery
+}
+
+/** "Best try" batch progress. Mirror of main/local/types.ts `ArtBestTryProgress`. */
+export interface ArtBestTryProgress {
+  done: number
+  total: number
+}
+
+/** One artwork to commit in a bulk save. Mirror of main/local/types.ts `ArtSaveItem`. */
+export interface ArtSaveItem {
+  scope: ArtScope
+  key: string
+  source: 'local' | 'remote'
+  src: string
+}
+
+/** Bulk artwork save outcome. Mirror of main/local/types.ts `ArtSaveResult`. */
+export interface ArtSaveResult {
+  saved: number
+  failed: number
+}
+
 /** What can be favorited. Mirror of main/local/favorites.ts `FavKind`. */
 export type FavKind = 'track' | 'artist' | 'album'
 
@@ -192,6 +218,9 @@ interface LocalMusicContextValue {
   /** Smart-label every Unlabeled track (tags + filename + folder, merging
    *  duplicates), then re-scan. Returns a report. */
   autoOrganize: () => Promise<OrganizeReport>
+  /** Resolve a duplicate-artist suggestion: merge the variant spellings into the
+   *  chosen canonical one, then re-scan. Returns how many tracks were renamed. */
+  mergeArtist: (canonical: string, variants: string[]) => Promise<number>
 
   /** Best-effort metadata from the file's embedded tags, for prefilling the editor. */
   readTags: (localId: string) => Promise<LocalTrackMeta>
@@ -201,6 +230,10 @@ interface LocalMusicContextValue {
   saveMetaMany: (entries: { localId: string; meta: LocalTrackMeta }[]) => Promise<void>
   /** Remove a track's metadata; returns it to Unlabeled (re-scans to re-derive). */
   removeMeta: (localId: string) => Promise<void>
+  /** Drop a track from the library: deletes the file if it's a library copy
+   *  (referenced-in-place sources are left intact). Resolves with whether the file
+   *  was deleted. Removes it from local state immediately. */
+  dropTrack: (localId: string) => Promise<{ deletedFile: boolean }>
 
   /** Taxonomy tags keyed by local id, for every track that carries any — drives
    *  the "tagged" indicator in track lists without a per-row IPC round-trip. */
@@ -237,8 +270,16 @@ interface LocalMusicContextValue {
   setArtFromPath: (scope: ArtScope, key: string, path: string) => Promise<string | null>
   /** Search a third party (Deezer) for album covers / artist photos. */
   searchArt: (scope: ArtScope, query: ArtQuery) => Promise<ArtCandidate[]>
+  /** "Best try" a batch of targets in one call — first match per request (or
+   *  null), in order. Pair with onBestTryProgress for a running count. */
+  bestTryArt: (reqs: ArtRequest[]) => Promise<(ArtCandidate | null)[]>
+  /** Subscribe to progress for the in-flight bestTryArt batch; returns unsubscribe. */
+  onBestTryProgress: (cb: (p: ArtBestTryProgress) => void) => () => void
   /** Commit a third-party image (by URL) as artwork for (scope, key). */
   setArtFromUrl: (scope: ArtScope, key: string, url: string) => Promise<string | null>
+  /** Bulk-commit staged artwork in one call; resolves with saved/failed counts.
+   *  Invalidates the art cache for the saved keys so thumbnails refresh. */
+  setArtMany: (items: ArtSaveItem[]) => Promise<ArtSaveResult>
   /** Remove the stored artwork for (scope, key). */
   clearArt: (scope: ArtScope, key: string) => Promise<void>
 
@@ -445,6 +486,15 @@ export function LocalMusicProvider({ children }: { children: ReactNode }) {
     }
   }, [scanDir])
 
+  const mergeArtist = useCallback(async (canonical: string, variants: string[]): Promise<number> => {
+    const n = await window.localMusic.mergeArtist(canonical, variants)
+    if (n > 0) {
+      await scanDir() // reflect renamed artists
+      setArtRev((r) => r + 1) // artwork keys moved to the canonical name
+    }
+    return n
+  }, [scanDir])
+
   // ── Metadata library ──────────────────────────────────────────────────
   const libraryTracks = useMemo(() => tracks.filter((t) => t.labeled), [tracks])
   const unlabeledTracks = useMemo(() => tracks.filter((t) => !t.labeled), [tracks])
@@ -474,6 +524,21 @@ export function LocalMusicProvider({ children }: { children: ReactNode }) {
     // Re-scan so the track's title/artist revert to the filename-derived guess.
     await scanDir(dir ?? undefined)
   }, [scanDir, dir])
+
+  const dropTrack = useCallback(async (localId: string): Promise<{ deletedFile: boolean }> => {
+    const res = await window.localMusic.dropTrack(localId)
+    // Stop playback if we just dropped the playing track (its stream is now gone).
+    if (current?.id === localId) {
+      const audio = audioRef.current
+      if (audio) { audio.pause(); audio.removeAttribute('src'); audio.load() }
+      setCurrent(null)
+      setIsPlaying(false)
+    }
+    // Drop from local state immediately — no re-scan needed (and a re-scan would
+    // re-add a referenced-in-place source file we intentionally left on disk).
+    setTracks((prev) => prev.filter((t) => t.id !== localId))
+    return res
+  }, [current])
 
   // ── Taxonomy tags ─────────────────────────────────────────────────────────
   // Local-only enrichment; doesn't change a track's labeled/title state, so there's
@@ -555,10 +620,24 @@ export function LocalMusicProvider({ children }: { children: ReactNode }) {
 
   const searchArt = useCallback((scope: ArtScope, query: ArtQuery) => window.localMusic.searchArt(scope, query), [])
 
+  const bestTryArt = useCallback((reqs: ArtRequest[]) => window.localMusic.bestTryArt(reqs), [])
+
+  const onBestTryProgress = useCallback(
+    (cb: (p: ArtBestTryProgress) => void) => window.localMusic.onBestTryProgress(cb), [])
+
   const setArtFromUrl = useCallback(async (scope: ArtScope, key: string, remoteUrl: string): Promise<string | null> => {
     const url = await window.localMusic.setArtFromUrl(scope, key, remoteUrl)
     if (url) { artCache.current.set(`${scope}:${key}`, url); setArtRev((r) => r + 1) }
     return url
+  }, [])
+
+  const setArtMany = useCallback(async (items: ArtSaveItem[]): Promise<ArtSaveResult> => {
+    const res = await window.localMusic.setArtMany(items)
+    // Drop the cached data URL for every saved key (we don't ship the bytes back),
+    // so the next getArt re-reads from disk; one bump refreshes all thumbnails.
+    for (const it of items) artCache.current.delete(`${it.scope}:${it.key}`)
+    if (items.length) setArtRev((r) => r + 1)
+    return res
   }, [])
 
   const clearArt = useCallback(async (scope: ArtScope, key: string): Promise<void> => {
@@ -718,11 +797,11 @@ export function LocalMusicProvider({ children }: { children: ReactNode }) {
     progress: duration ? currentTime / duration : 0,
     ensureLoaded, rescan, chooseFolder,
     extraRoots, importing, importProgress, pickImportSource, importMusic, removeRoot,
-    organizing, organizeProgress, autoOrganize,
-    readTags, saveMeta, saveMetaMany, removeMeta,
+    organizing, organizeProgress, autoOrganize, mergeArtist,
+    readTags, saveMeta, saveMetaMany, removeMeta, dropTrack,
     trackTagsById, getTrackTags, saveTrackTags, deleteTrackTags,
     discoverableIds, refreshDiscoverable,
-    artRev, listArtKeys, getArt, setArt, pickImage, setArtFromPath, searchArt, setArtFromUrl, clearArt,
+    artRev, listArtKeys, getArt, setArt, pickImage, setArtFromPath, searchArt, bestTryArt, onBestTryProgress, setArtFromUrl, setArtMany, clearArt,
     favorites, isFavorite, toggleFavorite,
     playlists, createPlaylist, renamePlaylist, deletePlaylist, addToPlaylist, removeFromPlaylist,
     playTrack, togglePlay, next, prev, seek,

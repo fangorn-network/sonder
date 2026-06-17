@@ -103,6 +103,30 @@ export function listRegistry(): { id: string; path: string }[] {
   return [...registry.entries()].map(([id, e]) => ({ id, path: e.path }))
 }
 
+/**
+ * Drop a track from the library. The on-disk file is permanently deleted ONLY
+ * when it lives inside the primary library folder (a copy made by import); files
+ * under a referenced-in-place root (the user's source folder/drive) are left
+ * untouched so the source stays intact. Either way the id is removed from the
+ * serve registry so it stops streaming immediately. Returns whether the file was
+ * deleted (false when it was a referenced source we left alone, or already gone).
+ *
+ * Caller is responsible for clearing any stored metadata/tags (see ipc).
+ */
+export function dropTrack(id: string): { deletedFile: boolean } {
+  const entry = registry.get(id)
+  registry.delete(id)
+  if (!entry) return { deletedFile: false }
+  if (!isInside(entry.path, getSavedDir())) return { deletedFile: false }
+  try {
+    fs.rmSync(entry.path)
+    return { deletedFile: true }
+  } catch (e) {
+    console.warn('[local-music] could not delete file:', entry.path, e)
+    return { deletedFile: false }
+  }
+}
+
 // ─── Music directory (default + persisted override) ───────────────────────────
 
 /** OS-standard music location: ~/Music, %USERPROFILE%\Music, etc. */

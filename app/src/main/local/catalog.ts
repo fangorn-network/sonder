@@ -152,6 +152,24 @@ export function deleteMeta(localId: string): void {
   getDb().prepare('DELETE FROM local_track_meta WHERE local_id = ?').run(localId)
 }
 
+/**
+ * Rewrite a labeled track's artist — used when merging duplicate artist spellings
+ * (e.g. "God Smack" → "Godsmack"). Recomputes trackId (which is derived from
+ * artist + title) so the track still resolves to the right canonical id. No-op if
+ * the track has no stored row or the new name is blank.
+ */
+export function setArtistName(localId: string, byArtist: string): void {
+  const artist = byArtist.trim()
+  if (!artist) return
+  const row = getDb()
+    .prepare('SELECT title FROM local_track_meta WHERE local_id = ?')
+    .get(localId) as { title: string } | undefined
+  if (!row) return
+  getDb()
+    .prepare('UPDATE local_track_meta SET by_artist = ?, track_id = ?, updated_at = ? WHERE local_id = ?')
+    .run(artist, computeTrackId(artist, row.title), Date.now(), localId)
+}
+
 // ─── Embedded tags ──────────────────────────────────────────────────────────
 
 /**

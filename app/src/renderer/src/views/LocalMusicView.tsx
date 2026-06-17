@@ -12,7 +12,7 @@
  * audio keeps going if the view is closed.
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocalMusic, type ArtScope, type FavKind, type LocalTrack, type LocalTrackTags, type OrganizeReport } from '../providers/LocalMusicProvider'
 import { LocalMetadataEditor } from '../components/LocalMetadataEditor'
 import { LocalBatchEditor } from '../components/LocalBatchEditor'
@@ -196,7 +196,7 @@ export function LocalMusicView() {
         padding: '16px 22px 0',
       } as React.CSSProperties}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ minWidth: 0 }}>
             <div style={{ fontFamily: DISP, fontSize: 26, letterSpacing: '0.06em', lineHeight: 1 }}>
               HOME
             </div>
@@ -209,6 +209,13 @@ export function LocalMusicView() {
             >
               {lm.dir ?? 'No folder selected'}
             </div> */}
+          </div>
+
+          <div style={{
+            flex: 1, minWidth: 0, fontFamily: MONO, fontSize: 10.5, color: ACCENT,
+            letterSpacing: '0.02em', lineHeight: 1.3, textAlign: 'center',
+          }}>
+            Local listening does not yet contribute to your algorithm
           </div>
 
           <HeaderBtn label="Import" onClick={() => setImporting(true)} />
@@ -430,6 +437,13 @@ function LibraryPane({
   // play; edit mode exposes art set/replace/remove and per-track Edit.
   const [editMode, setEditMode] = useState(false)
 
+  // Switching Artists/Albums/Tracks rebuilds a large list. Defer that heavy render
+  // so the GroupSwitch highlight + click stay responsive (the tab reflects the
+  // urgent `groupMode`, the list catches up via `renderMode`). `switching` drives a
+  // brief dim on the outgoing list so the change reads as intentional.
+  const renderMode = useDeferredValue(groupMode)
+  const switching = renderMode !== groupMode
+
   const terms = useMemo(() => queryTerms(query), [query])
   const matches = useMemo(
     () => (terms.length ? tracks.filter((t) => trackMatches(t, terms)) : []),
@@ -544,11 +558,12 @@ function LibraryPane({
         {editToggle}
       </PaneToolbar>
 
+      <div style={{ opacity: switching ? 0.55 : 1, transition: 'opacity 0.12s ease' }}>
       {/* Tracks */}
-      {groupMode === 'tracks' && flatList(tracks)}
+      {renderMode === 'tracks' && flatList(tracks)}
 
       {/* Artists */}
-      {groupMode === 'artists' && !selectedArtist && artists.map(([name, ts]) => (
+      {renderMode === 'artists' && !selectedArtist && artists.map(([name, ts]) => (
         <GroupRow
           key={name}
           title={name}
@@ -560,7 +575,7 @@ function LibraryPane({
         />
       ))}
       {/* Artist → its albums (+ a Misc section for tracks with no album) */}
-      {groupMode === 'artists' && selectedArtist && !selectedAlbum && (() => {
+      {renderMode === 'artists' && selectedArtist && !selectedAlbum && (() => {
         const at = tracks.filter((t) => artistKey(t) === selectedArtist)
         const albumMap = new Map<string, LocalTrack[]>()
         const misc: LocalTrack[] = []
@@ -606,7 +621,7 @@ function LibraryPane({
       })()}
 
       {/* Artist → album → tracks */}
-      {groupMode === 'artists' && selectedArtist && selectedAlbum && (() => {
+      {renderMode === 'artists' && selectedArtist && selectedAlbum && (() => {
         const inAlbum = tracks.filter((t) => artistKey(t) === selectedArtist && albumKey(t) === selectedAlbum)
         return (
           <>
@@ -626,7 +641,7 @@ function LibraryPane({
       })()}
 
       {/* Albums */}
-      {groupMode === 'albums' && !selectedAlbum && albums.map((g) => {
+      {renderMode === 'albums' && !selectedAlbum && albums.map((g) => {
         const artist = [...g.artists][0] || UNKNOWN_ARTIST
         return (
           <GroupRow
@@ -640,7 +655,7 @@ function LibraryPane({
           />
         )
       })}
-      {groupMode === 'albums' && selectedAlbum && (() => {
+      {renderMode === 'albums' && selectedAlbum && (() => {
         const inAlbum = tracks.filter((t) => albumKey(t) === selectedAlbum)
         const artist = inAlbum[0] ? artistKey(inAlbum[0]) : UNKNOWN_ARTIST
         return (
@@ -659,6 +674,7 @@ function LibraryPane({
           </>
         )
       })()}
+      </div>
     </>
   )
 }

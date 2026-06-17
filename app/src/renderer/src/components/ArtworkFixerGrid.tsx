@@ -25,10 +25,6 @@ const ACCENT_DIM = 'var(--accent-dim)'
 const BORDER = 'var(--border)'
 const MONO = 'var(--font-mono,"Fragment Mono","DM Mono",monospace)'
 
-/** How many Deezer searches "Best try" runs at once — enough to feel quick on a
- *  big import without hammering the keyless API. */
-const BEST_TRY_CONCURRENCY = 4
-
 const targetId = (t: ArtTarget): string => `${t.scope}::${t.artist}::${t.album ?? ''}`
 const artKeyFor = (t: ArtTarget): string =>
   t.scope === 'artist' ? artistArtKey(t.artist) : albumArtKeyOf(t.artist, t.album ?? '')
@@ -57,44 +53,55 @@ export function ArtworkFixerGrid({
       : () => lm.searchArt('album', { artist: t.artist, album: t.album ?? '' })
 
   // Search Deezer for every target that isn't already chosen and stage the first
-  // result. Runs a few searches in parallel; targets with no hits are simply left
-  // for the user to fill in by hand. Manual picks already made are untouched.
+  // result. One batched IPC call does all the lookups in main (which downloads
+  // just the first match's thumbnail per target and limits concurrency); progress
+  // streams back as a running count. Targets with no hits are left for a manual
+  // pick, and manual picks already made are untouched.
   const bestTry = async () => {
     const todo = targets.filter((t) => !staged[targetId(t)])
     if (todo.length === 0) return
     setTrying({ done: 0, total: todo.length })
-    let done = 0
-    let next = 0
-    const worker = async () => {
-      while (next < todo.length) {
-        const t = todo[next++]
-        try {
-          const [first] = await onSearch(t)()
-          if (first) setOne(targetId(t), { source: 'remote', url: first.fullUrl, dataUrl: first.thumbDataUrl })
-        } catch { /* no luck for this one — leave it for a manual pick */ }
-        setTrying({ done: ++done, total: todo.length })
-      }
+    const off = lm.onBestTryProgress(setTrying)
+    try {
+      const found = await lm.bestTryArt(
+        todo.map((t) => ({
+          scope: t.scope,
+          query: t.scope === 'artist' ? { artist: t.artist } : { artist: t.artist, album: t.album ?? '' },
+        })),
+      )
+      setStaged((prev) => {
+        const out = { ...prev }
+        found.forEach((c, i) => {
+          if (c) out[targetId(todo[i])] = { source: 'remote', url: c.fullUrl, dataUrl: c.thumbDataUrl }
+        })
+        return out
+      })
+    } finally {
+      off()
+      setTrying(null)
     }
-    await Promise.all(Array.from({ length: Math.min(BEST_TRY_CONCURRENCY, todo.length) }, worker))
-    setTrying(null)
   }
 
   const save = async () => {
-    setSaving(true)
-    let saved = 0
-    for (const t of targets) {
+    // Flatten every staged pick into one batch the main process commits together
+    // (downloads run concurrently there, then persist in a single transaction).
+    const items = targets.flatMap((t) => {
       const s = staged[targetId(t)]
-      if (!s) continue
-      try {
-        const key = artKeyFor(t)
-        if (s.source === 'local') await lm.setArtFromPath(t.scope, key, s.path)
-        else await lm.setArtFromUrl(t.scope, key, s.url)
-        saved++
-      } catch { /* skip the ones that fail; keep the rest */ }
+      if (!s) return []
+      const key = artKeyFor(t)
+      return [{ scope: t.scope, key, source: s.source, src: s.source === 'local' ? s.path : s.url }]
+    })
+    if (items.length === 0) return
+    setSaving(true)
+    try {
+      const { saved } = await lm.setArtMany(items)
+      setStaged({})
+      onSaved?.(saved)
+    } catch {
+      /* whole-batch failure (rare) — leave staged picks so the user can retry */
+    } finally {
+      setSaving(false)
     }
-    setStaged({})
-    setSaving(false)
-    onSaved?.(saved)
   }
 
   if (targets.length === 0) {

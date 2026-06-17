@@ -14,10 +14,10 @@ import * as taxonomy from './taxonomy'
 import * as discovery from './discovery'
 import * as art from './art'
 import * as artSearch from './artSearch'
-import { autoOrganize } from './organize'
+import { autoOrganize, mergeArtist } from './organize'
 import * as favorites from './favorites'
 import * as playlists from './playlists'
-import type { ArtQuery, ArtScope, ImportMode, ImportProgress, LocalTrackMeta, LocalTrackTags, OrganizeProgress } from './types'
+import type { ArtBestTryProgress, ArtQuery, ArtRequest, ArtSaveItem, ArtScope, ImportMode, ImportProgress, LocalTrackMeta, LocalTrackTags, OrganizeProgress } from './types'
 import type { FavKind } from './favorites'
 
 export function registerLocalMusicIpc(): void {
@@ -94,6 +94,11 @@ export function registerLocalMusicIpc(): void {
     return autoOrganize(onProgress)
   })
 
+  // Resolve a duplicate-artist suggestion: merge the variant spellings into the
+  // canonical one the user picked. Returns how many tracks were renamed.
+  ipcMain.handle('local:artist:merge', (_e, canonical: string, variants: string[]) =>
+    mergeArtist(canonical, variants))
+
   // ── Track metadata library ──────────────────────────────────────────────────
   // Tracks are addressed by their served id; the path is resolved from the last
   // scan's registry so these can't touch files outside the scanned folder.
@@ -108,6 +113,15 @@ export function registerLocalMusicIpc(): void {
 
   ipcMain.handle('local:meta:delete', (_e, localId: string) => {
     catalog.deleteMeta(localId)
+  })
+
+  // Drop a track from the library: delete the file if it's a library copy (leaves
+  // referenced-in-place source files intact), and clear its metadata + tags.
+  ipcMain.handle('local:track:drop', (_e, localId: string) => {
+    const res = lib.dropTrack(localId)
+    catalog.deleteMeta(localId)
+    taxonomy.deleteTags(localId)
+    return res
   })
 
   ipcMain.handle('local:read-tags', async (_e, localId: string) => {
@@ -188,9 +202,28 @@ export function registerLocalMusicIpc(): void {
   // data URLs (CSP-safe) plus a full-res URL to commit later.
   ipcMain.handle('local:art:search', (_e, scope: ArtScope, q: ArtQuery) => artSearch.searchArt(scope, q))
 
+  // "Best try": resolve many missing-art targets in one call, streaming throttled
+  // progress. Only the first match's thumbnail is downloaded per target (vs. the
+  // full search's up-to-MAX_RESULTS), so a big import is one IPC + N light lookups.
+  ipcMain.handle('local:art:bestTry', (e, reqs: ArtRequest[]) => {
+    let last = 0
+    const onProgress = (p: ArtBestTryProgress) => {
+      const now = Date.now()
+      if (p.done >= p.total || now - last > 120) {
+        last = now
+        if (!e.sender.isDestroyed()) e.sender.send('local:art:bestTry:progress', p)
+      }
+    }
+    return artSearch.bestTryArt(reqs, onProgress)
+  })
+
   // Commit a third-party image (by URL) as the artwork for (scope, key).
   ipcMain.handle('local:art:set-url', (_e, scope: ArtScope, key: string, url: string) =>
     art.setArtFromUrl(scope, key, url))
+
+  // Bulk-commit staged artwork in one call (downloads/reads run concurrently in
+  // main, then persist in a single transaction). Returns saved/failed counts.
+  ipcMain.handle('local:art:set-many', (_e, items: ArtSaveItem[]) => art.setArtMany(items))
 
   // ── Favorites (artists / albums / songs) ─────────────────────────────────────
   ipcMain.handle('local:fav:list', () => favorites.listFavorites())

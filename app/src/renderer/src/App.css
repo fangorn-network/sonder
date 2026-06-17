@@ -3281,6 +3281,13 @@ textarea {
   gap: 4px;
 }
 
+/* Hover/focus reveal for LocalArtThumb's overlay glyph. Defined once here rather
+   than injected per-thumb — the library lists render hundreds of these. */
+.local-art-thumb:hover .local-art-thumb__hint,
+.local-art-thumb:focus-visible .local-art-thumb__hint {
+  opacity: 1;
+}
+
 .tg-row-publish-btn:hover {
   opacity: 1;
   border-color: var(--accent-color);

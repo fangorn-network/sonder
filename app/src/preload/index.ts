@@ -4,8 +4,9 @@ import type { AgentProviderConfig, ProviderStatus } from "../main/agent/agent-pr
 import type { OllamaStatus } from "../main/agent/ollama-manager";
 import type { FangornAgentResponse } from "@fangorn-network/agent";
 import type {
-  ArtCandidate, ArtQuery, ArtScope, ImportMode, ImportProgress, ImportSummary, LibraryRoots,
-  LocalTrack, LocalTrackMeta, LocalTrackTags, OrganizeProgress, OrganizeReport,
+  ArtBestTryProgress, ArtCandidate, ArtQuery, ArtRequest, ArtSaveItem, ArtSaveResult, ArtScope,
+  ImportMode, ImportProgress, ImportSummary, LibraryRoots, LocalTrack, LocalTrackMeta,
+  LocalTrackTags, OrganizeProgress, OrganizeReport,
 } from "../main/local/types";
 import type { StoredMeta } from "../main/local/catalog";
 import type { StoredTags } from "../main/local/taxonomy";
@@ -40,6 +41,9 @@ export interface LocalMusicApi {
   autoOrganize(): Promise<OrganizeReport>
   /** Subscribe to auto-organize progress; returns an unsubscribe function. */
   onOrganizeProgress(cb: (p: OrganizeProgress) => void): () => void
+  /** Merge duplicate artist spellings into the chosen canonical one. Returns how
+   *  many tracks were renamed. */
+  mergeArtist(canonical: string, variants: string[]): Promise<number>
 
   // ── Metadata library ──────────────────────────────────────────────────
   /** Stored metadata for a track, or null if it hasn't been labeled. */
@@ -48,6 +52,10 @@ export interface LocalMusicApi {
   saveMeta(localId: string, meta: LocalTrackMeta): Promise<StoredMeta>
   /** Remove a track's metadata (returns it to Unlabeled). */
   deleteMeta(localId: string): Promise<void>
+  /** Drop a track from the library: deletes the file if it's a library copy
+   *  (leaves referenced-in-place source files intact) and clears its data.
+   *  Resolves with whether the on-disk file was deleted. */
+  dropTrack(localId: string): Promise<{ deletedFile: boolean }>
   /** Best-effort metadata read from the file's embedded tags (for prefill). */
   readTags(localId: string): Promise<LocalTrackMeta>
 
@@ -85,9 +93,18 @@ export interface LocalMusicApi {
   /** Search a third party (Deezer) for album covers / artist photos. Returns
    *  candidates with inline thumbnail data URLs and a full-res URL to commit. */
   searchArt(scope: ArtScope, query: ArtQuery): Promise<ArtCandidate[]>
+  /** "Best try" a whole batch in one call: returns the first match per request
+   *  (or null), in order. Downloads only that match's thumbnail per target. */
+  bestTryArt(reqs: ArtRequest[]): Promise<(ArtCandidate | null)[]>
+  /** Subscribe to progress for the in-flight bestTryArt batch; returns an
+   *  unsubscribe. */
+  onBestTryProgress(cb: (p: ArtBestTryProgress) => void): () => void
   /** Download a third-party image (by URL) and store it as the artwork for
    *  (scope, key); returns its data URL. */
   setArtFromUrl(scope: ArtScope, key: string, url: string): Promise<string | null>
+  /** Bulk-commit staged artwork in one call (resolved concurrently in main, then
+   *  persisted together). Returns how many were saved / failed. */
+  setArtMany(items: ArtSaveItem[]): Promise<ArtSaveResult>
   /** Remove the stored artwork for (scope, key). */
   clearArt(scope: ArtScope, key: string): Promise<void>
 
@@ -127,6 +144,7 @@ const localMusic: LocalMusicApi = {
   listRoots: () => ipcRenderer.invoke('local:roots:list'),
   removeRoot: (path) => ipcRenderer.invoke('local:roots:remove', path),
   autoOrganize: () => ipcRenderer.invoke('local:auto-organize'),
+  mergeArtist: (canonical, variants) => ipcRenderer.invoke('local:artist:merge', canonical, variants),
   onOrganizeProgress: (cb) => {
     const handler = (_e: unknown, p: OrganizeProgress) => cb(p)
     ipcRenderer.on('local:organize:progress', handler)
@@ -135,6 +153,7 @@ const localMusic: LocalMusicApi = {
   getMeta: (localId) => ipcRenderer.invoke('local:meta:get', localId),
   saveMeta: (localId, meta) => ipcRenderer.invoke('local:meta:upsert', localId, meta),
   deleteMeta: (localId) => ipcRenderer.invoke('local:meta:delete', localId),
+  dropTrack: (localId) => ipcRenderer.invoke('local:track:drop', localId),
   readTags: (localId) => ipcRenderer.invoke('local:read-tags', localId),
   getTrackTags: (localId) => ipcRenderer.invoke('local:tags:get', localId),
   listTrackTags: () => ipcRenderer.invoke('local:tags:list'),
@@ -147,7 +166,14 @@ const localMusic: LocalMusicApi = {
   pickImage: (scope) => ipcRenderer.invoke('local:art:pick', scope),
   setArtFile: (scope, key, path) => ipcRenderer.invoke('local:art:set-file', scope, key, path),
   searchArt: (scope, query) => ipcRenderer.invoke('local:art:search', scope, query),
+  bestTryArt: (reqs) => ipcRenderer.invoke('local:art:bestTry', reqs),
+  onBestTryProgress: (cb) => {
+    const handler = (_e: unknown, p: ArtBestTryProgress) => cb(p)
+    ipcRenderer.on('local:art:bestTry:progress', handler)
+    return () => ipcRenderer.removeListener('local:art:bestTry:progress', handler)
+  },
   setArtFromUrl: (scope, key, url) => ipcRenderer.invoke('local:art:set-url', scope, key, url),
+  setArtMany: (items) => ipcRenderer.invoke('local:art:set-many', items),
   clearArt: (scope, key) => ipcRenderer.invoke('local:art:clear', scope, key),
   listFavorites: () => ipcRenderer.invoke('local:fav:list'),
   toggleFavorite: (kind, ref) => ipcRenderer.invoke('local:fav:toggle', kind, ref),

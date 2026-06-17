@@ -23,7 +23,8 @@
  */
 
 import path from 'path'
-import { listMeta, readEmbeddedTags, upsertMeta } from './catalog'
+import { listMeta, readEmbeddedTags, setArtistName, upsertMeta } from './catalog'
+import { renameArtistArt } from './art'
 import { listRegistry } from './LocalLibrary'
 import type { MergeSuggestion, OrganizeProgress, OrganizeReport } from './types'
 
@@ -306,6 +307,32 @@ export async function autoOrganize(onProgress?: (p: OrganizeProgress) => void): 
     albumsMerged: mergedCount(albumGroups),
     artistSuggestions: artistSuggestions.slice(0, 20),
   }
+}
+
+/**
+ * Resolve a "possible duplicate artists" suggestion: rewrite every labeled track
+ * whose artist matches one of `variants` (by canonical key) to `canonical`, the
+ * spelling the user picked, and re-home that artist's stored artwork. Reuses the
+ * same canonKey the organizer groups by, so e.g. "God Smack", "god smack" and
+ * "Godsmack" all collapse. Returns how many tracks were changed.
+ */
+export function mergeArtist(canonical: string, variants: string[]): number {
+  const target = canonical.trim()
+  if (!target) return 0
+  // Match against every variant's canonical key, including the canonical's own
+  // (so case-only twins of the chosen spelling normalize too).
+  const keys = new Set([target, ...variants].map(canonKey))
+
+  let changed = 0
+  for (const m of listMeta().values()) {
+    if (m.byArtist !== target && keys.has(canonKey(m.byArtist))) {
+      setArtistName(m.localId, target)
+      changed++
+    }
+  }
+  // Move artist photo + album covers off the old spellings onto the canonical.
+  renameArtistArt(variants, target)
+  return changed
 }
 
 // Album groups are keyed by a composite (artist||album) string rather than a bare

@@ -16,7 +16,7 @@ import fs from 'fs'
 import mime from 'mime-types'
 import { net } from 'electron'
 import { getDb } from '../db'
-import type { ArtScope } from './types'
+import type { ArtSaveItem, ArtSaveResult, ArtScope } from './types'
 
 function normKey(key: string): string {
   return key.trim().toLowerCase()
@@ -102,6 +102,89 @@ export async function setArtFromUrl(scope: ArtScope, key: string, url: string): 
   return storeArt(scope, key, m, data)
 }
 
+/** Read an image off disk as bytes + content type (async sibling of fetchImage). */
+async function readImage(filePath: string): Promise<{ mime: string; data: Buffer }> {
+  const data = await fs.promises.readFile(filePath)
+  return { mime: (mime.lookup(filePath) || 'image/png') as string, data }
+}
+
+/** How many images a bulk save resolves at once. The remote downloads are the
+ *  slow part, so this parallelizes them without flooding the network. */
+const ART_SAVE_CONCURRENCY = 6
+
+/**
+ * Commit many staged artworks in one call. Bytes are resolved concurrently
+ * (remote URLs downloaded, local files read), then every success is persisted in
+ * a single SQLite transaction. Replaces the renderer awaiting one IPC + one
+ * download/read per target. Failures are skipped; returns success/failure counts.
+ */
+export async function setArtMany(items: ArtSaveItem[]): Promise<ArtSaveResult> {
+  interface Resolved { scope: ArtScope; key: string; mime: string; data: Buffer }
+  const resolved: (Resolved | null)[] = new Array(items.length).fill(null)
+
+  let next = 0
+  const worker = async (): Promise<void> => {
+    while (next < items.length) {
+      const i = next++
+      const it = items[i]
+      try {
+        const img = it.source === 'remote' ? await fetchImage(it.src) : await readImage(it.src)
+        resolved[i] = { scope: it.scope, key: it.key, mime: img.mime, data: img.data }
+      } catch {
+        /* skip — tallied as failed below */
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(ART_SAVE_CONCURRENCY, items.length) }, worker))
+
+  const ok = resolved.filter((r): r is Resolved => r !== null)
+  getDb().transaction((rows: Resolved[]) => {
+    for (const r of rows) storeArt(r.scope, r.key, r.mime, r.data)
+  })(ok)
+
+  return { saved: ok.length, failed: items.length - ok.length }
+}
+
 export function clearArt(scope: ArtScope, key: string): void {
   getDb().prepare('DELETE FROM local_art WHERE scope = ? AND art_key = ?').run(scope, normKey(key))
+}
+
+// Album art keys are `artist` + NUL + `album` (see renderer lib/artKeys.ts). Built
+// via fromCharCode so there's no raw NUL byte in this source file.
+const ART_KEY_SEP = String.fromCharCode(0)
+
+/**
+ * Re-home stored artwork after an artist merge: move the artist photo and every
+ * album cover keyed under an old artist spelling to the canonical artist. If the
+ * canonical key already has art, the canonical wins (the old row is dropped). Old
+ * spellings equal to the canonical (case-insensitively) are skipped. Album keys
+ * are matched by their `<artist>NUL` prefix via substr — avoids escaping a NUL in
+ * a LIKE pattern.
+ */
+export function renameArtistArt(oldNames: string[], canonical: string): void {
+  const db = getDb()
+  const canon = normKey(canonical)
+  const has = db.prepare('SELECT 1 FROM local_art WHERE scope = ? AND art_key = ?')
+  const del = db.prepare('DELETE FROM local_art WHERE scope = ? AND art_key = ?')
+  const upd = db.prepare('UPDATE local_art SET art_key = ?, updated_at = ? WHERE scope = ? AND art_key = ?')
+  const now = Date.now()
+  for (const name of oldNames) {
+    const old = normKey(name)
+    if (!old || old === canon) continue
+
+    // Artist photo.
+    if (has.get('artist', canon)) del.run('artist', old)
+    else upd.run(canon, now, 'artist', old)
+
+    // Album covers prefixed with this artist (`<old>NUL…`).
+    const prefix = old + ART_KEY_SEP
+    const rows = db
+      .prepare("SELECT art_key FROM local_art WHERE scope = 'album' AND substr(art_key, 1, ?) = ?")
+      .all(prefix.length, prefix) as { art_key: string }[]
+    for (const r of rows) {
+      const newKey = canon + r.art_key.slice(old.length)
+      if (has.get('album', newKey)) del.run('album', r.art_key)
+      else upd.run(newKey, now, 'album', r.art_key)
+    }
+  }
 }

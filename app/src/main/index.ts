@@ -22,7 +22,8 @@ import { registerSpotifyAuth, handleSpotifyCallback } from './spotify/SpotifyAut
 import { registerPlaybackIpc } from './playback/ipc'
 import { registerLocalMusicIpc } from './local/ipc'
 import { installLogCapture, registerBugReportIpc } from './bug-report'
-import snapshotManifest from './snapshot-manifest.json'
+// import snapshotManifest from './snapshot-manifest.json'
+import snapshotManifest from './small.json'
 
 // ─── Stream cache ─────────────────────────────────────────────────────────────
 interface StreamEntry {
@@ -601,7 +602,7 @@ async function ensureCollection(win: BrowserWindow, snapshot: { sha256: string }
   writeSnapshotMarker(sha256)
 }
 
-function startQueryServer(cacheDir: string, snapshotId: string) {
+function startQueryServer() {
   const root = is.dev ? app.getAppPath() : process.resourcesPath
   const serverName = process.platform === 'win32' ? 'server.exe' : 'server'
 
@@ -609,13 +610,12 @@ function startQueryServer(cacheDir: string, snapshotId: string) {
   // no chroma path, no checkpoint, no graph key — that all moved to the builder.
   // The vector dim is read from the recovered snapshot's collection (and query
   // embeddings are Matryoshka-truncated to match), so nothing is hardcoded here.
-  // --cache-dir + --snapshot-id let the server persist its lexical index to
-  // userData keyed by the recovered snapshot, so warmup reloads it instead of
-  // rescanning the whole collection on every launch.
+  // Text search is served by Qdrant full-text payload indexes (built on first
+  // launch, persisted in qdrant_storage), so there's no lexical-index cache to key.
   const [bin, args, cwd]: [string, string[], string] = app.isPackaged
     ? [
       path.join(root, serverName),
-      ['--collection', 'fangorn', '--cache-dir', cacheDir, '--snapshot-id', snapshotId],
+      ['--collection', 'fangorn'],
       root,
     ]
     : [
@@ -623,8 +623,6 @@ function startQueryServer(cacheDir: string, snapshotId: string) {
       [
         path.join(root, 'vectordb/server.py'),
         '--collection', 'fangorn',
-        '--cache-dir', cacheDir,
-        '--snapshot-id', snapshotId,
       ],
       path.join(root, 'vectordb'),
     ]
@@ -987,9 +985,14 @@ app.whenReady().then(async () => {
   // (download + decompress + recover on first run, skip if cached) → query server.
   try {
     const snapshot = await resolveSnapshot()
-    await waitForReady('http://127.0.0.1:6333/readyz')
+    // Generous timeout: on a cold start Qdrant mmaps a large (10M-point) collection
+    // and rebuilds any payload indexes baked into the config before it serves
+    // /readyz — that can take a couple of minutes. The default 60s aborts the boot
+    // mid-rebuild (and a stale full-text index makes this much worse until the query
+    // server's startup drops it).
+    await waitForReady('http://127.0.0.1:6333/readyz', 300000)
     await ensureCollection(mainWindow, snapshot)
-    startQueryServer(app.getPath('userData'), snapshot.sha256)
+    startQueryServer()
     await waitForReady('http://127.0.0.1:8080/health')
     // Hold the splash through warmup. /health is up as soon as the server binds,
     // but its lexical index + embedding model + vector index aren't hot yet —

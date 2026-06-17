@@ -14,9 +14,10 @@ import * as taxonomy from './taxonomy'
 import * as discovery from './discovery'
 import * as art from './art'
 import * as artSearch from './artSearch'
+import { autoOrganize } from './organize'
 import * as favorites from './favorites'
 import * as playlists from './playlists'
-import type { ArtQuery, ArtScope, ImportMode, ImportProgress, LocalTrackMeta, LocalTrackTags } from './types'
+import type { ArtQuery, ArtScope, ImportMode, ImportProgress, LocalTrackMeta, LocalTrackTags, OrganizeProgress } from './types'
 import type { FavKind } from './favorites'
 
 export function registerLocalMusicIpc(): void {
@@ -79,6 +80,20 @@ export function registerLocalMusicIpc(): void {
   ipcMain.handle('local:roots:list', () => lib.getRoots())
   ipcMain.handle('local:roots:remove', (_e, p: string) => { lib.removeExtraRoot(p) })
 
+  // ── Auto-organize (smart bulk labeling) ──────────────────────────────────────
+  // Resolve + merge + label every Unlabeled track, streaming throttled progress.
+  ipcMain.handle('local:auto-organize', (e) => {
+    let last = 0
+    const onProgress = (p: OrganizeProgress) => {
+      const now = Date.now()
+      if (p.processed >= p.total || now - last > 120) {
+        last = now
+        if (!e.sender.isDestroyed()) e.sender.send('local:organize:progress', p)
+      }
+    }
+    return autoOrganize(onProgress)
+  })
+
   // ── Track metadata library ──────────────────────────────────────────────────
   // Tracks are addressed by their served id; the path is resolved from the last
   // scan's registry so these can't touch files outside the scanned folder.
@@ -128,6 +143,10 @@ export function registerLocalMusicIpc(): void {
   ipcMain.handle('local:discoverable:list', () => discovery.listDiscoverableLocalIds())
 
   // ── Album / artist artwork ──────────────────────────────────────────────────
+  // Normalized keys that already have stored art — lets the renderer surface only
+  // the artists/albums still missing artwork without probing each key.
+  ipcMain.handle('local:art:keys', () => art.listArtKeys())
+
   ipcMain.handle('local:art:get', (_e, scope: ArtScope, key: string) => art.getArt(scope, key))
 
   ipcMain.handle('local:art:clear', (_e, scope: ArtScope, key: string) => { art.clearArt(scope, key) })

@@ -18,3 +18,7 @@ const ALBUM_ART_SEP = String.fromCharCode(0)
 export const artistArtKey = (name: string): string => name
 export const albumArtKeyOf = (artist: string, album: string): string =>
   `${artist}${ALBUM_ART_SEP}${album}`
+
+/** Match main's normKey (trim + lowercase) so a built key can be checked against
+ *  the stored-key set from `listArtKeys` to tell whether art already exists. */
+export const normalizeArtKey = (key: string): string => key.trim().toLowerCase()

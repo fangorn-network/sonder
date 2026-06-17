@@ -13,14 +13,17 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useLocalMusic, type ArtScope, type FavKind, type LocalTrack, type LocalTrackTags } from '../providers/LocalMusicProvider'
+import { useLocalMusic, type ArtScope, type FavKind, type LocalTrack, type LocalTrackTags, type OrganizeReport } from '../providers/LocalMusicProvider'
 import { LocalMetadataEditor } from '../components/LocalMetadataEditor'
 import { LocalBatchEditor } from '../components/LocalBatchEditor'
 import { LocalTrackTagEditor } from '../components/LocalTrackTagEditor'
 import { LocalArtThumb } from '../components/LocalArtThumb'
 import { LocalArtViewer } from '../components/LocalArtViewer'
 import { LocalImportDialog } from '../components/LocalImportDialog'
+import { OrganizeResults } from '../components/OrganizeResults'
+import { ArtworkFixerGrid } from '../components/ArtworkFixerGrid'
 import { artistArtKey, albumArtKeyOf } from '../lib/artKeys'
+import { missingArtTargets, type ArtTarget } from '../lib/artTargets'
 
 // ── Design tokens (shared theme vars — respects light/dark) ───────────────────
 const BG1 = 'var(--bg1)'
@@ -39,7 +42,7 @@ const MONO = 'var(--font-mono,"Fragment Mono","DM Mono",monospace)'
 const SANS = 'var(--font-body,"Geist","Inter",sans-serif)'
 const DISP = 'var(--font-display,"Bebas Neue",sans-serif)'
 
-type Tab = 'library' | 'favorites' | 'playlists' | 'unlabeled'
+type Tab = 'library' | 'favorites' | 'playlists' | 'unlabeled' | 'artwork'
 type GroupMode = 'artists' | 'albums' | 'tracks'
 
 const UNKNOWN_ARTIST = 'Unknown artist'
@@ -88,6 +91,25 @@ function groupByFolder(tracks: LocalTrack[]): FolderGroup[] {
   return [...m.values()].sort((a, b) => a.name.localeCompare(b.name))
 }
 
+// ── Search ────────────────────────────────────────────────────────────────────
+// A query is split into whitespace-separated terms; a candidate matches when ALL
+// terms appear (case-insensitively) somewhere in its searchable text — so
+// "dark beatles" narrows, it doesn't widen. Empty query matches everything.
+
+/** Lowercased, de-blanked terms from a raw query string. */
+const queryTerms = (q: string): string[] => q.trim().toLowerCase().split(/\s+/).filter(Boolean)
+
+/** True when every term is present in `haystack` (which must already be lowercased). */
+const matchesAll = (haystack: string, terms: string[]): boolean =>
+  terms.every((t) => haystack.includes(t))
+
+/** A track's searchable text: title, artist, album, and file name. */
+const trackHaystack = (t: LocalTrack): string =>
+  `${t.title} ${t.artist ?? ''} ${t.album ?? ''} ${baseName(t.path)}`.toLowerCase()
+
+const trackMatches = (t: LocalTrack, terms: string[]): boolean =>
+  matchesAll(trackHaystack(t), terms)
+
 export function LocalMusicView() {
   const lm = useLocalMusic()
 
@@ -99,8 +121,23 @@ export function LocalMusicView() {
   const [tagging, setTagging] = useState<LocalTrack | null>(null)
   const [batch, setBatch] = useState<{ name: string; tracks: LocalTrack[] } | null>(null)
   const [preview, setPreview] = useState<{ scope: ArtScope; key: string; label: string } | null>(null)
-  const [bulkRunning, setBulkRunning] = useState(false)
   const [importing, setImporting] = useState(false)
+  const [orgReport, setOrgReport] = useState<OrganizeReport | null>(null)
+  // One search box in the header filters whichever tab is open. Persists across
+  // tabs (a global "find") but is cleared when we jump to a specific artist/album
+  // so the drill-down isn't masked by an active search.
+  const [query, setQuery] = useState('')
+
+  // Stored-art keys, for the Artwork tab + its "missing" badge. Refetched on
+  // every artwork change so saved items drop off.
+  const [artHave, setArtHave] = useState<{ artist: string[]; album: string[] } | null>(null)
+  useEffect(() => {
+    lm.listArtKeys().then(setArtHave).catch(() => setArtHave({ artist: [], album: [] }))
+  }, [lm.listArtKeys, lm.artRev]) // eslint-disable-line react-hooks/exhaustive-deps
+  const missingArtCount = useMemo(
+    () => (artHave ? missingArtTargets(lm.libraryTracks, artHave).length : 0),
+    [lm.libraryTracks, artHave],
+  )
 
   // Scan lazily the first time the view is shown.
   useEffect(() => { lm.ensureLoaded() }, [lm.ensureLoaded]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -124,26 +161,26 @@ export function LocalMusicView() {
 
   // Jump from the Favorites tab into the Library's drill-down for that thing.
   const openArtist = (name: string) => {
-    setTab('library'); setGroupMode('artists'); setSelectedArtist(name); setSelectedAlbum(null)
+    setQuery(''); setTab('library'); setGroupMode('artists'); setSelectedArtist(name); setSelectedAlbum(null)
   }
   const openAlbum = (artist: string, album: string) => {
-    setTab('library'); setGroupMode('artists'); setSelectedArtist(artist); setSelectedAlbum(album)
+    setQuery(''); setTab('library'); setGroupMode('artists'); setSelectedArtist(artist); setSelectedAlbum(album)
   }
 
-  // Bulk auto-label: label every unlabeled track whose embedded tags already
-  // carry a title + artist. Sequential to stay gentle and let the list update.
-  const autoLabel = async () => {
-    setBulkRunning(true)
-    try {
-      for (const t of lm.unlabeledTracks) {
-        const tags = await lm.readTags(t.id)
-        if (tags.title.trim() && tags.byArtist.trim()) {
-          await lm.saveMeta(t.id, tags)
-        }
-      }
-    } finally {
-      setBulkRunning(false)
-    }
+  // Per-tab placeholder so the search box hints at what it'll match.
+  const searchPlaceholder = ({
+    library: 'Search songs, artists, albums…',
+    favorites: 'Search favorites…',
+    playlists: 'Search playlists…',
+    unlabeled: 'Search unlabeled files…',
+    artwork: 'Search artists & albums…',
+  } as Record<Tab, string>)[tab]
+
+  // Smart auto-organize: resolve every unlabeled track from tags + filename +
+  // folder, merge duplicate artist/album spellings, skip duplicate songs, and
+  // label what it can. Runs in the main process; we surface the report.
+  const runOrganize = async () => {
+    setOrgReport(await lm.autoOrganize())
   }
 
   return (
@@ -179,12 +216,18 @@ export function LocalMusicView() {
           <HeaderBtn label={lm.loading ? 'Scanning…' : 'Rescan'} onClick={lm.rescan} disabled={lm.loading} />
         </div>
 
+        {/* Search — filters whichever tab is active. */}
+        <div style={{ marginTop: 12 }}>
+          <SearchBox value={query} onChange={setQuery} placeholder={searchPlaceholder} />
+        </div>
+
         {/* Tabs */}
         <div style={{ display: 'flex', gap: 0, marginTop: 14 }}>
           <Tab label="Library" count={lm.libraryTracks.length} active={tab === 'library'} onClick={() => setTab('library')} />
           <Tab label="Favorites" count={favCount} active={tab === 'favorites'} onClick={() => setTab('favorites')} />
           <Tab label="Playlists" count={lm.playlists.length} active={tab === 'playlists'} onClick={() => setTab('playlists')} />
           <Tab label="Unlabeled" count={lm.unlabeledTracks.length} active={tab === 'unlabeled'} onClick={() => setTab('unlabeled')} />
+          <Tab label="Artwork" count={missingArtCount} active={tab === 'artwork'} onClick={() => setTab('artwork')} />
         </div>
       </div>
 
@@ -204,15 +247,16 @@ export function LocalMusicView() {
 
         {lm.tracks.length > 0 && tab === 'unlabeled' && (
           <UnlabeledPane
+            query={query}
             onEdit={setEditing}
             onLabelFolder={(name, tracks) => setBatch({ name, tracks })}
-            onAutoLabel={autoLabel}
-            bulkRunning={bulkRunning}
+            onOrganize={runOrganize}
           />
         )}
 
         {lm.tracks.length > 0 && tab === 'library' && (
           <LibraryPane
+            query={query}
             groupMode={groupMode}
             onGroupMode={switchGroup}
             selectedArtist={selectedArtist}
@@ -227,6 +271,7 @@ export function LocalMusicView() {
 
         {tab === 'favorites' && (
           <FavoritesPane
+            query={query}
             onEdit={setEditing}
             onTag={setTagging}
             onPreview={(scope, key, label) => setPreview({ scope, key, label })}
@@ -235,7 +280,9 @@ export function LocalMusicView() {
           />
         )}
 
-        {tab === 'playlists' && <PlaylistsPane />}
+        {tab === 'playlists' && <PlaylistsPane query={query} />}
+
+        {tab === 'artwork' && <ArtworkPane have={artHave} query={query} />}
       </div>
 
       {/* ── Player bar ─────────────────────────────────────────────────── */}
@@ -258,6 +305,9 @@ export function LocalMusicView() {
           onImported={() => setTab('unlabeled')}
         />
       )}
+
+      {/* ── Auto-organize report ────────────────────────────────────────── */}
+      {orgReport && <OrganizeReportModal report={orgReport} onClose={() => setOrgReport(null)} />}
     </div>
   )
 }
@@ -265,25 +315,47 @@ export function LocalMusicView() {
 // ─── Unlabeled pane ────────────────────────────────────────────────────────────
 
 function UnlabeledPane({
-  onEdit, onLabelFolder, onAutoLabel, bulkRunning,
+  query, onEdit, onLabelFolder, onOrganize,
 }: {
+  query: string
   onEdit: (t: LocalTrack) => void
   onLabelFolder: (name: string, tracks: LocalTrack[]) => void
-  onAutoLabel: () => void
-  bulkRunning: boolean
+  onOrganize: () => void
 }) {
   const lm = useLocalMusic()
   const tracks = lm.unlabeledTracks
   const [selectedDir, setSelectedDir] = useState<string | null>(null)
 
   const folders = useMemo(() => groupByFolder(tracks), [tracks])
+  const terms = useMemo(() => queryTerms(query), [query])
+  const matches = useMemo(
+    () => (terms.length ? tracks.filter((t) => trackMatches(t, terms)) : []),
+    [tracks, terms],
+  )
 
   if (tracks.length === 0) {
     return <EmptyState text="Everything here is labeled." hint="New unlabeled files will show up after a rescan." />
   }
 
-  const autoBtn = <HeaderBtn label={bulkRunning ? 'Labeling…' : 'Auto-label from tags'} onClick={onAutoLabel} disabled={bulkRunning} />
+  const organizeLabel = lm.organizing
+    ? (lm.organizeProgress ? `Organizing ${lm.organizeProgress.processed}/${lm.organizeProgress.total}…` : 'Organizing…')
+    : 'Auto-organize'
+  const autoBtn = <HeaderBtn label={organizeLabel} onClick={onOrganize} disabled={lm.organizing} />
   const labelFolderBtn = (g: FolderGroup) => <HeaderBtn label={`Label all (${g.tracks.length})`} onClick={() => onLabelFolder(g.name, g.tracks)} />
+
+  // Searching → a flat list of matching files across every folder.
+  if (terms.length) {
+    return (
+      <>
+        <SearchResultBar count={matches.length}>{autoBtn}</SearchResultBar>
+        {matches.length === 0
+          ? <EmptyState text="No unlabeled files match your search." hint="Try fewer or different words." />
+          : matches.map((track, i) => (
+            <TrackRow key={track.id} index={i + 1} track={track} actionLabel="Add details" onAction={() => onEdit(track)} />
+          ))}
+      </>
+    )
+  }
 
   // Drilled into a folder, or there's only one folder → show its tracks with a
   // "Label all" for that folder.
@@ -339,8 +411,9 @@ function UnlabeledPane({
 // ─── Library pane ──────────────────────────────────────────────────────────────
 
 function LibraryPane({
-  groupMode, onGroupMode, selectedArtist, selectedAlbum, onSelectArtist, onSelectAlbum, onEdit, onTag, onPreview,
+  query, groupMode, onGroupMode, selectedArtist, selectedAlbum, onSelectArtist, onSelectAlbum, onEdit, onTag, onPreview,
 }: {
+  query: string
   groupMode: GroupMode
   onGroupMode: (m: GroupMode) => void
   selectedArtist: string | null
@@ -356,6 +429,12 @@ function LibraryPane({
   // Browse vs edit: in browse, clicking art opens it full-size and rows just
   // play; edit mode exposes art set/replace/remove and per-track Edit.
   const [editMode, setEditMode] = useState(false)
+
+  const terms = useMemo(() => queryTerms(query), [query])
+  const matches = useMemo(
+    () => (terms.length ? tracks.filter((t) => trackMatches(t, terms)) : []),
+    [tracks, terms],
+  )
 
   // Builds the leading artwork thumb for a group row, wired for the current mode.
   const artThumb = (scope: ArtScope, key: string, label: string, shape: 'square' | 'circle') => (
@@ -406,6 +485,31 @@ function LibraryPane({
       />
     ))
 
+  const editToggle = (
+    <button
+      onClick={() => setEditMode((v) => !v)}
+      title={editMode ? 'Done editing' : 'Edit library'}
+      style={{
+        background: editMode ? ACCENT_DIM : 'none', border: `1px solid ${editMode ? ACCENT_BORDER : BORDER2}`,
+        color: editMode ? ACCENT : FG3, fontFamily: MONO, fontSize: 10, letterSpacing: '0.10em',
+        textTransform: 'uppercase', padding: '5px 12px', cursor: 'pointer',
+      }}
+    >{editMode ? 'Done' : 'Edit'}</button>
+  )
+
+  // Searching → a flat list of matching songs across the whole library, so the
+  // group mode and any drill-down are bypassed.
+  if (terms.length) {
+    return (
+      <>
+        <SearchResultBar count={matches.length}>{editToggle}</SearchResultBar>
+        {matches.length === 0
+          ? <EmptyState text="No songs match your search." hint="Try fewer or different words." />
+          : flatList(matches)}
+      </>
+    )
+  }
+
   // Drill-down breadcrumb. In Artists mode the trail is Artist › Album; in Albums
   // mode it's just the album. "Back" pops one level.
   const crumbs: { label: string; onClick?: () => void }[] = []
@@ -437,15 +541,7 @@ function LibraryPane({
           </>
         )}
         <span style={{ flex: 1 }} />
-        <button
-          onClick={() => setEditMode((v) => !v)}
-          title={editMode ? 'Done editing' : 'Edit library'}
-          style={{
-            background: editMode ? ACCENT_DIM : 'none', border: `1px solid ${editMode ? ACCENT_BORDER : BORDER2}`,
-            color: editMode ? ACCENT : FG3, fontFamily: MONO, fontSize: 10, letterSpacing: '0.10em',
-            textTransform: 'uppercase', padding: '5px 12px', cursor: 'pointer',
-          }}
-        >{editMode ? 'Done' : 'Edit'}</button>
+        {editToggle}
       </PaneToolbar>
 
       {/* Tracks */}
@@ -567,6 +663,126 @@ function LibraryPane({
   )
 }
 
+// ─── Artwork pane ───────────────────────────────────────────────────────────────
+// Manage album / artist artwork across the whole library, using the same picker
+// (local file or online search) as the metadata editor. Defaults to the items
+// still missing art; toggle to show everything to replace existing artwork.
+// Albums and artists are split into their own collapsible sections (with an
+// "Unknown" catch-all for anything that doesn't classify) so each can be tackled
+// — and best-tried / saved — on its own.
+function ArtworkPane({ have, query }: { have: { artist: string[]; album: string[] } | null; query: string }) {
+  const lm = useLocalMusic()
+  const [missingOnly, setMissingOnly] = useState(true)
+  const terms = useMemo(() => queryTerms(query), [query])
+
+  const targets = useMemo(() => {
+    // An empty have-set means "nothing has art" → every artist/album shows.
+    const haveSet = missingOnly ? (have ?? { artist: [], album: [] }) : { artist: [], album: [] }
+    return missingArtTargets(lm.libraryTracks, haveSet)
+  }, [lm.libraryTracks, have, missingOnly])
+
+  // Narrow to the search (artist + album name), then best-effort split by scope.
+  // `unknown` is a defensive bucket — with today's data every target is a known
+  // artist/album, but anything we can't classify still surfaces here.
+  const { artists, albums, unknown } = useMemo(() => {
+    const shown = terms.length
+      ? targets.filter((t) => matchesAll(`${t.artist} ${t.album ?? ''}`.toLowerCase(), terms))
+      : targets
+    const artists: ArtTarget[] = []
+    const albums: ArtTarget[] = []
+    const unknown: ArtTarget[] = []
+    for (const t of shown) {
+      if (t.scope === 'artist') artists.push(t)
+      else if (t.scope === 'album') albums.push(t)
+      else unknown.push(t)
+    }
+    return { artists, albums, unknown }
+  }, [targets, terms])
+  const shownCount = artists.length + albums.length + unknown.length
+
+  if (lm.libraryTracks.length === 0) {
+    return <EmptyState text="No artwork to manage yet." hint="Label some tracks first — artwork is keyed by artist and album." />
+  }
+
+  return (
+    <div style={{ padding: '16px 22px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <span style={{ flex: 1, fontFamily: MONO, fontSize: 10.5, color: FG3, lineHeight: 1.5 }}>
+          {missingOnly
+            ? 'Artists and albums in your library that don’t have artwork yet.'
+            : 'Every artist and album. Pick a new image to replace existing artwork.'}
+        </span>
+        <button
+          onClick={() => setMissingOnly((v) => !v)}
+          style={{
+            background: 'none', border: `1px solid ${BORDER2}`, color: FG2, fontFamily: MONO,
+            fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '6px 12px', cursor: 'pointer', whiteSpace: 'nowrap',
+          }}
+        >{missingOnly ? 'Show all' : 'Missing only'}</button>
+      </div>
+
+      {shownCount === 0 ? (
+        <div style={{ fontFamily: MONO, fontSize: 11, color: FG3, padding: '8px 0' }}>
+          {terms.length
+            ? 'No artists or albums match your search.'
+            : missingOnly ? 'Every artist and album has artwork. 🎉' : 'Your library is empty.'}
+        </div>
+      ) : (
+        <>
+          {artists.length > 0 && (
+            <ArtworkSection label="Artists" count={artists.length} defaultOpen>
+              <ArtworkFixerGrid targets={artists} />
+            </ArtworkSection>
+          )}
+          {albums.length > 0 && (
+            <ArtworkSection label="Albums" count={albums.length} defaultOpen>
+              <ArtworkFixerGrid targets={albums} />
+            </ArtworkSection>
+          )}
+          {unknown.length > 0 && (
+            <ArtworkSection label="Unknown" count={unknown.length} hint="couldn’t tell artist from album">
+              <ArtworkFixerGrid targets={unknown} />
+            </ArtworkSection>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
+/** A collapsible, titled group within the Artwork tab (Artists / Albums / Unknown). */
+function ArtworkSection({
+  label, count, hint, defaultOpen = false, children,
+}: {
+  label: string; count: number; hint?: string; defaultOpen?: boolean; children: React.ReactNode
+}) {
+  const [open, setOpen] = useState(defaultOpen)
+  return (
+    <div style={{ border: `1px solid ${BORDER2}` }}>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        style={{
+          width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px',
+          background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left',
+        }}
+      >
+        <span style={{
+          display: 'inline-block', fontSize: 8, color: FG3,
+          transition: 'transform 120ms ease', transform: open ? 'rotate(90deg)' : 'rotate(0deg)',
+        }}>▶</span>
+        <span style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: FG2 }}>{label}</span>
+        <span style={{ fontFamily: MONO, fontSize: 10, color: FG4 }}>{count}</span>
+        {hint && <span style={{ flex: 1, textAlign: 'right', fontFamily: MONO, fontSize: 9, color: FG4, letterSpacing: '0.04em' }}>{hint}</span>}
+      </button>
+      {open && (
+        <div style={{ padding: '6px 14px 16px', borderTop: `1px solid ${BORDER2}` }}>
+          {children}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Shared sub-components ──────────────────────────────────────────────────────
 
 function Tab({ label, count, active, onClick }: { label: string; count: number; active: boolean; onClick: () => void }) {
@@ -610,6 +826,48 @@ function PaneToolbar({ children }: { children: React.ReactNode }) {
       display: 'flex', alignItems: 'center', gap: 10, padding: '12px 22px',
       borderBottom: `1px solid ${BORDER2}`,
     }}>{children}</div>
+  )
+}
+
+/** The header search box. Controlled; clears on the ✕ or Escape. */
+function SearchBox({ value, onChange, placeholder }: {
+  value: string; onChange: (v: string) => void; placeholder: string
+}) {
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 8, background: BG2,
+      border: `1px solid ${value ? ACCENT_BORDER : BORDER2}`, padding: '6px 10px',
+    }}>
+      <span aria-hidden style={{ color: value ? ACCENT : FG4, fontFamily: MONO, fontSize: 13, lineHeight: 1 }}>⌕</span>
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => { if (e.key === 'Escape') onChange('') }}
+        placeholder={placeholder}
+        spellCheck={false}
+        style={{ flex: 1, minWidth: 0, background: 'none', border: 'none', outline: 'none', color: FG, fontFamily: SANS, fontSize: 13 }}
+      />
+      {value && (
+        <button
+          onClick={() => onChange('')}
+          title="Clear search (Esc)"
+          style={{ flexShrink: 0, background: 'none', border: 'none', color: FG4, cursor: 'pointer', fontFamily: MONO, fontSize: 12, lineHeight: 1, padding: 0 }}
+        >✕</button>
+      )}
+    </div>
+  )
+}
+
+/** A toolbar that just reports how many items a search turned up. */
+function SearchResultBar({ count, children }: { count: number; children?: React.ReactNode }) {
+  return (
+    <PaneToolbar>
+      <span style={{ fontFamily: MONO, fontSize: 11, color: FG3 }}>
+        {count} result{count === 1 ? '' : 's'}
+      </span>
+      <span style={{ flex: 1 }} />
+      {children}
+    </PaneToolbar>
   )
 }
 
@@ -1008,8 +1266,9 @@ function AddToPlaylistBtn({ localId }: { localId: string }) {
 // ─── Favorites pane ─────────────────────────────────────────────────────────────
 
 function FavoritesPane({
-  onEdit, onTag, onPreview, onOpenArtist, onOpenAlbum,
+  query, onEdit, onTag, onPreview, onOpenArtist, onOpenAlbum,
 }: {
+  query: string
   onEdit: (t: LocalTrack) => void
   onTag: (t: LocalTrack) => void
   onPreview: (scope: ArtScope, key: string, label: string) => void
@@ -1017,18 +1276,33 @@ function FavoritesPane({
   onOpenAlbum: (artist: string, album: string) => void
 }) {
   const lm = useLocalMusic()
+  const terms = useMemo(() => queryTerms(query), [query])
 
-  const favArtists = useMemo(
+  const allFavArtists = useMemo(
     () => [...lm.favorites.artist].sort((a, b) => a.localeCompare(b)),
     [lm.favorites],
   )
-  const favAlbums = useMemo(
+  const allFavAlbums = useMemo(
     () => [...lm.favorites.album].map(parseFavAlbum).sort((a, b) => a.album.localeCompare(b.album)),
     [lm.favorites],
   )
-  const favTracks = useMemo(
+  const allFavTracks = useMemo(
     () => lm.tracks.filter((t) => lm.favorites.track.has(t.id)),
     [lm.tracks, lm.favorites],
+  )
+
+  // Apply the search to each section (artists by name; albums by album + artist).
+  const favArtists = useMemo(
+    () => allFavArtists.filter((name) => matchesAll(name.toLowerCase(), terms)),
+    [allFavArtists, terms],
+  )
+  const favAlbums = useMemo(
+    () => allFavAlbums.filter(({ artist, album }) => matchesAll(`${album} ${artist}`.toLowerCase(), terms)),
+    [allFavAlbums, terms],
+  )
+  const favTracks = useMemo(
+    () => allFavTracks.filter((t) => trackMatches(t, terms)),
+    [allFavTracks, terms],
   )
 
   // Catalog discoverability for the favorited artists/albums, derived from which
@@ -1044,8 +1318,12 @@ function FavoritesPane({
     return s
   }, [lm.tracks, lm.discoverableIds])
 
-  if (favArtists.length === 0 && favAlbums.length === 0 && favTracks.length === 0) {
+  if (allFavArtists.length === 0 && allFavAlbums.length === 0 && allFavTracks.length === 0) {
     return <EmptyState text="No favorites yet." hint="Tap the ♥ on any artist, album, or song to save it here." />
+  }
+
+  if (terms.length && favArtists.length === 0 && favAlbums.length === 0 && favTracks.length === 0) {
+    return <EmptyState text="No favorites match your search." hint="Try fewer or different words." />
   }
 
   return (
@@ -1098,7 +1376,7 @@ function FavoritesPane({
 
 // ─── Playlists pane ─────────────────────────────────────────────────────────────
 
-function PlaylistsPane() {
+function PlaylistsPane({ query }: { query: string }) {
   const lm = useLocalMusic()
   const [selected, setSelected] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
@@ -1106,6 +1384,7 @@ function PlaylistsPane() {
   const [renaming, setRenaming] = useState(false)
   const [renameText, setRenameText] = useState('')
 
+  const terms = useMemo(() => queryTerms(query), [query])
   const byId = useMemo(() => new Map(lm.tracks.map((t) => [t.id, t])), [lm.tracks])
   const current = selected ? lm.playlists.find((p) => p.id === selected) ?? null : null
 
@@ -1120,6 +1399,8 @@ function PlaylistsPane() {
   if (current) {
     const tracks = current.trackIds.map((id) => byId.get(id)).filter((t): t is LocalTrack => !!t)
     const missing = current.trackIds.length - tracks.length
+    // Search filters the rows shown within this playlist.
+    const shown = terms.length ? tracks.filter((t) => trackMatches(t, terms)) : tracks
     const saveRename = async () => {
       const n = renameText.trim()
       if (n && n !== current.name) await lm.renamePlaylist(current.id, n)
@@ -1155,15 +1436,17 @@ function PlaylistsPane() {
           <HeaderBtn label="Play all" onClick={() => { if (tracks[0]) lm.playTrack(tracks[0], tracks) }} disabled={tracks.length === 0} />
           <HeaderBtn label="Delete" onClick={() => { void lm.deletePlaylist(current.id); setSelected(null) }} />
         </PaneToolbar>
-        {tracks.length === 0 && (
-          <EmptyState text="This playlist is empty." hint="Add songs with the ＋ button on any track in your library." />
+        {shown.length === 0 && (
+          terms.length
+            ? <EmptyState text="No tracks in this playlist match your search." hint="Try fewer or different words." />
+            : <EmptyState text="This playlist is empty." hint="Add songs with the ＋ button on any track in your library." />
         )}
-        {tracks.map((track, i) => (
+        {shown.map((track, i) => (
           <TrackRow
             key={track.id}
             index={i + 1}
             track={track}
-            queue={tracks}
+            queue={shown}
             library
             actionLabel="Remove"
             onAction={() => lm.removeFromPlaylist(current.id, track.id)}
@@ -1179,11 +1462,16 @@ function PlaylistsPane() {
   }
 
   // ── Playlist list ──
+  const shownPlaylists = terms.length
+    ? lm.playlists.filter((pl) => matchesAll(pl.name.toLowerCase(), terms))
+    : lm.playlists
   return (
     <>
       <PaneToolbar>
         <span style={{ fontFamily: MONO, fontSize: 11, color: FG3 }}>
-          {lm.playlists.length} playlist{lm.playlists.length === 1 ? '' : 's'}
+          {terms.length
+            ? `${shownPlaylists.length} of ${lm.playlists.length} playlist${lm.playlists.length === 1 ? '' : 's'}`
+            : `${lm.playlists.length} playlist${lm.playlists.length === 1 ? '' : 's'}`}
         </span>
         <span style={{ flex: 1 }} />
         {creating ? (
@@ -1205,7 +1493,10 @@ function PlaylistsPane() {
       {lm.playlists.length === 0 && !creating && (
         <EmptyState text="No playlists yet." hint="Create one, then add songs with the ＋ button on any track." />
       )}
-      {lm.playlists.map((pl) => (
+      {lm.playlists.length > 0 && shownPlaylists.length === 0 && (
+        <EmptyState text="No playlists match your search." hint="Try fewer or different words." />
+      )}
+      {shownPlaylists.map((pl) => (
         <GroupRow
           key={pl.id}
           title={pl.name}
@@ -1294,5 +1585,37 @@ function CtrlBtn({
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}
     >{children}</button>
+  )
+}
+
+/** Modal wrapper around the shared results screen (Unlabeled-tab "Auto-organize").
+ *  Same component the import flow uses; with no import `summary` it shows just the
+ *  report plus the finish-up artwork / review steps, scoped to the whole library. */
+function OrganizeReportModal({ report, onClose }: { report: OrganizeReport; onClose: () => void }) {
+  const lm = useLocalMusic()
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.45)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 30, padding: 24,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{ width: 480, maxWidth: '100%', maxHeight: '100%', display: 'flex', flexDirection: 'column', background: BG1, border: `1px solid ${BORDER}`, color: FG }}
+      >
+        <div style={{ padding: '16px 20px', borderBottom: `1px solid ${BORDER}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+          <div style={{ fontFamily: DISP, fontSize: 22, letterSpacing: '0.05em' }}>AUTO-ORGANIZE</div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: FG4, fontSize: 18, cursor: 'pointer', fontFamily: MONO }}>✕</button>
+        </div>
+        <OrganizeResults
+          report={report}
+          artScopeTracks={lm.libraryTracks}
+          primaryLabel="Done"
+          onPrimary={onClose}
+        />
+      </div>
+    </div>
   )
 }

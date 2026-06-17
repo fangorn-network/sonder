@@ -5,7 +5,7 @@ import type { OllamaStatus } from "../main/agent/ollama-manager";
 import type { FangornAgentResponse } from "@fangorn-network/agent";
 import type {
   ArtCandidate, ArtQuery, ArtScope, ImportMode, ImportProgress, ImportSummary, LibraryRoots,
-  LocalTrack, LocalTrackMeta, LocalTrackTags,
+  LocalTrack, LocalTrackMeta, LocalTrackTags, OrganizeProgress, OrganizeReport,
 } from "../main/local/types";
 import type { StoredMeta } from "../main/local/catalog";
 import type { StoredTags } from "../main/local/taxonomy";
@@ -35,6 +35,11 @@ export interface LocalMusicApi {
   listRoots(): Promise<LibraryRoots>
   /** Remove a referenced-in-place folder. */
   removeRoot(path: string): Promise<void>
+  /** Smart-label every Unlabeled track (tags + filename + folder, with merging).
+   *  Returns a report of what was labeled / merged / left for review. */
+  autoOrganize(): Promise<OrganizeReport>
+  /** Subscribe to auto-organize progress; returns an unsubscribe function. */
+  onOrganizeProgress(cb: (p: OrganizeProgress) => void): () => void
 
   // ── Metadata library ──────────────────────────────────────────────────
   /** Stored metadata for a track, or null if it hasn't been labeled. */
@@ -62,6 +67,9 @@ export interface LocalMusicApi {
   listDiscoverable(): Promise<string[]>
 
   // ── Album / artist artwork ────────────────────────────────────────────
+  /** Normalized keys that already have stored art, grouped by scope — for
+   *  flagging which artists/albums still need artwork. */
+  listArtKeys(): Promise<{ artist: string[]; album: string[] }>
   /** Stored artwork for (scope, key) as a data URL, or null if none. */
   getArt(scope: ArtScope, key: string): Promise<string | null>
   /** Open the image picker and store the chosen image; returns its data URL,
@@ -118,6 +126,12 @@ const localMusic: LocalMusicApi = {
   },
   listRoots: () => ipcRenderer.invoke('local:roots:list'),
   removeRoot: (path) => ipcRenderer.invoke('local:roots:remove', path),
+  autoOrganize: () => ipcRenderer.invoke('local:auto-organize'),
+  onOrganizeProgress: (cb) => {
+    const handler = (_e: unknown, p: OrganizeProgress) => cb(p)
+    ipcRenderer.on('local:organize:progress', handler)
+    return () => ipcRenderer.removeListener('local:organize:progress', handler)
+  },
   getMeta: (localId) => ipcRenderer.invoke('local:meta:get', localId),
   saveMeta: (localId, meta) => ipcRenderer.invoke('local:meta:upsert', localId, meta),
   deleteMeta: (localId) => ipcRenderer.invoke('local:meta:delete', localId),
@@ -127,6 +141,7 @@ const localMusic: LocalMusicApi = {
   saveTrackTags: (localId, tags) => ipcRenderer.invoke('local:tags:upsert', localId, tags),
   deleteTrackTags: (localId) => ipcRenderer.invoke('local:tags:delete', localId),
   listDiscoverable: () => ipcRenderer.invoke('local:discoverable:list'),
+  listArtKeys: () => ipcRenderer.invoke('local:art:keys'),
   getArt: (scope, key) => ipcRenderer.invoke('local:art:get', scope, key),
   pickArt: (scope, key) => ipcRenderer.invoke('local:art:pick-set', scope, key),
   pickImage: (scope) => ipcRenderer.invoke('local:art:pick', scope),

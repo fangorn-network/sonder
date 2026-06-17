@@ -11,8 +11,9 @@
  * with a remove control so the in-place option stays manageable.
  */
 
-import { useState } from 'react'
-import { useLocalMusic, type ImportMode, type ImportSummary } from '../providers/LocalMusicProvider'
+import { useEffect, useMemo, useState } from 'react'
+import { useLocalMusic, type ImportMode, type ImportSummary, type OrganizeReport } from '../providers/LocalMusicProvider'
+import { OrganizeResults } from './OrganizeResults'
 
 const BG1 = 'var(--bg1)'
 const BG2 = 'var(--bg2)'
@@ -29,7 +30,28 @@ const MONO = 'var(--font-mono,"Fragment Mono","DM Mono",monospace)'
 const SANS = 'var(--font-body,"Geist","Inter",sans-serif)'
 const DISP = 'var(--font-display,"Bebas Neue",sans-serif)'
 
-const baseName = (p: string) => p.split(/[\\/]/).filter(Boolean).pop() ?? p
+/** Is `p` the folder `root` or a file beneath it? Used to scope the just-imported
+ *  tracks (which live under the copy destination, or the referenced source). */
+function underRoot(p: string, root: string): boolean {
+  if (!root) return false
+  const r = root.replace(/[\\/]+$/, '')
+  return p === r || p.startsWith(`${r}/`) || p.startsWith(`${r}\\`)
+}
+
+/** Where this import's tracks landed: the copy destination, else the referenced
+ *  source folder. */
+const importRootOf = (s: ImportSummary): string => s.dest ?? s.source
+
+/** Human, deliberately rough remaining-time label (e.g. "~3 min", "~1h 12m"). */
+function formatDuration(ms: number): string {
+  const secs = Math.max(1, Math.round(ms / 1000))
+  if (secs < 60) return `~${secs}s`
+  const mins = Math.round(secs / 60)
+  if (mins < 60) return `~${mins} min`
+  const hrs = Math.floor(mins / 60)
+  const rem = mins % 60
+  return rem ? `~${hrs}h ${rem}m` : `~${hrs}h`
+}
 
 export function LocalImportDialog({
   onClose, onImported,
@@ -43,7 +65,18 @@ export function LocalImportDialog({
   const [source, setSource] = useState<{ path: string; audioCount: number } | null>(null)
   const [mode, setMode] = useState<ImportMode>('copy')
   const [summary, setSummary] = useState<ImportSummary | null>(null)
+  const [orgReport, setOrgReport] = useState<OrganizeReport | null>(null)
   const [error, setError] = useState<string | null>(null)
+
+  const busy = lm.importing || lm.organizing
+
+  // Library tracks from THIS import (under the copy dest / referenced source) —
+  // the scope for the results screen's "Add artwork" / review steps.
+  const importRoot = summary ? importRootOf(summary) : ''
+  const importedLibrary = useMemo(
+    () => (importRoot ? lm.libraryTracks.filter((t) => underRoot(t.path, importRoot)) : []),
+    [lm.libraryTracks, importRoot],
+  )
 
   const choose = async () => {
     setError(null)
@@ -52,25 +85,54 @@ export function LocalImportDialog({
   }
 
   const empty = !!source && source.audioCount === 0
-  const canImport = !!source && !empty && !lm.importing
+  const canImport = !!source && !empty && !busy
 
   const run = async () => {
     if (!source || !canImport) return
     setError(null)
     try {
       setSummary(await lm.importMusic(source.path, mode))
+      // Auto-organize the freshly imported (Unlabeled) tracks.
+      setOrgReport(await lm.autoOrganize())
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Import failed')
     }
   }
 
-  const pct = lm.importProgress && lm.importProgress.total > 0
-    ? Math.round((lm.importProgress.processed / lm.importProgress.total) * 100)
-    : null
+  // Active progress: import (copy) first, then auto-organize.
+  const prog = lm.importing ? lm.importProgress : lm.organizing ? lm.organizeProgress : null
+  const phase = lm.importing ? (mode === 'copy' ? 'Copying…' : 'Adding folder…') : lm.organizing ? 'Auto-organizing…' : ''
+  const pct = prog && prog.total > 0 ? Math.round((prog.processed / prog.total) * 100) : null
+
+  // Rough ETA for the copy import. A clock ticks `now` every 500ms; `startedAt`
+  // is anchored to it the moment copying begins (the blessed "adjust state during
+  // render" pattern, so no impure Date.now() in render or handlers). We then
+  // project the remaining files off the average files/sec rate — average (not
+  // instantaneous) stays stable despite per-file size swings — waiting a beat
+  // before showing a (rounded) estimate.
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 500)
+    return () => clearInterval(id)
+  }, [])
+  const [startedAt, setStartedAt] = useState<number | null>(null)
+  const [wasImporting, setWasImporting] = useState(false)
+  if (lm.importing !== wasImporting) {
+    setWasImporting(lm.importing)
+    setStartedAt(lm.importing ? now : null)
+  }
+  const eta = useMemo(() => {
+    const p = lm.importProgress
+    if (!lm.importing || startedAt == null || !p || p.total <= 0 || p.processed <= 0) return null
+    const elapsed = now - startedAt
+    const remaining = p.total - p.processed
+    if (elapsed < 1500 || remaining <= 0) return null // too early / done
+    return formatDuration((remaining / p.processed) * elapsed)
+  }, [lm.importing, lm.importProgress, startedAt, now])
 
   return (
     <div
-      onClick={lm.importing ? undefined : onClose}
+      onClick={busy ? undefined : onClose}
       style={{
         position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.45)',
         display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 30, padding: 24,
@@ -91,20 +153,30 @@ export function LocalImportDialog({
               Bring in a folder or an external drive
             </div>
           </div>
-          <button onClick={onClose} disabled={lm.importing} style={{ background: 'none', border: 'none', color: FG4, fontSize: 18, cursor: lm.importing ? 'default' : 'pointer', fontFamily: MONO, opacity: lm.importing ? 0.4 : 1 }}>✕</button>
+          <button onClick={onClose} disabled={busy} style={{ background: 'none', border: 'none', color: FG4, fontSize: 18, cursor: busy ? 'default' : 'pointer', fontFamily: MONO, opacity: busy ? 0.4 : 1 }}>✕</button>
         </div>
 
-        {/* Body */}
-        <div style={{ flex: 1, overflowY: 'auto', minHeight: 80 }}>
-          {summary ? (
-            <SummaryView summary={summary} />
-          ) : (
-            <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {summary ? (
+          // Once imported, the shared results screen takes over (summary + the
+          // auto-organize report + finish-up artwork / review).
+          <OrganizeResults
+            report={orgReport}
+            organizing={lm.organizing}
+            organizeProgress={lm.organizeProgress}
+            summary={summary}
+            artScopeTracks={importedLibrary}
+            primaryLabel="Go to Unlabeled"
+            onPrimary={() => { onImported(summary); onClose() }}
+          />
+        ) : (
+          <>
+            {/* Body */}
+            <div style={{ flex: 1, overflowY: 'auto', minHeight: 80, padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
               {/* Source */}
               <div>
                 <Label>Source folder</Label>
                 <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <SmallBtn label={source ? 'Change…' : 'Choose folder…'} onClick={choose} disabled={lm.importing} />
+                  <SmallBtn label={source ? 'Change…' : 'Choose folder…'} onClick={choose} disabled={busy} />
                   {source && (
                     <span style={{ minWidth: 0, flex: 1 }}>
                       <span title={source.path} style={{ display: 'block', fontFamily: MONO, fontSize: 11, color: FG2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -123,12 +195,12 @@ export function LocalImportDialog({
                 <Label>How to import</Label>
                 <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
                   <ModeOption
-                    active={mode === 'copy'} onClick={() => setMode('copy')} disabled={lm.importing}
+                    active={mode === 'copy'} onClick={() => setMode('copy')} disabled={busy}
                     title="Copy into my library"
                     hint="Files are copied into your music folder. They stay available after the source is disconnected."
                   />
                   <ModeOption
-                    active={mode === 'reference'} onClick={() => setMode('reference')} disabled={lm.importing}
+                    active={mode === 'reference'} onClick={() => setMode('reference')} disabled={busy}
                     title="Reference in place"
                     hint="Scan the files where they are — nothing is copied. They disappear when the source (e.g. an external drive) is disconnected."
                   />
@@ -136,16 +208,16 @@ export function LocalImportDialog({
               </div>
 
               {/* Progress */}
-              {lm.importing && (
+              {busy && (
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: MONO, fontSize: 10, color: FG3 }}>
-                    <span>{mode === 'copy' ? 'Copying…' : 'Adding folder…'}</span>
-                    {pct != null && <span>{lm.importProgress?.processed} / {lm.importProgress?.total}</span>}
+                    <span>{phase}{eta ? <span style={{ color: FG4 }}> · {eta} left</span> : null}</span>
+                    {pct != null && <span>{prog?.processed} / {prog?.total}</span>}
                   </div>
                   <div style={{ marginTop: 6, height: 4, background: BORDER, borderRadius: 2, overflow: 'hidden' }}>
                     <div style={{ height: '100%', width: pct != null ? `${pct}%` : '100%', background: ACCENT, transition: 'width 0.12s linear' }} />
                   </div>
-                  {lm.importProgress?.file && (
+                  {lm.importing && lm.importProgress?.file && (
                     <div title={lm.importProgress.file} style={{ marginTop: 5, fontFamily: MONO, fontSize: 9.5, color: FG4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {lm.importProgress.file}
                     </div>
@@ -163,9 +235,9 @@ export function LocalImportDialog({
                         <span title={root} style={{ flex: 1, minWidth: 0, fontFamily: MONO, fontSize: 10.5, color: FG2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{root}</span>
                         <button
                           onClick={() => void lm.removeRoot(root)}
-                          disabled={lm.importing}
+                          disabled={busy}
                           title="Stop referencing this folder"
-                          style={{ background: 'none', border: `1px solid ${BORDER2}`, color: FG4, fontFamily: MONO, fontSize: 9.5, padding: '2px 7px', cursor: lm.importing ? 'default' : 'pointer' }}
+                          style={{ background: 'none', border: `1px solid ${BORDER2}`, color: FG4, fontFamily: MONO, fontSize: 9.5, padding: '2px 7px', cursor: busy ? 'default' : 'pointer' }}
                         >Remove</button>
                       </div>
                     ))}
@@ -173,62 +245,27 @@ export function LocalImportDialog({
                 </div>
               )}
             </div>
-          )}
-        </div>
 
-        {/* Footer */}
-        <div style={{ padding: '14px 20px', borderTop: `1px solid ${BORDER}`, display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
-          <span style={{ flex: 1, color: error ? ACCENT : FG4, fontFamily: MONO, fontSize: 11 }}>{error ?? ''}</span>
-          {summary ? (
-            <button
-              onClick={() => { onImported(summary); onClose() }}
-              style={primaryBtn(true)}
-            >Go to Unlabeled</button>
-          ) : (
-            <>
-              <SmallBtn label="Cancel" onClick={onClose} disabled={lm.importing} />
-              <button onClick={run} disabled={!canImport} style={primaryBtn(canImport)}>
-                {lm.importing ? 'Importing…' : 'Import'}
-              </button>
-            </>
-          )}
-        </div>
+            {/* Footer */}
+            <div style={{ padding: '14px 20px', borderTop: `1px solid ${BORDER}`, display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
+              <span style={{ flex: 1, color: error ? ACCENT : FG4, fontFamily: MONO, fontSize: 11 }}>{error ?? ''}</span>
+              {busy ? (
+                <button disabled style={primaryBtn(false)}>{lm.importing ? 'Importing…' : 'Organizing…'}</button>
+              ) : (
+                <>
+                  <SmallBtn label="Cancel" onClick={onClose} disabled={busy} />
+                  <button onClick={run} disabled={!canImport} style={primaryBtn(canImport)}>Import</button>
+                </>
+              )}
+            </div>
+          </>
+        )}
       </div>
     </div>
   )
 }
 
 // ─── bits ───────────────────────────────────────────────────────────────────
-
-function SummaryView({ summary }: { summary: ImportSummary }) {
-  const lines: string[] = []
-  if (summary.mode === 'copy') {
-    if (summary.total === 0) {
-      lines.push('No audio files found there.')
-    } else {
-      lines.push(`Copied ${summary.copied} file${summary.copied === 1 ? '' : 's'} into your library.`)
-      if (summary.skipped) lines.push(`${summary.skipped} already present — skipped.`)
-      if (summary.failed) lines.push(`${summary.failed} could not be copied.`)
-    }
-  } else {
-    lines.push(summary.referenced
-      ? `Now referencing “${baseName(summary.source)}”.`
-      : 'That folder is already part of your library.')
-  }
-  return (
-    <div style={{ padding: '26px 20px', textAlign: 'center' }}>
-      <div style={{ fontFamily: DISP, fontSize: 30, color: ACCENT, lineHeight: 1 }}>✓</div>
-      <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 5 }}>
-        {lines.map((l, i) => (
-          <div key={i} style={{ fontFamily: i === 0 ? SANS : MONO, fontSize: i === 0 ? 14 : 11, color: i === 0 ? FG : FG3 }}>{l}</div>
-        ))}
-      </div>
-      <div style={{ marginTop: 12, fontFamily: MONO, fontSize: 10.5, color: FG4 }}>
-        Label them from the Unlabeled tab.
-      </div>
-    </div>
-  )
-}
 
 function ModeOption({
   active, onClick, disabled, title, hint,

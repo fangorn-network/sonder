@@ -98,6 +98,11 @@ export function pathForId(id: string): string | undefined {
   return registry.get(id)?.path
 }
 
+/** Every file from the last scan as { id, path } — used by the auto-organizer. */
+export function listRegistry(): { id: string; path: string }[] {
+  return [...registry.entries()].map(([id, e]) => ({ id, path: e.path }))
+}
+
 // ─── Music directory (default + persisted override) ───────────────────────────
 
 /** OS-standard music location: ~/Music, %USERPROFILE%\Music, etc. */

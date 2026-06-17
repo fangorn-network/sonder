@@ -97,6 +97,40 @@ export interface LibraryRoots {
   extra: string[]
 }
 
+/** Progress for the auto-organize pass (one tick per track examined). */
+export interface OrganizeProgress {
+  total: number
+  processed: number
+}
+
+/** A set of artist/album spellings that look like the same thing but weren't
+ *  auto-merged (they differ by more than case/punctuation) — surfaced for review. */
+export interface MergeSuggestion {
+  canonical: string
+  variants: string[]
+}
+
+/** Outcome of an auto-organize pass over the Unlabeled tracks. */
+export interface OrganizeReport {
+  /** Unlabeled tracks examined. */
+  processed: number
+  /** Newly labeled (moved into the Library). */
+  labeled: number
+  /** Skipped because another track resolves to the same artist + title. */
+  duplicates: number
+  /** Couldn't confidently resolve an artist + title — left for manual labeling. */
+  needsReview: number
+  /** Local file ids of those needs-review tracks, so the renderer can list the
+   *  same set it counts (distinct from the duplicates, which are also Unlabeled). */
+  needsReviewIds: string[]
+  /** Variant spellings folded into a canonical artist name (extras removed). */
+  artistsMerged: number
+  /** Variant spellings folded into a canonical album name. */
+  albumsMerged: number
+  /** Likely-duplicate artists that differ too much to auto-merge (for review). */
+  artistSuggestions: MergeSuggestion[]
+}
+
 /** A credited contributor — mirrors `contributors[]` in TrackInvariantSchema.json. */
 export interface Contributor {
   role: string | null

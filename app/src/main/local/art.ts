@@ -36,6 +36,21 @@ export function imageFileToDataUrl(filePath: string): string {
   return toDataUrl({ mime: m, data })
 }
 
+/** The normalized keys that currently have stored artwork, grouped by scope.
+ *  Lets the renderer flag which artists/albums still need art in one round-trip
+ *  instead of probing each key. Keys are normalized (see normKey), so callers
+ *  must compare against the same normalization. */
+export function listArtKeys(): { artist: string[]; album: string[] } {
+  const rows = getDb()
+    .prepare('SELECT scope, art_key FROM local_art')
+    .all() as { scope: ArtScope; art_key: string }[]
+  const out: { artist: string[]; album: string[] } = { artist: [], album: [] }
+  for (const r of rows) {
+    if (r.scope === 'artist' || r.scope === 'album') out[r.scope].push(r.art_key)
+  }
+  return out
+}
+
 /** The stored artwork as a data URL, or null if none is set. */
 export function getArt(scope: ArtScope, key: string): string | null {
   const row = getDb()

@@ -66,6 +66,31 @@ export interface ImportSummary {
   referenced: boolean
 }
 
+/** Auto-organize progress. Mirror of main/local/types.ts `OrganizeProgress`. */
+export interface OrganizeProgress {
+  total: number
+  processed: number
+}
+
+/** A near-duplicate name group. Mirror of main/local/types.ts `MergeSuggestion`. */
+export interface MergeSuggestion {
+  canonical: string
+  variants: string[]
+}
+
+/** Auto-organize outcome. Mirror of main/local/types.ts `OrganizeReport`. */
+export interface OrganizeReport {
+  processed: number
+  labeled: number
+  duplicates: number
+  needsReview: number
+  /** Local file ids of the needs-review tracks (the same set `needsReview` counts). */
+  needsReviewIds: string[]
+  artistsMerged: number
+  albumsMerged: number
+  artistSuggestions: MergeSuggestion[]
+}
+
 /** Favorited refs grouped by kind, held as Sets for O(1) membership checks. */
 export interface FavState {
   track: Set<string>
@@ -160,6 +185,13 @@ interface LocalMusicContextValue {
   importMusic: (source: string, mode: ImportMode) => Promise<ImportSummary>
   /** Remove a referenced-in-place folder, then re-scan. */
   removeRoot: (path: string) => Promise<void>
+  /** True while the smart auto-organize pass is running. */
+  organizing: boolean
+  /** Live auto-organize progress, or null when idle. */
+  organizeProgress: OrganizeProgress | null
+  /** Smart-label every Unlabeled track (tags + filename + folder, merging
+   *  duplicates), then re-scan. Returns a report. */
+  autoOrganize: () => Promise<OrganizeReport>
 
   /** Best-effort metadata from the file's embedded tags, for prefilling the editor. */
   readTags: (localId: string) => Promise<LocalTrackMeta>
@@ -189,6 +221,9 @@ interface LocalMusicContextValue {
 
   /** Bumps whenever artwork changes — consumers re-read to refresh. */
   artRev: number
+  /** Normalized keys (per scope) that already have stored art — for surfacing
+   *  artists/albums still missing artwork. Compare via `normalizeArtKey`. */
+  listArtKeys: () => Promise<{ artist: string[]; album: string[] }>
   /** Stored album/artist artwork as a data URL (cached), or null. */
   getArt: (scope: ArtScope, key: string) => Promise<string | null>
   /** Open the image picker and set artwork for (scope, key); returns its URL. */
@@ -391,6 +426,25 @@ export function LocalMusicProvider({ children }: { children: ReactNode }) {
     await scanDir()
   }, [refreshRoots, scanDir])
 
+  // ── Auto-organize ─────────────────────────────────────────────────────────
+  const [organizing, setOrganizing] = useState(false)
+  const [organizeProgress, setOrganizeProgress] = useState<OrganizeProgress | null>(null)
+
+  useEffect(() => window.localMusic?.onOrganizeProgress(setOrganizeProgress), [])
+
+  const autoOrganize = useCallback(async (): Promise<OrganizeReport> => {
+    setOrganizing(true)
+    setOrganizeProgress(null)
+    try {
+      const report = await window.localMusic.autoOrganize()
+      await scanDir() // reflect newly labeled tracks
+      return report
+    } finally {
+      setOrganizing(false)
+      setOrganizeProgress(null)
+    }
+  }, [scanDir])
+
   // ── Metadata library ──────────────────────────────────────────────────
   const libraryTracks = useMemo(() => tracks.filter((t) => t.labeled), [tracks])
   const unlabeledTracks = useMemo(() => tracks.filter((t) => !t.labeled), [tracks])
@@ -469,6 +523,8 @@ export function LocalMusicProvider({ children }: { children: ReactNode }) {
   const artCache = useRef(new Map<string, string | null>())
   const artInflight = useRef(new Map<string, Promise<string | null>>())
   const [artRev, setArtRev] = useState(0)
+
+  const listArtKeys = useCallback(() => window.localMusic.listArtKeys(), [])
 
   const getArt = useCallback((scope: ArtScope, key: string): Promise<string | null> => {
     const id = `${scope}:${key}`
@@ -662,10 +718,11 @@ export function LocalMusicProvider({ children }: { children: ReactNode }) {
     progress: duration ? currentTime / duration : 0,
     ensureLoaded, rescan, chooseFolder,
     extraRoots, importing, importProgress, pickImportSource, importMusic, removeRoot,
+    organizing, organizeProgress, autoOrganize,
     readTags, saveMeta, saveMetaMany, removeMeta,
     trackTagsById, getTrackTags, saveTrackTags, deleteTrackTags,
     discoverableIds, refreshDiscoverable,
-    artRev, getArt, setArt, pickImage, setArtFromPath, searchArt, setArtFromUrl, clearArt,
+    artRev, listArtKeys, getArt, setArt, pickImage, setArtFromPath, searchArt, setArtFromUrl, clearArt,
     favorites, isFavorite, toggleFavorite,
     playlists, createPlaylist, renamePlaylist, deletePlaylist, addToPlaylist, removeFromPlaylist,
     playTrack, togglePlay, next, prev, seek,

@@ -14,7 +14,7 @@ Requirements: **Node 22** (Corepack enables Yarn 4), **Python 3.12+**, and `tar`
 
 ```bash
 yarn install   # deps + native-module rebuild
-yarn dev       # first run auto-provisions the dev backend, then launches
+yarn dev       # first run auto-provisPions the dev backend, then launches
 ```
 
 That's the whole flow. The first `yarn dev` runs a one-time setup (`scripts/setup.mjs`, also available as `yarn setup`) that provisions everything a fresh clone is missing, **per-OS**:

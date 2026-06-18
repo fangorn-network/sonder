@@ -1,0 +1,35 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cd /home/driemworks/fangorn/sonder/app/vectordb && ls -la *.py 2>/dev/null; echo \"---x402 anywhere in repo---\"; find /home/driemworks/fangorn -name 'x402.py' 2>/dev/null | head; echo \"---roles.py present?---\"; ls roles.py 2>/dev/null)",
+      "Read(//home/driemworks/fangorn/**)",
+      "Bash(timeout 25 ./venv/bin/python -c \"import sys; sys.argv=['server.py','--collection','fangorn']; import server; print\\('IMPORT OK — x402mod:', server.x402mod.__name__\\)\")",
+      "Bash(timeout 25 ./venv/bin/python -c \"import sys; sys.argv=['server.py','--collection','fangorn']; import server; print\\('IMPORT OK — no x402, no quickbeam dep'\\)\")",
+      "Bash(echo \"=== tail of py log ===\")",
+      "Read(//home/driemworks/.config/sond3r/**)",
+      "Bash(echo)",
+      "Bash(echo \"=== dmesg OOM check \\(best effort\\) ===\")",
+      "Bash(dmesg)",
+      "Bash(curl -s http://127.0.0.1:6333/collections/fangorn)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\)['result']; print\\('points:', d.get\\('points_count'\\)\\)\")",
+      "Bash(curl -s -X POST http://127.0.0.1:6333/collections/fangorn/points/scroll -H 'Content-Type: application/json' -d '{\"limit\":50,\"with_payload\":true,\"with_vector\":false}')",
+      "Bash(python3 -c ' *)",
+      "Bash(./venv/bin/python -c \"import ast; ast.parse\\(open\\('server.py'\\).read\\(\\)\\); print\\('syntax OK'\\)\")",
+      "Bash(./venv/bin/python -c \"import ast; ast.parse\\(open\\('server.py'\\).read\\(\\)\\); print\\('server.py syntax OK'\\)\")",
+      "Bash(./venv/bin/python -c \"import sys; sys.argv=['server.py','--collection','fangorn','--cache-dir','/tmp/x','--snapshot-id','abc']; import server; print\\('args accepted: cache_dir=%r snapshot_id=%r' % \\(server.parse_args\\(\\).cache_dir, server.parse_args\\(\\).snapshot_id\\)\\)\")",
+      "Bash(ps -eo pid,pcpu,pmem,rss,comm --sort=-pcpu)",
+      "Bash(curl -s -m 3 http://127.0.0.1:6333/collections/fangorn)",
+      "Bash(curl -s -m 3 http://127.0.0.1:8080/schema)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('roles:', json.dumps\\(d.get\\('roles',{}\\)\\)[:500]\\)\")",
+      "Bash(curl -s -m 5 http://127.0.0.1:6333/readyz)",
+      "Bash(curl -s -m 5 http://127.0.0.1:6333/collections/fangorn)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\)['result']; print\\(json.dumps\\(d.get\\('payload_schema',{}\\), indent=2\\)\\)\")",
+      "Bash(ps -eo pid,etimes,rss,args)",
+      "Bash(python3 -)",
+      "Bash(curl -s -m 10 http://127.0.0.1:6333/readyz)",
+      "Bash(curl -s -m 10 http://127.0.0.1:6333/collections/fangorn)",
+      "Bash(ps -o pid,stat,%cpu,%mem,etimes,rss -p 20374)",
+      "Bash(top -b -n1 -H -p 20374)"
+    ]
+  }
+}

@@ -294,6 +294,27 @@ if (process.contextIsolated) {
         ipcRenderer.removeAllListeners('backend:ready')
         ipcRenderer.on('backend:ready', () => cb())
       },
+      // background HNSW index build progress: { indexed, total, pct, done }.
+      // Streams after backend:ready until Qdrant's optimizer settles (done:true),
+      // so the search index keeps a live progress bar while it finishes.
+      onIndexingProgress: (cb: (d: { indexed: number; total: number; pct: number | null; done: boolean }) => void) => {
+        ipcRenderer.removeAllListeners('snapshot:indexing')
+        ipcRenderer.on('snapshot:indexing', (_e, d) => cb(d))
+      },
+      // Opt-in catalog: the backend stops at Qdrant when nothing's installed and
+      // emits the size disclosure here so the renderer can prompt for download.
+      // (Precise types live in index.d.ts / Sond3rBootApi.)
+      onNeedsConsent: (cb: (info: unknown) => void) => {
+        ipcRenderer.removeAllListeners('snapshot:needs-consent')
+        ipcRenderer.on('snapshot:needs-consent', (_e, info) => cb(info))
+      },
+      // Current sizes + install state (for the Settings data panel / re-checks).
+      getSnapshotInfo: () => ipcRenderer.invoke('snapshot:info'),
+      // User consented — start the download/recover/warm install. Progress arrives
+      // via the existing snapshot:status / backend:ready / snapshot:indexing events.
+      downloadSnapshot: () => ipcRenderer.invoke('snapshot:download'),
+      // Delete the catalog, free the disk, return to "not installed".
+      deleteSnapshot: () => ipcRenderer.invoke('snapshot:delete'),
       // backend failed somewhere in the boot chain
       onBackendError: (cb: (msg: string) => void) => {
         ipcRenderer.removeAllListeners('backend:error')
@@ -304,6 +325,8 @@ if (process.contextIsolated) {
         ipcRenderer.removeAllListeners('snapshot:progress')
         ipcRenderer.removeAllListeners('snapshot:status')
         ipcRenderer.removeAllListeners('snapshot:warmup')
+        ipcRenderer.removeAllListeners('snapshot:indexing')
+        ipcRenderer.removeAllListeners('snapshot:needs-consent')
         ipcRenderer.removeAllListeners('backend:ready')
         ipcRenderer.removeAllListeners('backend:error')
       },

@@ -12,7 +12,7 @@ import { SpotifyProvider, useSpotifyContext } from './context/SpotifyContext'
 import { useFangornAgent } from './hooks/useFangornAgent'
 import { useChroma } from './hooks/useChroma'
 import { StartupView } from './views/StartupView'
-import { BootProvider, useBoot } from './providers/BootProvider'
+import { BootProvider, useBoot, type SnapshotInfo } from './providers/BootProvider'
 import { IndexingBar } from './components/IndexingBar'
 import { useSessionKernel } from './hooks/useSessionKernel'
 import { useTheme } from './hooks/useTheme'
@@ -60,15 +60,35 @@ const MB_USER_AGENT = 'SOND3R/1.0.0 (https://fangorn.network)'
 const onTrackEndedRef = { current: () => { } }
 
 type AnalyzeTab = 'wiki' | 'neighborhood' | 'galaxy'
-type DrawerSection = 'kernel' | 'account' | 'connectors' | 'agent'
+type DrawerSection = 'kernel' | 'account' | 'connectors' | 'agent' | 'data'
 
-/** Warmup status pip shown on the Search tab: a spinning ring while the vector DB
- *  warms up on startup, swapped for a green check once search is ready — or a
- *  small × if the snapshot download / index build failed. */
-function SearchStatus({ ready, failed }: { ready: boolean; failed?: boolean }) {
+/** Status pip shown on the Search tab. Four states:
+ *   - `failed`     → small × (snapshot download / index build failed)
+ *   - `optimizing` → amber pulsing dot (search works, but the vector index is
+ *                    still building, so results aren't fully optimized yet)
+ *   - `ready`      → green check (warm + fully indexed)
+ *   - otherwise    → spinning ring (still warming up; search not usable yet) */
+function SearchStatus({ ready, optimizing, failed, needsDownload }: { ready: boolean; optimizing?: boolean; failed?: boolean; needsDownload?: boolean }) {
   if (failed) {
     return (
       <span aria-label="Search unavailable" style={{ color: 'var(--err)', fontSize: 12, lineHeight: 1, fontFamily: 'var(--font-mono, monospace)' }}>×</span>
+    )
+  }
+  if (needsDownload) {
+    return (
+      <span aria-label="Catalog not downloaded" title="Catalog not downloaded" style={{ color: 'var(--fg4)', fontSize: 12, lineHeight: 1, fontFamily: 'var(--font-mono, monospace)' }}>↓</span>
+    )
+  }
+  if (optimizing) {
+    return (
+      <span
+        aria-label="Search ready — still optimizing"
+        style={{
+          width: 8, height: 8, borderRadius: '50%', background: 'var(--accent)',
+          display: 'inline-block', boxShadow: '0 0 5px var(--accent)',
+          animation: 'fangornBootPulse 1.4s ease-in-out infinite',
+        }}
+      />
     )
   }
   if (ready) {
@@ -129,9 +149,11 @@ function Main() {
   const { theme, toggleTheme } = useTheme()
   const spotify = useSpotify(() => onTrackEndedRef.current())
 
-  // Search is gated until the backend's text index is built; the IndexingBar
-  // stands in for the search field meanwhile.
-  const { indexing, ready: searchReady, stage: bootStage } = useBoot()
+  // Search opens as soon as the backend is `searchable` (post-warmup); the
+  // IndexingBar only stands in while it's still warming. Once searchable, the
+  // header swaps in the real search field and `optimizing` drives a soft hint
+  // that the vector index is still building (results valid but unoptimized).
+  const { searchable, optimizing, needsDownload, ready: searchReady, stage: bootStage } = useBoot()
   // Snapshot download / index build failed — show an × on the Search tab.
   const searchFailed = bootStage === 'error'
 
@@ -461,10 +483,10 @@ function Main() {
             </button>
             <button
               onClick={() => setShowLocal(false)}
-              title={searchFailed ? 'Search unavailable — catalog failed to load' : searchReady ? 'Search ready' : 'Warming up search…'}
+              title={searchFailed ? 'Search unavailable — catalog failed to load' : needsDownload ? 'Catalog not downloaded — enable it in Settings → Data' : optimizing ? 'Search ready — still optimizing the index, results improving' : searchReady ? 'Search ready' : 'Warming up search…'}
               style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: !showLocal ? ACCENT_DIM : 'none', border: `1px solid ${!showLocal ? ACCENT_BORDER : 'transparent'}`, color: !showLocal ? ACCENT : FG3, fontFamily: MONO, fontSize: 11, letterSpacing: '0.10em', textTransform: 'uppercase', padding: '4px 12px', cursor: 'pointer', flexShrink: 0, lineHeight: 1, WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
               Search
-              <SearchStatus ready={searchReady} failed={searchFailed} />
+              <SearchStatus ready={searchReady} optimizing={optimizing} failed={searchFailed} needsDownload={needsDownload} />
             </button>
 
             {/* Wiki navigation (back / breadcrumb / search box) — Search tab only.
@@ -500,10 +522,12 @@ function Main() {
                 </div>
 
                 {/* Search input — hidden on the wiki's own home (it has its own
-                    prominent search). While the index is building, the search is
-                    replaced by a progress bar so it can't be used until queries are fast. */}
-                {wikiView.kind !== 'search' && indexing && <IndexingBar variant="header" />}
-                {wikiView.kind !== 'search' && !indexing && (
+                    prominent search). Shown as soon as search is usable; only the
+                    pre-warmup window (not yet searchable) gets the progress bar.
+                    The not-downloaded gate shows neither (the pip + Home prompt
+                    carry that state instead). */}
+                {wikiView.kind !== 'search' && !searchable && !needsDownload && <IndexingBar variant="header" />}
+                {wikiView.kind !== 'search' && searchable && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 0, flexShrink: 0, WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
                     <input
                       value={wikiSearchBox}
@@ -577,6 +601,10 @@ function Main() {
             {/* Wiki — primary surface */}
             <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
               <KernelStrip {...kernelStrip} theme={theme} />
+              {/* Soft, non-blocking hint while the catalog search index is still
+                  optimizing — search already works, this just signals results are
+                  still improving. Search tab only (local music needs no catalog). */}
+              {optimizing && !showLocal && <IndexingBar variant="banner" />}
               {/* Content region below the Kernel view. LocalMusicView overlays
                   just this area (position:absolute inset:0), so the shell header
                   and KernelStrip stay visible — same chrome as the wiki. */}
@@ -739,6 +767,108 @@ function AccountIcon() {
 
 // ─── Settings drawer ──────────────────────────────────────────────────────────
 
+function fmtBytes(n: number): string {
+  if (n >= 1e9) return (n / 1e9).toFixed(2) + ' GB'
+  if (n >= 1e6) return (n / 1e6).toFixed(1) + ' MB'
+  if (n >= 1e3) return (n / 1e3).toFixed(0) + ' KB'
+  return `${n} B`
+}
+
+// Settings → Data: opt-in catalog management. Shows install state + sizes, and
+// lets the user download (if they skipped the startup prompt) or delete to
+// reclaim the disk. Live install/optimize progress mirrors the boot state.
+function DataSettings() {
+  const boot = useBoot()
+  const [info, setInfo] = useState<SnapshotInfo | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+
+  const refresh = useCallback(() => {
+    window.sond3r?.getSnapshotInfo().then(setInfo).catch(() => { })
+  }, [])
+  // Refresh on mount and whenever boot crosses a stage boundary (install/delete).
+  useEffect(() => { refresh() }, [refresh, boot.stage])
+
+  const loading    = boot.stage === 'downloading' || boot.stage === 'decompressing' || boot.stage === 'recovering' || boot.stage === 'warming'
+  const optimizing = boot.stage === 'indexing'
+  const installed  = boot.ready || optimizing || (info?.installed ?? false)
+  const lowDisk    = !!info && info.freeBytes < info.requiredBytes
+
+  const onDownload = () => { setBusy(true); window.sond3r?.downloadSnapshot().finally(() => setBusy(false)) }
+  const onDelete = () => {
+    setBusy(true)
+    window.sond3r?.deleteSnapshot().then(() => setConfirmDelete(false)).finally(() => { setBusy(false); refresh() })
+  }
+
+  const Row = ({ k, v, warn }: { k: string; v: string; warn?: boolean }) => (
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, fontFamily: MONO, fontSize: 11, color: warn ? 'var(--err)' : FG3, fontVariantNumeric: 'tabular-nums' }}>
+      <span style={{ color: FG4, letterSpacing: '0.08em', textTransform: 'uppercase' }}>{k}</span>
+      <span>{v}</span>
+    </div>
+  )
+  const btn = (primary: boolean, danger?: boolean): React.CSSProperties => ({
+    marginTop: 8, padding: '9px 14px', fontFamily: MONO, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase',
+    color: danger ? 'var(--err)' : primary ? '#fff' : FG3,
+    background: primary && !danger ? ACCENT : 'transparent',
+    border: `1px solid ${danger ? 'var(--err)' : primary ? ACCENT : BORDER2}`,
+    cursor: 'pointer', textAlign: 'left',
+  })
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div>
+        <div style={{ fontFamily: MONO, fontSize: 8, color: FG4, letterSpacing: '0.18em', textTransform: 'uppercase', marginBottom: 6 }}>Search catalog</div>
+        <div style={{ fontFamily: SANS, fontSize: 12, color: FG3, lineHeight: 1.55 }}>
+          The catalog (10M+ tracks) powers Search. It's optional — local music works without it.
+        </div>
+      </div>
+
+      {loading ? (
+        <div style={{ fontFamily: MONO, fontSize: 11, color: FG2 }}>
+          {boot.label}{boot.pct != null ? ` · ${boot.pct}%` : '…'}
+        </div>
+      ) : installed ? (
+        <>
+          <Row k="Status" v={optimizing ? 'Installed · optimizing' : 'Installed'} />
+          {info && info.installedBytes > 0 && <Row k="On disk" v={fmtBytes(info.installedBytes)} />}
+          {!confirmDelete ? (
+            <button onClick={() => setConfirmDelete(true)} disabled={busy} style={btn(false, true)}>Delete catalog…</button>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, border: '1px solid var(--err)', padding: 12 }}>
+              <div style={{ fontFamily: SANS, fontSize: 12, color: FG2, lineHeight: 1.5 }}>
+                Delete the catalog and free {info && info.installedBytes > 0 ? fmtBytes(info.installedBytes) : 'this disk space'}? You'll need to re-download it to search again.
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={onDelete} disabled={busy} style={{ ...btn(false, true), marginTop: 0, flex: 1, textAlign: 'center' }}>{busy ? 'Deleting…' : 'Delete'}</button>
+                <button onClick={() => setConfirmDelete(false)} disabled={busy} style={{ ...btn(false), marginTop: 0, flex: 1, textAlign: 'center' }}>Cancel</button>
+              </div>
+            </div>
+          )}
+        </>
+      ) : (
+        <>
+          <Row k="Status" v="Not installed" />
+          {info && <>
+            <Row k="Download" v={fmtBytes(info.compressedBytes)} />
+            <Row k="On disk (unpacked)" v={`≈ ${fmtBytes(info.uncompressedBytes)}`} />
+            <Row k="Free disk needed" v={fmtBytes(info.requiredBytes)} warn={lowDisk} />
+            <Row k="You have free" v={fmtBytes(info.freeBytes)} warn={lowDisk} />
+          </>}
+          <div style={{ fontFamily: SANS, fontSize: 11, color: FG4, lineHeight: 1.5 }}>
+            Large download - best on a fast, unmetered connection.
+          </div>
+          {lowDisk && (
+            <div style={{ fontFamily: MONO, fontSize: 10, color: 'var(--err)', lineHeight: 1.5 }}>Not enough free disk to install.</div>
+          )}
+          <button onClick={onDownload} disabled={busy || !info || lowDisk} style={btn(true)}>
+            {busy ? 'Starting…' : `Download catalog${info ? ` · ${fmtBytes(info.compressedBytes)}` : ''}`}
+          </button>
+        </>
+      )}
+    </div>
+  )
+}
+
 interface SettingsDrawerProps {
   kernelState: any
   entropy: number
@@ -764,7 +894,7 @@ function SettingsDrawer({ kernelState, entropy, activeProfileName, section, onSe
       {/* Drawer header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 14px', height: 40, borderBottom: `1px solid ${BORDER}`, flexShrink: 0 }}>
         <div style={{ display: 'flex', gap: 0 }}>
-          {(['kernel', 'account', 'connectors', 'agent'] as const).map(s => (
+          {(['kernel', 'account', 'connectors', 'agent', 'data'] as const).map(s => (
             <button key={s} onClick={() => onSectionChange(s)} style={{
               background: 'none', border: 'none', borderBottom: `1px solid ${section === s ? ACCENT : 'transparent'}`,
               color: section === s ? FG : FG4, fontFamily: MONO, fontSize: 9, letterSpacing: '0.16em',
@@ -805,6 +935,7 @@ function SettingsDrawer({ kernelState, entropy, activeProfileName, section, onSe
         {section === 'account' && <AccountView />}
         {section === 'connectors' && <ConnectorsView />}
         {section === 'agent' && <AgentView />}
+        {section === 'data' && <DataSettings />}
       </div>
     </div>
   )

@@ -1563,7 +1563,7 @@ function Home({ onNavigate, kernelTopGenres, allGenres, kernelEntropy }: {
     allGenres?: string[]
     kernelEntropy?: number
 }) {
-    const { indexing } = useBoot()
+    const { searchable, needsDownload } = useBoot()
     const slot = getTimeSlotMoods()
     const phrase = kernelPhrase(kernelEntropy)
 
@@ -1576,9 +1576,29 @@ function Home({ onNavigate, kernelTopGenres, allGenres, kernelEntropy }: {
 
     const hasKernel = kernelTopGenres && kernelTopGenres.length > 0
 
-    // While the backend is still building its text index, the home page shows
-    // nothing but the progress bar — no search, tagline, or discovery sections.
-    if (indexing) {
+    // Opt-in catalog isn't downloaded yet → point the user to the download
+    // (offered at startup and in Settings → Data) rather than a progress bar.
+    if (needsDownload) {
+        return (
+            <div style={{ flex: 1, overflowY: 'auto', background: BG }}>
+                <div style={{ maxWidth: 600, margin: '0 auto', padding: '64px 32px 80px', textAlign: 'center' }}>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--fg2)', marginBottom: 12 }}>
+                        Search catalog not downloaded
+                    </div>
+                    <div style={{ fontFamily: 'var(--font-body, sans-serif)', fontSize: 13, lineHeight: 1.6, color: 'var(--fg3)' }}>
+                        Search runs on a local catalog of 10M+ tracks. It's a large, optional download —
+                        enable it from <span style={{ color: 'var(--fg2)' }}>Settings → Data</span> when you're ready.
+                    </div>
+                </div>
+            </div>
+        )
+    }
+
+    // Only while search isn't usable yet (still warming up) does the home page
+    // show nothing but the progress bar. Once searchable, the full home — search
+    // included — renders even if the vector index is still optimizing in the
+    // background; the App-level banner carries the soft "still optimizing" hint.
+    if (!searchable) {
         return (
             <div style={{ flex: 1, overflowY: 'auto', background: BG }}>
                 <div style={{ maxWidth: 600, margin: '0 auto', padding: '48px 32px 80px' }}>

@@ -1,5 +1,5 @@
 import { useState, ReactNode } from 'react'
-import { useBoot } from '../providers/BootProvider'
+import { useBoot, type SnapshotInfo } from '../providers/BootProvider'
 import { BugReportFab } from '../components/BugReportFab'
 
 // ── Boot sequence ─────────────────────────────────────────────────────────────
@@ -16,6 +16,58 @@ function fmtBytes(n: number): string {
   return `${n} B`
 }
 
+// Opt-in download disclosure shown on the splash when the catalog isn't
+// installed. States the compressed/uncompressed/required sizes up front so users
+// on slow or metered connections aren't surprised by a multi-GB fetch. Skipping
+// (the Enter affordance below) lets them use the app — local music — without it.
+function ConsentCard({ info, onDownload }: { info: SnapshotInfo | null; onDownload: () => void }) {
+  const enoughSpace = info ? info.freeBytes >= info.requiredBytes : true
+  const Row = ({ k, v, warn }: { k: string; v: string; warn?: boolean }) => (
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, fontFamily: 'var(--font-mono)', fontSize: '11px', color: warn ? 'var(--err, #c0392b)' : 'var(--fg3)', fontVariantNumeric: 'tabular-nums' }}>
+      <span style={{ letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--fg4)' }}>{k}</span>
+      <span>{v}</span>
+    </div>
+  )
+  return (
+    <div style={{ border: '1px solid var(--border2)', background: 'var(--bg1)', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 9, WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--fg2)', marginBottom: 2 }}>
+        Download the catalog?
+      </div>
+      <div style={{ fontFamily: 'var(--font-body, sans-serif)', fontSize: '12px', lineHeight: 1.55, color: 'var(--fg3)', marginBottom: 4 }}>
+        The full search catalog (10M+ tracks) is a large download - best on a fast, unmetered connection. You can skip and use local music without it, but you will be missing some features such as algorithm curation.
+      </div>
+      {info ? (
+        <>
+          <Row k="Download" v={fmtBytes(info.compressedBytes)} />
+          <Row k="On disk (unpacked)" v={`≈ ${fmtBytes(info.uncompressedBytes)}`} />
+          <Row k="Free disk needed" v={fmtBytes(info.requiredBytes)} warn={!enoughSpace} />
+          <Row k="You have free" v={fmtBytes(info.freeBytes)} warn={!enoughSpace} />
+        </>
+      ) : (
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--fg4)' }}>checking sizes…</div>
+      )}
+      {!enoughSpace && (
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--err, #c0392b)', lineHeight: 1.5 }}>
+          Not enough free disk to install. Free up space and reopen, or skip for now.
+        </div>
+      )}
+      <button
+        onClick={onDownload}
+        disabled={!info || !enoughSpace}
+        style={{
+          marginTop: 6, padding: '10px 16px', fontFamily: 'var(--font-mono)', fontSize: '11px',
+          letterSpacing: '0.18em', textTransform: 'uppercase',
+          color: !info || !enoughSpace ? 'var(--fg4)' : '#fff',
+          background: !info || !enoughSpace ? 'transparent' : 'var(--accent)',
+          border: `1px solid ${!info || !enoughSpace ? 'var(--border2)' : 'var(--accent)'}`,
+          cursor: !info || !enoughSpace ? 'default' : 'pointer', WebkitAppRegion: 'no-drag',
+        } as React.CSSProperties}>
+        Download catalog{info ? ` · ${fmtBytes(info.compressedBytes)}` : ''}
+      </button>
+    </div>
+  )
+}
+
 // ── Main Startup View ──────────────────────────────────────────────────────────
 // Editorial / wiki aesthetic: paper surface, ink type, one brick-red accent,
 // sharp corners. The catalog load is shown as a real progress bar rather than a
@@ -29,8 +81,18 @@ interface StartupViewProps {
 export function StartupView({ onReady, children }: StartupViewProps) {
   const [exiting, setExiting] = useState(false)
   // `label` reflects the real backend step ("building text index", …); `canEnter`
-  // flips on once the index build starts so we can show Enter early.
-  const { stage, pct, received, total, error, ready, warmup, canEnter, label } = useBoot()
+  // flips on as soon as boot is underway (incl. the IPFS fetch) so we can show
+  // Enter early and let the rest load inside the app.
+  const { stage, pct, received, total, error, ready, warmup, index, needsDownload, snapshotInfo, canEnter, label } = useBoot()
+  const [requested, setRequested] = useState(false)
+
+  // Opt-in: kick off the (large) catalog download. The backend then streams
+  // snapshot:status='downloading', which flips us off the consent stage.
+  const handleDownload = () => {
+    if (requested) return
+    setRequested(true)
+    window.sond3r?.downloadSnapshot().catch(() => setRequested(false))
+  }
 
   // The bar keeps running until the backend is actually ready (or errors) — the
   // loading screen looks the same as before for anyone who waits it out.
@@ -42,9 +104,9 @@ export function StartupView({ onReady, children }: StartupViewProps) {
   const showBar = !revealed
   const indeterminate = pct === null
 
-  // Enter is offered the moment warmup begins (the "building text index" phase),
-  // not just at full ready — the user can enter and let the index finish inside
-  // the app, where IndexingBar takes over the progress display.
+  // Enter is offered as soon as boot is underway (incl. while the catalog is
+  // still downloading), not just at full ready — the user can enter and let the
+  // fetch/index finish inside the app, where IndexingBar takes over the display.
   const handleExit = () => {
     if (!canEnter || exiting) return
     setExiting(true)
@@ -86,7 +148,10 @@ export function StartupView({ onReady, children }: StartupViewProps) {
 
         {/* ── Progress block (fixed footprint so nothing jumps on stage change) ── */}
         <div style={{ width: 'min(480px, 72vw)', minHeight: '54px' }}>
-          {!revealed && (
+          {needsDownload && !requested && (
+            <ConsentCard info={snapshotInfo} onDownload={handleDownload} />
+          )}
+          {!revealed && !(needsDownload && !requested) && (
             <>
               {/* Stage label + percent */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '8px', fontFamily: 'var(--font-mono)', fontSize: '11px', letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--fg2)' }}>
@@ -114,6 +179,8 @@ export function StartupView({ onReady, children }: StartupViewProps) {
                   ? `${fmtBytes(received)} / ${fmtBytes(total)}`
                   : stage === 'warming' && warmup.total > 0
                   ? `${warmup.indexed.toLocaleString()} / ${warmup.total.toLocaleString()} records`
+                  : stage === 'indexing' && index.total > 0
+                  ? `${index.indexed.toLocaleString()} / ${index.total.toLocaleString()} vectors`
                   :' '}
               </div>
 
@@ -132,8 +199,8 @@ export function StartupView({ onReady, children }: StartupViewProps) {
         </div>
 
         {/* Enter affordance — flat, sharp, ink. Hover inverts to ink fill.
-            Revealed at `canEnter` (warmup started), so users can enter while the
-            index is still building. */}
+            Revealed at `canEnter` (boot underway), so users can enter while the
+            catalog is still downloading / the index is still building. */}
         <div
           onClick={handleExit}
           style={{

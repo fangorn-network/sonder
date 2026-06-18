@@ -6,6 +6,7 @@ import { Socket as NetSocket } from 'net'
 import path from 'path'
 import fs, { createWriteStream, createReadStream } from 'fs'
 import http from 'http'
+import os from 'os'
 import zlib from 'zlib'
 import crypto from 'crypto'
 import { Transform } from 'stream'
@@ -22,8 +23,8 @@ import { registerSpotifyAuth, handleSpotifyCallback } from './spotify/SpotifyAut
 import { registerPlaybackIpc } from './playback/ipc'
 import { registerLocalMusicIpc } from './local/ipc'
 import { installLogCapture, registerBugReportIpc } from './bug-report'
-// import snapshotManifest from './snapshot-manifest.json'
-import snapshotManifest from './small.json'
+import snapshotManifest from './snapshot-manifest.json'
+// import snapshotManifest from './small.json'
 
 // ─── Stream cache ─────────────────────────────────────────────────────────────
 interface StreamEntry {
@@ -246,6 +247,14 @@ function resolveYt(query: string): Promise<YtResolveResult> {
 
 let qdrantProc: ReturnType<typeof spawn> | null = null
 let pyProcess: ReturnType<typeof spawn> | null = null
+// Liveness signals for the query server's slow cold start, watched by
+// waitForHealth. `pyLastOutput` is bumped on every stdout/stderr chunk (the
+// model download + collection load stream progress), so a slow-but-working boot
+// keeps the wait alive; `pyExitCode` flips non-null if the process dies, so the
+// wait can fail fast instead of sitting out the full timeout.
+let pyLastOutput = 0
+let pyExitCode: number | null = null
+let pyExited = false
 let rendererServer: http.Server | null = null
 // Set once we're shutting down so the qdrant exit handler doesn't try to respawn
 // a sidecar we just deliberately killed.
@@ -297,7 +306,18 @@ interface SnapshotManifest {
   total_size: number
   part_size: number
   parts: SnapshotPart[]
+  // Optional: the size of the reassembled .gz once decompressed. When the
+  // manifest builder records it we report it exactly; otherwise computeSnapshotInfo
+  // falls back to a ratio estimate (see SNAPSHOT_UNCOMPRESSED_RATIO).
+  uncompressed_size?: number
 }
+
+// Rough multiplier from compressed (.gz) → uncompressed snapshot size, used only
+// when the manifest has no `uncompressed_size`. The snapshot is mostly float32
+// vectors (high entropy, compresses poorly), so the inflation is modest. This is
+// a deliberately conservative estimate — its job is to warn users it's a big
+// download, not to be exact.
+const SNAPSHOT_UNCOMPRESSED_RATIO = 1.25
 
 // Load and validate the committed split-upload manifest (the part-CID list).
 // `snapshot-manifest.json` is checked into this repo next to this file and bundled
@@ -400,18 +420,33 @@ function startQdrant() {
   fs.mkdirSync(storage, { recursive: true })
   fs.mkdirSync(snapshotsDir, { recursive: true })
 
+  // Cap the background optimizer/HNSW indexing that fires once after a snapshot
+  // recover. On first launch Qdrant rebuilds the index over the 10M-point
+  // collection, which otherwise pins every core at ~100% before the user has
+  // even searched (a relaunch is quiet + fast because the built index is already
+  // persisted in qdrant_storage — no recover, no re-optimize). server.py already
+  // sleeps idle OpenMP threads and caps its native pools to half the cores for
+  // exactly this reason; Qdrant is a separate Rust process those env vars don't
+  // touch, so it was the one thing left free to lock up the machine. A positive
+  // optimizer_cpu_budget caps the indexing job to that many CPUs — half the box,
+  // leaving the rest responsive. The index still builds, just without melting
+  // everything; it's a one-time cost per snapshot.
+  const optimizerCpus = String(Math.max(1, Math.floor(os.cpus().length / 2)))
+
   qdrantProc = spawn(qdrantBin(), [], {
     detached: process.platform !== 'win32',
     env: {
       ...process.env,
       QDRANT__STORAGE__STORAGE_PATH: storage,
       QDRANT__STORAGE__SNAPSHOTS_PATH: snapshotsDir,
+      QDRANT__STORAGE__PERFORMANCE__OPTIMIZER_CPU_BUDGET: optimizerCpus,
       QDRANT__SERVICE__HTTP_PORT: '6333',
       QDRANT__SERVICE__GRPC_PORT: '6334',
       QDRANT__SERVICE__HOST: '127.0.0.1',   // localhost only, never exposed
       QDRANT__TELEMETRY_DISABLED: 'true',   // no phone-home; matches the ethos
     },
   })
+  console.log(`[qdrant] starting (storage=${storage}, optimizer capped to ${optimizerCpus} cpus)`)
   const spawnedAt = Date.now()
   qdrantProc.stdout?.on('data', (d) => console.log('[qdrant]', d.toString().trimEnd()))
   qdrantProc.stderr?.on('data', (d) => console.error('[qdrant]', d.toString().trimEnd()))
@@ -441,6 +476,40 @@ async function waitForReady(url: string, timeoutMs = 60000): Promise<void> {
   throw new Error(`timed out waiting for ${url}`)
 }
 
+// Wait for the query server's /health, gated on process liveness rather than a
+// fixed wall clock. The server doesn't bind /health until it has pulled the
+// embedding model and mmapped the (10M-point) collection from the freshly
+// recovered 15 GB snapshot — minutes on a cold disk. A plain waitForReady either
+// aborts that healthy-but-slow boot (the old 60s default did exactly this) or,
+// if its timeout is bumped blindly, hangs the splash for minutes when the server
+// actually crashes. So instead:
+//   • fail fast the moment the process exits — a dead backend won't ever answer;
+//   • keep waiting as long as it's alive AND still emitting output (the model
+//     download / collection load stream progress), so slow boots aren't capped;
+//   • give up only if it goes quiet for `idleMs` (genuinely wedged), with a
+//     generous absolute `maxMs` backstop so we can't wait forever.
+async function waitForHealth(
+  url: string,
+  { idleMs = 180000, maxMs = 900000 }: { idleMs?: number; maxMs?: number } = {},
+): Promise<void> {
+  const start = Date.now()
+  while (Date.now() - start < maxMs) {
+    if (pyExited) {
+      throw new Error(`backend process exited (code ${pyExitCode}) before ${url} came up`)
+    }
+    try {
+      const r = await net.fetch(url)
+      if (r.ok) return
+    } catch { /* not up yet */ }
+    const idle = Date.now() - pyLastOutput
+    if (idle > idleMs) {
+      throw new Error(`timed out waiting for ${url}: backend silent for ${Math.round(idle / 1000)}s`)
+    }
+    await new Promise((r) => setTimeout(r, 300))
+  }
+  throw new Error(`timed out waiting for ${url} after ${Math.round((Date.now() - start) / 1000)}s`)
+}
+
 // Like waitForReady, but forwards the /ready 503 body to the splash so it can
 // show real warmup progress (records scanned during the lexical build) instead
 // of a blind spinner. Resolves when /ready flips to 200.
@@ -465,6 +534,81 @@ async function waitForWarmup(url: string, win: BrowserWindow, timeoutMs = 300000
     await new Promise((r) => setTimeout(r, 300))
   }
   throw new Error(`timed out waiting for ${url}`)
+}
+
+// ─── Boot step logging ───────────────────────────────────────────────────────
+// The data backend comes up in distinct phases (Qdrant ready → snapshot fetch →
+// decompress → recover → query server → warmup → background HNSW indexing) and a
+// slow or stuck boot used to show up as a silent gap with no way to tell which
+// phase owned the time. These helpers stamp every phase with its elapsed time so
+// the logs read as a timeline: `[boot] +12.4s ✓ recover snapshot (8.1s)`.
+let bootStartedAt = 0
+// Set once the main window + resolved snapshot exist, so the snapshot:* IPC
+// handlers (download/delete, registered earlier in bootstrap) can drive the
+// install on demand. `installing` guards against re-entrant download clicks.
+let bootWindow: BrowserWindow | null = null
+let currentSnapshot: { sha256: string } = { sha256: '' }
+let installing = false
+function bootLog(msg: string): void {
+  const since = bootStartedAt ? `+${((Date.now() - bootStartedAt) / 1000).toFixed(1)}s ` : ''
+  console.log(`[boot] ${since}${msg}`)
+}
+async function bootStep<T>(label: string, fn: () => Promise<T>): Promise<T> {
+  const t0 = Date.now()
+  bootLog(`▶ ${label}…`)
+  try {
+    const out = await fn()
+    bootLog(`✓ ${label} (${((Date.now() - t0) / 1000).toFixed(1)}s)`)
+    return out
+  } catch (err) {
+    bootLog(`✗ ${label} failed after ${((Date.now() - t0) / 1000).toFixed(1)}s`)
+    throw err
+  }
+}
+
+// Post-recover, Qdrant builds the HNSW vector index over the collection in the
+// background — the silent, all-core CPU spike users hit before the index lands.
+// It logs nothing on its own, so poll the collection and report indexed/total
+// until the optimizer goes green: this both makes "is indexing actually done
+// yet?" answerable from the logs (correlatable with the CPU dropping) AND streams
+// the same progress to the renderer (`snapshot:indexing`) so the loading bar can
+// stay up — and the user browse the app — until the search index is really hot.
+function logIndexingProgress(win: BrowserWindow): void {
+  const t0 = Date.now()
+  let lastIndexed = -1
+  const send = (indexed: number, total: number, done: boolean): void => {
+    if (win.isDestroyed()) return
+    win.webContents.send('snapshot:indexing', {
+      indexed, total,
+      pct: total > 0 ? Math.min(100, (indexed / total) * 100) : null,
+      done,
+    })
+  }
+  const tick = async (): Promise<void> => {
+    try {
+      const r = await net.fetch('http://127.0.0.1:6333/collections/fangorn')
+      if (r.ok) {
+        const res     = (await r.json())?.result ?? {}
+        const total   = res.points_count ?? 0
+        const indexed = res.indexed_vectors_count ?? 0
+        const status  = res.status ?? 'unknown'          // green = no pending optimizations
+        if (indexed !== lastIndexed) {
+          const pct = total ? ((indexed / total) * 100).toFixed(1) : '0.0'
+          bootLog(`[index] ${indexed}/${total} vectors indexed (${pct}%) — status=${status}`)
+          lastIndexed = indexed
+        }
+        if (status === 'green') {
+          bootLog(`[index] ✓ HNSW indexing settled — ${indexed}/${total} vectors in ${((Date.now() - t0) / 1000).toFixed(0)}s`)
+          send(indexed, total, true)
+          return
+        }
+        send(indexed, total, false)
+      }
+    } catch { /* qdrant momentarily busy mid-optimization — retry */ }
+    if (Date.now() - t0 < 30 * 60 * 1000) setTimeout(() => void tick(), 5000)
+    else { bootLog('[index] stopped tracking indexing after 30m (still not green)'); send(lastIndexed, lastIndexed, true) }
+  }
+  void tick()
 }
 
 // Download the gzipped snapshot from IPFS, streaming progress to the window.
@@ -545,6 +689,107 @@ function writeSnapshotMarker(sha256: string): void {
   }
 }
 
+// "Installed" = the catalog collection actually exists in Qdrant with data.
+// Ground truth (a stray marker or an empty server-created collection doesn't
+// count), so the opt-in gate and the Settings "delete" state stay honest.
+async function isSnapshotInstalled(): Promise<boolean> {
+  try {
+    const r = await net.fetch('http://127.0.0.1:6333/collections/fangorn')
+    if (!r.ok) return false
+    const res = (await r.json())?.result ?? {}
+    return (res.points_count ?? 0) > 0
+  } catch {
+    return false
+  }
+}
+
+// Best-effort recursive byte size of a directory (the on-disk qdrant_storage
+// footprint). The collection is a handful of large mmap files per segment, not a
+// deep tree, so this stays fast.
+async function dirSize(dir: string): Promise<number> {
+  let total = 0
+  let entries: fs.Dirent[]
+  try { entries = await fs.promises.readdir(dir, { withFileTypes: true }) } catch { return 0 }
+  for (const e of entries) {
+    const p = path.join(dir, e.name)
+    try {
+      if (e.isDirectory()) total += await dirSize(p)
+      else total += (await fs.promises.stat(p)).size
+    } catch { /* file vanished mid-walk — skip */ }
+  }
+  return total
+}
+
+export interface SnapshotInfo {
+  installed: boolean
+  compressedBytes: number     // the .gz download size (X)
+  uncompressedBytes: number   // unpacked snapshot size (Y) — exact if the manifest has it, else estimated
+  requiredBytes: number       // peak free disk needed to install (Z): .gz + unpacked coexist mid-decompress
+  freeBytes: number           // free disk on the userData volume right now
+  installedBytes: number      // current on-disk footprint when installed (else 0)
+}
+
+// Numbers behind the download disclosure + the Settings data panel.
+async function computeSnapshotInfo(): Promise<SnapshotInfo> {
+  const m = snapshotManifest as SnapshotManifest
+  const compressed = m.total_size || (m.parts ?? []).reduce((s, p) => s + (p.size || 0), 0)
+  const uncompressed = m.uncompressed_size || Math.round(compressed * SNAPSHOT_UNCOMPRESSED_RATIO)
+  const userData = app.getPath('userData')
+
+  let freeBytes = 0
+  try { const st = await fs.promises.statfs(userData); freeBytes = st.bavail * st.bsize } catch { /* unknown */ }
+
+  const installed = await isSnapshotInstalled()
+  const installedBytes = installed ? await dirSize(path.join(userData, 'qdrant_storage')) : 0
+
+  return {
+    installed,
+    compressedBytes: compressed,
+    uncompressedBytes: uncompressed,
+    requiredBytes: compressed + uncompressed,
+    freeBytes,
+    installedBytes,
+  }
+}
+
+// The download → recover → serve → warm tail of boot, factored out so it runs
+// either automatically (already installed) or on the user's opt-in click. Streams
+// the same snapshot:status / backend:ready / snapshot:indexing events either way.
+async function installBackend(win: BrowserWindow): Promise<void> {
+  await bootStep('ensure collection (download/recover or cached)', () => ensureCollection(win, currentSnapshot))
+  bootLog('▶ start query server')
+  startQueryServer()
+  await bootStep('wait for query server /health', () => waitForHealth('http://127.0.0.1:8080/health'))
+  win.webContents.send('snapshot:status', 'warming')
+  await bootStep('warmup (embeddings + vector index hot)', () =>
+    waitForWarmup('http://127.0.0.1:8080/ready', win, 300000))
+  bootLog('✓ data backend ready — search is live')
+  win.webContents.send('backend:ready')
+  logIndexingProgress(win)
+}
+
+// Free the disk and return to the "not installed" state: stop the query server
+// (it holds the collection open), drop the Qdrant collection (which removes its
+// segment files), and clear leftover temp files + the marker. Then re-surface the
+// consent prompt so the user can re-download later.
+async function deleteSnapshot(): Promise<{ ok: boolean; error?: string }> {
+  try {
+    killQueryServer()
+    await net.fetch('http://127.0.0.1:6333/collections/fangorn', { method: 'DELETE' }).catch(() => {})
+    const userData = app.getPath('userData')
+    try { fs.unlinkSync(path.join(userData, 'fangorn.snapshot.gz')) } catch { /* none */ }
+    try { fs.rmSync(path.join(userData, 'qdrant_snapshots', 'fangorn'), { recursive: true, force: true }) } catch { /* none */ }
+    try { fs.unlinkSync(snapshotMarkerPath()) } catch { /* none */ }
+    bootLog('[snapshot] deleted — catalog uninstalled')
+    if (bootWindow && !bootWindow.isDestroyed()) {
+      bootWindow.webContents.send('snapshot:needs-consent', await computeSnapshotInfo())
+    }
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, error: String(e) }
+  }
+}
+
 // Ensure the catalog for `snapshot` is recovered. Unchanged snapshot → no-op (the
 // query server reuses its cached lexical index, so warmup is near-instant). New
 // snapshot → remove the stale collection first, then fetch + decompress + recover
@@ -562,8 +807,10 @@ async function ensureCollection(win: BrowserWindow, snapshot: { sha256: string }
   // current. Either way nothing to fetch.
   if (exists && (!marker || !markedId || markedId === sha256)) {
     if (!markedId) writeSnapshotMarker(sha256)
+    bootLog('collection already present and current — skipping download/recover (cached)')
     return
   }
+  bootLog(exists ? 'collection present but stale — refreshing' : 'no collection yet — first-run fetch')
 
   // A different snapshot is live → drop the old collection's data before pulling
   // the new one, so stale vectors don't linger in qdrant_storage.
@@ -582,19 +829,21 @@ async function ensureCollection(win: BrowserWindow, snapshot: { sha256: string }
   const snapPath = path.join(snapDir, 'fangorn.snapshot')
 
   win.webContents.send('snapshot:status', 'downloading')
-  await downloadGz(gzPath, win)
+  await bootStep('download snapshot (~15 GB compressed)', () => downloadGz(gzPath, win))
 
   win.webContents.send('snapshot:status', 'decompressing')
-  await gunzipVerify(gzPath, snapPath, sha256)
+  await bootStep('decompress + verify snapshot', () => gunzipVerify(gzPath, snapPath, sha256))
   try { fs.unlinkSync(gzPath) } catch { }
 
   win.webContents.send('snapshot:status', 'recovering')
-  const res = await net.fetch('http://127.0.0.1:6333/collections/fangorn/snapshots/recover', {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ location: `file://${snapPath}` }),
+  await bootStep('recover snapshot into Qdrant', async () => {
+    const res = await net.fetch('http://127.0.0.1:6333/collections/fangorn/snapshots/recover', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ location: `file://${snapPath}` }),
+    })
+    if (!res.ok) throw new Error(`recover failed: ${res.status} ${await res.text()}`)
   })
-  if (!res.ok) throw new Error(`recover failed: ${res.status} ${await res.text()}`)
 
   try { fs.unlinkSync(snapPath) } catch { }
 
@@ -628,15 +877,42 @@ function startQueryServer() {
     ]
 
   pyProcess = spawn(bin, args, { cwd, detached: process.platform !== 'win32', env: { ...process.env } })
+  console.log(`[py] query server spawned (pid=${pyProcess.pid}, ${app.isPackaged ? 'packaged binary' : 'dev venv'})`)
 
-  pyProcess.stdout?.on('data', (d) => console.log('[py]', d.toString().trimEnd()))
-  pyProcess.stderr?.on('data', (d) => console.error('[py]', d.toString().trimEnd()))
+  // Reset liveness tracking for this boot. Seed last-output to "now" so the
+  // initial process-spawn → first-log gap doesn't read as a silent hang.
+  pyLastOutput = Date.now()
+  pyExitCode = null
+  pyExited = false
+
+  const markOutput = (): void => { pyLastOutput = Date.now() }
+  pyProcess.stdout?.on('data', (d) => { markOutput(); console.log('[py]', d.toString().trimEnd()) })
+  pyProcess.stderr?.on('data', (d) => { markOutput(); console.error('[py]', d.toString().trimEnd()) })
   pyProcess.on('error', (err) => console.error('[py] failed to start:', err))
-  pyProcess.on('exit', (code) => console.log('[py] exited with code', code))
+  pyProcess.on('exit', (code) => {
+    pyExited = true
+    pyExitCode = code
+    console.log('[py] exited with code', code)
+  })
 
   const pyLog = createWriteStream(path.join(app.getPath('userData'), 'py-stderr.log'))
   pyProcess.stderr?.on('data', (d) => pyLog.write(d))
   pyProcess.stdout?.on('data', (d) => pyLog.write(d))
+}
+
+// Stop just the query server (Qdrant stays up). Used by deleteSnapshot, which
+// needs the server's hold on the collection released before dropping it, but
+// keeps Qdrant alive to serve the DELETE. Mirrors killSidecars' group-kill.
+function killQueryServer(): void {
+  const proc = pyProcess
+  pyProcess = null
+  if (!proc || proc.pid == null || proc.killed) return
+  try {
+    if (process.platform === 'win32') spawn('taskkill', ['/PID', String(proc.pid), '/F', '/T'])
+    else process.kill(-proc.pid, 'SIGKILL')
+  } catch {
+    try { proc.kill('SIGKILL') } catch { /* already gone */ }
+  }
 }
 
 // ─── Local renderer server ────────────────────────────────────────────────────
@@ -840,6 +1116,30 @@ function registerIpcHandlers() {
     return net.fetch('http://127.0.0.1:8080/ready').then(r => r.ok).catch(() => false)
   })
 
+  // ── Opt-in catalog snapshot: disclosure / download / delete ──────────────
+  // Sizes + install state for the startup disclosure and the Settings panel.
+  ipcMain.handle('snapshot:info', async () => computeSnapshotInfo())
+  // User consented to the (large) download — run the install tail on demand.
+  ipcMain.handle('snapshot:download', async () => {
+    if (installing) return { ok: false, error: 'already installing' }
+    if (!bootWindow) return { ok: false, error: 'window not ready' }
+    installing = true
+    bootStartedAt = Date.now()
+    bootLog('user consented — installing catalog')
+    try {
+      await installBackend(bootWindow)
+      return { ok: true }
+    } catch (e) {
+      bootLog(`✗ catalog install failed: ${String(e)}`)
+      if (!bootWindow.isDestroyed()) bootWindow.webContents.send('backend:error', String(e))
+      return { ok: false, error: String(e) }
+    } finally {
+      installing = false
+    }
+  })
+  // Delete the catalog, free the disk, return to "not installed".
+  ipcMain.handle('snapshot:delete', async () => deleteSnapshot())
+
   registerBugReportIpc()   // bug:submit / bug:diagnostics (in-app problem reporter)
 }
 
@@ -981,31 +1281,34 @@ app.whenReady().then(async () => {
   // Wait until the renderer is mounted so it can actually receive boot events.
   await new Promise<void>((r) => mainWindow.webContents.once('did-finish-load', () => r()))
 
-  // Backend comes up behind the window: Qdrant ready → collection present
-  // (download + decompress + recover on first run, skip if cached) → query server.
+  // Backend comes up behind the window. The catalog download is opt-in: if it's
+  // already installed we bring it straight up; if not, we stop at Qdrant and hand
+  // the renderer a size disclosure so the user can choose to download (or skip and
+  // use the app — local music — without a catalog). See installBackend / the
+  // snapshot:* IPC handlers for the on-demand path.
+  bootStartedAt = Date.now()
+  bootLog('starting data backend')
   try {
-    const snapshot = await resolveSnapshot()
+    const snapshot = await bootStep('resolve snapshot', () => resolveSnapshot())
+    currentSnapshot = snapshot
+    bootWindow = mainWindow
     // Generous timeout: on a cold start Qdrant mmaps a large (10M-point) collection
     // and rebuilds any payload indexes baked into the config before it serves
     // /readyz — that can take a couple of minutes. The default 60s aborts the boot
     // mid-rebuild (and a stale full-text index makes this much worse until the query
     // server's startup drops it).
-    await waitForReady('http://127.0.0.1:6333/readyz', 300000)
-    await ensureCollection(mainWindow, snapshot)
-    startQueryServer()
-    await waitForReady('http://127.0.0.1:8080/health')
-    // Hold the splash through warmup. /health is up as soon as the server binds,
-    // but its lexical index + embedding model + vector index aren't hot yet —
-    // /ready flips to 200 only when warmup finishes. Gating here means the user
-    // can't reach the search box until the very first query is fast, which is
-    // the whole point of a local-first search. Generous timeout: building the
-    // 860k-record lexical index can take a bit on a cold disk.
-    mainWindow.webContents.send('snapshot:status', 'warming')
-    await waitForWarmup('http://127.0.0.1:8080/ready', mainWindow, 300000)
-    console.log('[boot] data backend ready')
-    mainWindow.webContents.send('backend:ready')
+    await bootStep('wait for Qdrant /readyz', () =>
+      waitForReady('http://127.0.0.1:6333/readyz', 300000))
+
+    if (await isSnapshotInstalled()) {
+      bootLog('catalog already installed — bringing it up')
+      await installBackend(mainWindow)
+    } else {
+      bootLog('catalog not installed — awaiting user consent to download')
+      mainWindow.webContents.send('snapshot:needs-consent', await computeSnapshotInfo())
+    }
   } catch (err) {
-    console.error('[boot] backend failed to come up:', err)
+    bootLog(`✗ backend failed to come up: ${String(err)}`)
     mainWindow.webContents.send('backend:error', String(err))
   }
 

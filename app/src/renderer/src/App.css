@@ -636,6 +636,13 @@ textarea {
   0%, 100% { opacity: 1; }
   50% { opacity: 0; }
 }
+/* Soft pulse for the "still optimizing" status dot (Search tab pip + the
+   IndexingBar banner). Global so it animates in-app, after the splash — which
+   also declares it inline — has unmounted. */
+@keyframes fangornBootPulse {
+  0%, 100% { opacity: 0.35; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.12); }
+}
 
 .upload-error {
   font-size: 11px;

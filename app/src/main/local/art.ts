@@ -151,6 +151,15 @@ export function clearArt(scope: ArtScope, key: string): void {
 
 // Album art keys are `artist` + NUL + `album` (see renderer lib/artKeys.ts). Built
 // via fromCharCode so there's no raw NUL byte in this source file.
+//
+// DEBUGGING THE STORED KEYS: the NUL separator is invisible in a terminal and trips
+// up the line-oriented text tools — `grep` reports "binary file matches" and hides
+// the row, and BSD/macOS `sed` can't match it. Do NOT pipe dumped keys through
+// grep/sed/awk; you'll either lose rows or see `artistalbum` mashed together with no
+// visible boundary. Inspect with SQL instead, which renders the byte safely:
+//   SELECT scope, replace(art_key, char(0), '|'), length(art_key) FROM local_art;
+//   SELECT scope, hex(art_key) FROM local_art;   -- the NUL shows up as `00`
+// `char(0)` is also how you write a NUL into a WHERE clause when matching a key.
 const ART_KEY_SEP = String.fromCharCode(0)
 
 /**

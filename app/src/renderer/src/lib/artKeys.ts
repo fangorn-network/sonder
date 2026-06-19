@@ -13,6 +13,9 @@
 // resolves. better-sqlite3 binds TEXT with an explicit length, so the embedded
 // NUL round-trips intact. Built via fromCharCode so there's no raw NUL byte in
 // source (which would make git treat this file as binary).
+//
+// Debugging the stored keys: the NUL is invisible and breaks grep/sed/awk — inspect
+// the data via SQL, not the text pipeline. See main/local/art.ts for the recipe.
 const ALBUM_ART_SEP = String.fromCharCode(0)
 
 export const artistArtKey = (name: string): string => name

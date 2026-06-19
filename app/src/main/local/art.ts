@@ -85,8 +85,10 @@ async function fetchImage(url: string): Promise<{ mime: string; data: Buffer }> 
   const res = await net.fetch(url)
   if (!res.ok) throw new Error(`Image fetch failed (${res.status})`)
   const buf = Buffer.from(await res.arrayBuffer())
-  const ct = res.headers.get('content-type')?.split(';')[0]?.trim()
-  const m = ct && ct.startsWith('image/') ? ct : (mime.lookup(url) || 'image/jpeg') as string
+  // Content-Type may be absent; when present, drop any `; charset=…` parameter.
+  const header = res.headers.get('content-type')
+  const ct = header ? header.split(';')[0].trim() : ''
+  const m = ct.startsWith('image/') ? ct : (mime.lookup(url) || 'image/jpeg') as string
   return { mime: m, data: buf }
 }
 

@@ -3,10 +3,11 @@
  *
  * Single source of truth for which chain + token contracts the app talks to.
  *
- * `yarn dev` (electron-vite dev) sets `import.meta.env.DEV`, so development
- * always defaults to **Arbitrum Sepolia** testnet USDC — you never touch
- * real-money mainnet contracts while hacking. Production builds default to
- * Arbitrum One. Force either with `VITE_NETWORK=arbitrumSepolia | arbitrum`.
+ * We are not deployed on Arbitrum One yet, so every build — `yarn dev` and
+ * packaged production alike — currently defaults to **Arbitrum Sepolia**
+ * testnet USDC. Once mainnet is live, flip the default back in
+ * `resolveNetwork()`. Force either chain with
+ * `VITE_NETWORK=arbitrumSepolia | arbitrum`.
  *
  * Note: the Fangorn protocol (publish / x402) is currently only deployed on
  * Arbitrum Sepolia. On mainnet those flows degrade gracefully (`fangorn` /
@@ -73,8 +74,10 @@ const NETWORKS: Record<NetworkKey, NetworkConfig> = {
 function resolveNetwork(): NetworkConfig {
   const override = (env.VITE_NETWORK as string | undefined)?.trim()
   if (override && override in NETWORKS) return NETWORKS[override as NetworkKey]
-  // `yarn dev` → import.meta.env.DEV → testnet; packaged builds → mainnet.
-  return env.DEV ? NETWORKS.arbitrumSepolia : NETWORKS.arbitrum
+  // We are not deployed on Arbitrum One yet, so default everything — including
+  // packaged builds — to Arbitrum Sepolia for now. Force mainnet explicitly
+  // with VITE_NETWORK=arbitrum once we're live there.
+  return NETWORKS.arbitrumSepolia
 }
 
 /** The active network for this build/run. */

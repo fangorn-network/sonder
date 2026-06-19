@@ -10,11 +10,13 @@ import { NETWORK } from './lib/network';
 // import * as THREE from 'three'
 // ;(window as any).THREE = THREE
 
+const PRIVY_APP_ID = (import.meta as any).env.VITE_PRIVY_APP_ID as string | undefined;
+
 const root = ReactDOM.createRoot(document.getElementById('root')!);
 root.render(
   <React.StrictMode>
     <PrivyProvider
-      appId="cmqad9j9b00i10cl7apzw6rq8"
+      appId={PRIVY_APP_ID ?? ''}
       config={{
         // Embedded wallets for users who don't have one
         embeddedWallets: {
@@ -29,8 +31,8 @@ root.render(
             useSandbox: NETWORK.testnet,
           },
         },
-        // Active chain — Arbitrum Sepolia under `yarn dev`, Arbitrum One in
-        // packaged builds (override via VITE_NETWORK). See lib/network.ts.
+        // Active chain — Arbitrum Sepolia everywhere until we deploy on
+        // Arbitrum One (override via VITE_NETWORK). See lib/network.ts.
         defaultChain: NETWORK.chain,
         supportedChains: [NETWORK.chain],
         appearance: {

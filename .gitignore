@@ -49,4 +49,4 @@ db/
 **/__pycache__/
 *.pyc
 *.pyo
-.claude
+**/.claude/**

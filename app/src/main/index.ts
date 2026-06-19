@@ -22,6 +22,7 @@ import { ToolboxConfigManager } from './agent/toolbox-config-manager'
 import { registerSpotifyAuth, handleSpotifyCallback } from './spotify/SpotifyAuth'
 import { registerPlaybackIpc } from './playback/ipc'
 import { registerLocalMusicIpc } from './local/ipc'
+import { trackCover } from './local/deezer'
 import { installLogCapture, registerBugReportIpc } from './bug-report'
 import snapshotManifest from './snapshot-manifest.json'
 // import snapshotManifest from './small.json'
@@ -1034,9 +1035,8 @@ function registerIpcHandlers() {
     return { status: res.status, body: await res.text() }
   })
 
-  ipcMain.handle('deezer:api', async (_event, { url }) => {
-    const res = await fetch(url, { headers: { 'Accept': 'application/json' } })
-    return { status: res.status, body: await res.text() }
+  ipcMain.handle('deezer:track-cover', async (_event, { artist, title }) => {
+    return trackCover(artist, title)
   })
 
   ipcMain.handle('spotify:api', async (_event, { url, method, token, body }) => {

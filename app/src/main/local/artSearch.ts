@@ -18,8 +18,8 @@
  * eight-thumbnail search per item.
  */
 
-import { net } from 'electron'
 import { imageUrlToDataUrl } from './art'
+import { searchAlbums, searchArtists } from './deezer'
 import type { ArtBestTryProgress, ArtCandidate, ArtQuery, ArtRequest, ArtScope } from './types'
 
 const SEARCH_LIMIT = 12 // raw hits to consider before de-duping
@@ -27,26 +27,6 @@ const MAX_RESULTS = 8 // candidates returned to the renderer
 /** How many Deezer lookups a "Best try" batch runs at once — enough to feel quick
  *  on a big import without hammering the keyless API. */
 const BEST_TRY_CONCURRENCY = 4
-
-interface DeezerArtist { id: number; name: string; picture_medium?: string; picture_xl?: string; picture_big?: string }
-interface DeezerAlbum {
-  id: number; title: string
-  cover_medium?: string; cover_big?: string; cover_xl?: string
-  artist?: { name?: string }
-}
-
-async function deezerJson<T>(url: string): Promise<T | null> {
-  try {
-    const res = await net.fetch(url)
-    if (!res.ok) return null
-    return (await res.json()) as T
-  } catch {
-    return null
-  }
-}
-
-/** Advanced Deezer query fragment, quoting the value and stripping quotes. */
-const term = (field: string, value: string) => `${field}:"${value.replace(/"/g, '')}"`
 
 /** A raw provider hit before any thumbnail is downloaded — the JSON lookup
  *  without the (expensive) image fetches. Shared by the full search and Best try. */
@@ -60,20 +40,15 @@ async function hitsFor(scope: ArtScope, q: ArtQuery): Promise<RawHit[]> {
   if (scope === 'album') {
     const album = (q.album ?? '').trim()
     if (!album) return []
-    const query = encodeURIComponent([term('artist', artist), term('album', album)].join(' '))
-    const data = await deezerJson<{ data?: DeezerAlbum[] }>(
-      `https://api.deezer.com/search/album?q=${query}&limit=${SEARCH_LIMIT}`,
-    )
-    return (data?.data ?? []).map((a) => ({
+    const albums = await searchAlbums(artist, album, SEARCH_LIMIT)
+    return albums.map((a) => ({
       fullUrl: a.cover_xl || a.cover_big,
       thumbUrl: a.cover_medium || a.cover_big,
       label: [a.artist?.name, a.title].filter(Boolean).join(' — ') || a.title,
     }))
   }
-  const data = await deezerJson<{ data?: DeezerArtist[] }>(
-    `https://api.deezer.com/search/artist?q=${encodeURIComponent(artist)}&limit=${SEARCH_LIMIT}`,
-  )
-  return (data?.data ?? []).map((a) => ({
+  const artists = await searchArtists(artist, SEARCH_LIMIT)
+  return artists.map((a) => ({
     fullUrl: a.picture_xl || a.picture_big,
     thumbUrl: a.picture_medium || a.picture_big,
     label: a.name,

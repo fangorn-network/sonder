@@ -12,10 +12,14 @@ import { SpotifyProvider, useSpotifyContext } from './context/SpotifyContext'
 import { useFangornAgent } from './hooks/useFangornAgent'
 import { useChroma } from './hooks/useChroma'
 import { StartupView } from './views/StartupView'
+import { BootProvider, useBoot, type SnapshotInfo } from './providers/BootProvider'
+import { IndexingBar } from './components/IndexingBar'
 import { useSessionKernel } from './hooks/useSessionKernel'
+import { useTheme } from './hooks/useTheme'
 import { ConnectorsView } from './views/ConnectorsView'
+import { AccountView } from './views/AccountView'
+import { BugReportFab } from './components/BugReportFab'
 import type { TasteSignal } from './types'
-import { ConnectWallet } from './components/ConnectWallet'
 import { type SessionEvent } from './kernel/Visualizer'
 import { useChromaSync } from './hooks/useChromaSync'
 import KernelDebugHUD from './kernel/HUD'
@@ -32,20 +36,23 @@ import { DEFAULTS } from './kernel/constants'
 import type { KernelSnapshot } from './types/kernel'
 import type { TrackNeighborData } from './kernel/neighborhoodAnalysis'
 
-// ── Design tokens (light editorial) ──────────────────────────────────────────
-const BG1    = '#f0ece5'
-const BG2    = '#e8e3da'
-const FG     = '#1a1714'
-const FG2    = '#4a4440'
-const FG3    = '#766e66'
-const FG4    = '#a09890'
-const ACCENT = '#b83030'
-const BORDER = 'rgba(0,0,0,0.12)'
-const BORDER2 = 'rgba(0,0,0,0.07)'
+// ── Design tokens ─────────────────────────────────────────────────────────────
+// Read from the shared CSS variables (App.css :root + the data-theme="dark"
+// override) so the shell flips with the light/dark toggle. See hooks/useTheme.
+const BG1    = 'var(--bg1)'
+const BG2    = 'var(--bg2)'
+const FG     = 'var(--fg)'
+const FG2    = 'var(--fg2)'
+const FG3    = 'var(--fg3)'
+const FG4    = 'var(--fg4)'
+const ACCENT = 'var(--accent)'
+const ACCENT_DIM    = 'var(--accent-dim)'
+const ACCENT_BORDER = 'var(--accent-border)'
+const BORDER = 'var(--border)'
+const BORDER2 = 'var(--border2)'
 const MONO   = 'var(--font-mono,"Fragment Mono","DM Mono",monospace)'
 const SANS   = 'var(--font-body,"Geist","Inter",sans-serif)'
 const DISP   = 'var(--font-display,"Bebas Neue",sans-serif)'
-const CHROMA_URL = 'http://localhost:8080'
 
 const SNAPSHOT_HISTORY_DEPTH = 5
 const MB_USER_AGENT = 'SOND3R/1.0.0 (https://fangorn.network)'
@@ -53,10 +60,67 @@ const MB_USER_AGENT = 'SOND3R/1.0.0 (https://fangorn.network)'
 const onTrackEndedRef = { current: () => { } }
 
 type AnalyzeTab = 'wiki' | 'neighborhood' | 'galaxy'
+type DrawerSection = 'kernel' | 'account' | 'connectors' | 'agent' | 'data'
+
+/** Status pip shown on the Search tab. Four states:
+ *   - `failed`     → small × (snapshot download / index build failed)
+ *   - `optimizing` → amber pulsing dot (search works, but the vector index is
+ *                    still building, so results aren't fully optimized yet)
+ *   - `ready`      → green check (warm + fully indexed)
+ *   - otherwise    → spinning ring (still warming up; search not usable yet) */
+function SearchStatus({ ready, optimizing, failed, needsDownload }: { ready: boolean; optimizing?: boolean; failed?: boolean; needsDownload?: boolean }) {
+  if (failed) {
+    return (
+      <span aria-label="Search unavailable" style={{ color: 'var(--err)', fontSize: 12, lineHeight: 1, fontFamily: 'var(--font-mono, monospace)' }}>×</span>
+    )
+  }
+  if (needsDownload) {
+    return (
+      <span aria-label="Catalog not downloaded" title="Catalog not downloaded" style={{ color: 'var(--fg4)', fontSize: 12, lineHeight: 1, fontFamily: 'var(--font-mono, monospace)' }}>↓</span>
+    )
+  }
+  if (optimizing) {
+    return (
+      <span
+        aria-label="Search ready — still optimizing"
+        style={{
+          width: 8, height: 8, borderRadius: '50%', background: 'var(--accent)',
+          display: 'inline-block', boxShadow: '0 0 5px var(--accent)',
+          animation: 'fangornBootPulse 1.4s ease-in-out infinite',
+        }}
+      />
+    )
+  }
+  if (ready) {
+    return (
+      <span aria-label="Search ready" style={{ color: 'var(--success)', fontSize: 12, lineHeight: 1, fontFamily: 'var(--font-mono, monospace)' }}>✓</span>
+    )
+  }
+  return (
+    <span
+      aria-label="Warming up search"
+      style={{
+        width: 10, height: 10, boxSizing: 'border-box', borderRadius: '50%',
+        border: '1.5px solid var(--border2)', borderTopColor: 'var(--accent)',
+        display: 'inline-block', animation: 'spin 0.8s linear infinite',
+      }}
+    />
+  )
+}
 
 // ─── Root ──────────────────────────────────────────────────────────────────────
 
 export default function App() {
+  // BootProvider wraps everything so the backend boot/index subscription is
+  // shared and survives the splash → app transition (user can enter mid-index).
+  return (
+    <BootProvider>
+      <AppRoot />
+    </BootProvider>
+  )
+}
+
+function AppRoot() {
   const [booted, setBooted] = useState(() => localStorage.getItem('booted') === 'true')
   const { ready, authenticated, login } = usePrivy()
 
@@ -82,7 +146,16 @@ export default function App() {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 function Main() {
+  const { theme, toggleTheme } = useTheme()
   const spotify = useSpotify(() => onTrackEndedRef.current())
+
+  // Search opens as soon as the backend is `searchable` (post-warmup); the
+  // IndexingBar only stands in while it's still warming. Once searchable, the
+  // header swaps in the real search field and `optimizing` drives a soft hint
+  // that the vector index is still building (results valid but unoptimized).
+  const { searchable, optimizing, needsDownload, ready: searchReady, stage: bootStage } = useBoot()
+  // Snapshot download / index build failed — show an × on the Search tab.
+  const searchFailed = bootStage === 'error'
 
   const [sessionHistory, setSessionHistory] = useState<SessionEvent[]>([])
   const [entropy, setEntropy] = useState(0.2)
@@ -91,7 +164,7 @@ function Main() {
   const [genreWeights, setGenreWeights] = useState<Record<string, number>>({})
 
   // ── Wiki navigation state (lifted from TrackWikiView) ─────────────────────
-  const [wikiView, setWikiView] = useState<View>({ kind: 'home' })
+  const [wikiView, setWikiView] = useState<View>({ kind: 'search' })
   const [wikiStack, setWikiStack] = useState<View[]>([])
   const [wikiSearchBox, setWikiSearchBox] = useState('')
 
@@ -132,9 +205,16 @@ function Main() {
 
   // ── UI state ──────────────────────────────────────────────────────────────
   const [showSettings, setShowSettings] = useState(false)
+  const [settingsSection, setSettingsSection] = useState<DrawerSection>('kernel')
   const [nowPlayingOpen, setNowPlayingOpen] = useState(false)
   const [showGalaxy, setShowGalaxy] = useState(false)
-  const [showLocal, setShowLocal] = useState(false)
+  // Home tab = Local Music (the default landing); Search tab = the catalog wiki.
+  const [showLocal, setShowLocal] = useState(true)
+
+  const openSettings = useCallback((section: DrawerSection) => {
+    setSettingsSection(section)
+    setShowSettings(true)
+  }, [])
 
   // ── Kernel / chroma ───────────────────────────────────────────────────────
 
@@ -317,8 +397,11 @@ function Main() {
     kernel.embedText(query)
       .then(vec => applyKernelQuery(Array.from(vec), true))
       .catch(e => console.warn('[app] startup embed failed:', e))
-    // Warm the UMAP projection cache so the galaxy view loads faster
-    fetch(`${CHROMA_URL}/catalog/map`).catch(() => {})
+    // The UMAP projection (/catalog/map) is deliberately NOT prefetched here:
+    // building it over 860k points is a multi-minute, CPU-saturating job, and
+    // running it in the background during normal search pegs the machine. The
+    // galaxy view (SoundTownView) builds it lazily on open — the only place it's
+    // actually needed.
   }, [chromaReady, loading, kernelTopGenres]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function buildStartupQuery(topGenres?: string[]): string {
@@ -352,6 +435,9 @@ function Main() {
     wikiNavigate({ kind: 'results', query: q, mode: 'semantic' })
   }, [wikiNavigate])
 
+  const accountActive  = showSettings && settingsSection === 'account'
+  const settingsActive = showSettings && settingsSection !== 'account'
+
   // ─────────────────────────────────────────────────────────────────────────
   // Render
   // ─────────────────────────────────────────────────────────────────────────
@@ -360,7 +446,7 @@ function Main() {
     <SpotifyProvider value={{ ...spotify }}>
       <LocalMusicProvider>
       <PlayerProvider tracks={tracks}>
-        <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#050309', overflow: 'hidden', fontFamily: SANS }}>
+        <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: 'var(--bg)', overflow: 'hidden', fontFamily: SANS }}>
 
           {/* ── Shell header (40px) ───────────────────────────────────────── */}
           <header style={{
@@ -379,9 +465,9 @@ function Main() {
             WebkitAppRegion: 'drag',
           } as React.CSSProperties}>
 
-            {/* SOND3R wordmark */}
+            {/* SOND3R wordmark — brand; also returns to Home (Local Music) */}
             <button
-              onClick={() => { setWikiView({ kind: 'home' }); setWikiStack([]); setWikiSearchBox('') }}
+              onClick={() => setShowLocal(true)}
               style={{ fontFamily: DISP, fontSize: 20, color: FG, letterSpacing: '0.08em', background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0, WebkitAppRegion: 'no-drag', lineHeight: 1 } as React.CSSProperties}>
               SOND3R
             </button>
@@ -389,74 +475,106 @@ function Main() {
             {/* Separator */}
             <span style={{ color: BORDER, fontSize: 14, flexShrink: 0 }}>|</span>
 
-            {/* Back button — only when there's history */}
-            {wikiStack.length > 0 && (
-              <button
-                onClick={wikiBack}
-                style={{ background: 'none', border: `1px solid ${BORDER2}`, color: FG3, fontFamily: MONO, fontSize: 11, padding: '2px 8px', cursor: 'pointer', flexShrink: 0, WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
-                ←
-              </button>
-            )}
-
-            {/* Breadcrumb trail — inherits drag from header; buttons individually opt out */}
-            <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 5, overflow: 'hidden', whiteSpace: 'nowrap' }}>
-              {wikiCrumbs.slice(-5).map((c, i, arr) => {
-                const realIndex = wikiCrumbs.length - arr.length + i
-                const isLast = i === arr.length - 1
-                return (
-                  <span key={realIndex} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, minWidth: 0, flexShrink: isLast ? 1 : 0 }}>
-                    {i > 0 && <span style={{ color: FG4, fontSize: 9 }}>›</span>}
-                    {isLast
-                      ? <span style={{ fontFamily: MONO, fontSize: 10, color: FG2, letterSpacing: '0.04em', overflow: 'hidden', textOverflow: 'ellipsis' }}>{viewLabel(c)}</span>
-                      : <button onClick={() => wikiGoTo(realIndex)}
-                          style={{ background: 'none', border: 'none', color: FG4, fontFamily: MONO, fontSize: 10, cursor: 'pointer', padding: 0, letterSpacing: '0.04em', flexShrink: 0, WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
-                          {viewLabel(c)}
-                        </button>}
-                  </span>
-                )
-              })}
-            </div>
-
-            {/* Search input — hidden on home (the home page has its own prominent search) */}
-            {wikiView.kind !== 'home' && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 0, flexShrink: 0, WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
-                <input
-                  value={wikiSearchBox}
-                  onChange={e => setWikiSearchBox(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter') wikiRunSearch(wikiSearchBox) }}
-                  placeholder="artist, track, or vibe…"
-                  style={{
-                    width: 220, background: BG2, border: `1px solid ${BORDER2}`,
-                    borderRight: 'none', color: FG, fontSize: 11, padding: '5px 9px',
-                    outline: 'none', fontFamily: MONO, letterSpacing: '0.02em',
-                  }} />
-                <button
-                  onClick={() => wikiRunSearch(wikiSearchBox)}
-                  disabled={!wikiSearchBox.trim()}
-                  style={{
-                    background: wikiSearchBox.trim() ? ACCENT : 'transparent',
-                    border: `1px solid ${wikiSearchBox.trim() ? ACCENT : BORDER2}`,
-                    color: wikiSearchBox.trim() ? '#fff' : FG4,
-                    fontFamily: MONO, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase',
-                    padding: '6px 10px', cursor: wikiSearchBox.trim() ? 'pointer' : 'default',
-                  }}>
-                  ↵
-                </button>
-              </div>
-            )}
-
-            {/* Local music */}
+            {/* Primary tabs: Home (local music) ⇄ Search (catalog wiki). */}
             <button
               onClick={() => setShowLocal(true)}
-              style={{ background: showLocal ? `${ACCENT}18` : 'none', border: `1px solid ${showLocal ? ACCENT + '44' : BORDER2}`, color: showLocal ? ACCENT : FG4, fontFamily: MONO, fontSize: 12, lineHeight: 1, padding: '3px 8px', cursor: 'pointer', flexShrink: 0, WebkitAppRegion: 'no-drag' } as React.CSSProperties}
-              title="Local music">
-              ♪
+              style={{ background: showLocal ? ACCENT_DIM : 'none', border: `1px solid ${showLocal ? ACCENT_BORDER : 'transparent'}`, color: showLocal ? ACCENT : FG3, fontFamily: MONO, fontSize: 11, letterSpacing: '0.10em', textTransform: 'uppercase', padding: '4px 12px', cursor: 'pointer', flexShrink: 0, lineHeight: 1, WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+              Home
+            </button>
+            <button
+              onClick={() => setShowLocal(false)}
+              title={searchFailed ? 'Search unavailable — catalog failed to load' : needsDownload ? 'Catalog not downloaded — enable it in Settings → Data' : optimizing ? 'Search ready — still optimizing the index, results improving' : searchReady ? 'Search ready' : 'Warming up search…'}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: !showLocal ? ACCENT_DIM : 'none', border: `1px solid ${!showLocal ? ACCENT_BORDER : 'transparent'}`, color: !showLocal ? ACCENT : FG3, fontFamily: MONO, fontSize: 11, letterSpacing: '0.10em', textTransform: 'uppercase', padding: '4px 12px', cursor: 'pointer', flexShrink: 0, lineHeight: 1, WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+              Search
+              <SearchStatus ready={searchReady} optimizing={optimizing} failed={searchFailed} needsDownload={needsDownload} />
+            </button>
+
+            {/* Wiki navigation (back / breadcrumb / search box) — Search tab only.
+                On Home, a flex spacer keeps the right-side controls right-aligned. */}
+            {!showLocal ? (
+              <>
+                {/* Back button — only when there's history */}
+                {wikiStack.length > 0 && (
+                  <button
+                    onClick={wikiBack}
+                    style={{ background: 'none', border: `1px solid ${BORDER2}`, color: FG3, fontFamily: MONO, fontSize: 11, padding: '2px 8px', cursor: 'pointer', flexShrink: 0, WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+                    ←
+                  </button>
+                )}
+
+                {/* Breadcrumb trail — inherits drag from header; buttons individually opt out */}
+                <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 5, overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                  {wikiCrumbs.slice(-5).map((c, i, arr) => {
+                    const realIndex = wikiCrumbs.length - arr.length + i
+                    const isLast = i === arr.length - 1
+                    return (
+                      <span key={realIndex} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, minWidth: 0, flexShrink: isLast ? 1 : 0 }}>
+                        {i > 0 && <span style={{ color: FG4, fontSize: 9 }}>›</span>}
+                        {isLast
+                          ? <span style={{ fontFamily: MONO, fontSize: 10, color: FG2, letterSpacing: '0.04em', overflow: 'hidden', textOverflow: 'ellipsis' }}>{viewLabel(c)}</span>
+                          : <button onClick={() => wikiGoTo(realIndex)}
+                              style={{ background: 'none', border: 'none', color: FG4, fontFamily: MONO, fontSize: 10, cursor: 'pointer', padding: 0, letterSpacing: '0.04em', flexShrink: 0, WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+                              {viewLabel(c)}
+                            </button>}
+                      </span>
+                    )
+                  })}
+                </div>
+
+                {/* Search input — hidden on the wiki's own home (it has its own
+                    prominent search). Shown as soon as search is usable; only the
+                    pre-warmup window (not yet searchable) gets the progress bar.
+                    The not-downloaded gate shows neither (the pip + Home prompt
+                    carry that state instead). */}
+                {wikiView.kind !== 'search' && !searchable && !needsDownload && <IndexingBar variant="header" />}
+                {wikiView.kind !== 'search' && searchable && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 0, flexShrink: 0, WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+                    <input
+                      value={wikiSearchBox}
+                      onChange={e => setWikiSearchBox(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') wikiRunSearch(wikiSearchBox) }}
+                      placeholder="artist, track, or vibe…"
+                      style={{
+                        width: 220, background: BG2, border: `1px solid ${BORDER2}`,
+                        borderRight: 'none', color: FG, fontSize: 11, padding: '5px 9px',
+                        outline: 'none', fontFamily: MONO, letterSpacing: '0.02em',
+                      }} />
+                    <button
+                      onClick={() => wikiRunSearch(wikiSearchBox)}
+                      disabled={!wikiSearchBox.trim()}
+                      style={{
+                        background: wikiSearchBox.trim() ? ACCENT : 'transparent',
+                        border: `1px solid ${wikiSearchBox.trim() ? ACCENT : BORDER2}`,
+                        color: wikiSearchBox.trim() ? '#fff' : FG4,
+                        fontFamily: MONO, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase',
+                        padding: '6px 10px', cursor: wikiSearchBox.trim() ? 'pointer' : 'default',
+                      }}>
+                      ↵
+                    </button>
+                  </div>
+                )}
+              </>
+            ) : (
+              <span style={{ flex: 1 }} />
+            )}
+
+            {/* Theme toggle — light ⇄ dark */}
+            <button
+              onClick={toggleTheme}
+              style={{ background: 'none', border: `1px solid ${BORDER2}`, color: FG4, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '4px 8px', cursor: 'pointer', flexShrink: 0, WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+              title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+              aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
+              <ThemeIcon theme={theme} />
             </button>
 
             {/* Settings icon */}
             <button
-              onClick={() => setShowSettings(s => !s)}
-              style={{ background: showSettings ? `${ACCENT}18` : 'none', border: `1px solid ${showSettings ? ACCENT + '44' : BORDER2}`, color: showSettings ? ACCENT : FG4, fontFamily: MONO, fontSize: 11, padding: '3px 8px', cursor: 'pointer', flexShrink: 0, WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+              onClick={() => {
+                if (!showSettings) openSettings('kernel')
+                else if (settingsSection === 'account') setSettingsSection('kernel')
+                else setShowSettings(false)
+              }}
+              style={{ background: settingsActive ? ACCENT_DIM : 'none', border: `1px solid ${settingsActive ? ACCENT_BORDER : BORDER2}`, color: settingsActive ? ACCENT : FG4, fontFamily: MONO, fontSize: 11, padding: '3px 8px', cursor: 'pointer', flexShrink: 0, WebkitAppRegion: 'no-drag' } as React.CSSProperties}
               title="Settings">
               ⚙
             </button>
@@ -464,10 +582,17 @@ function Main() {
             {/* Now-playing dot — only when the dataset is playable */}
             {canPlay && <NowPlayingDot onOpen={() => setNowPlayingOpen(true)} />}
 
-            {/* Wallet */}
-            <div style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
-              <ConnectWallet />
-            </div>
+            {/* Account */}
+            <button
+              onClick={() => {
+                if (!showSettings) openSettings('account')
+                else if (settingsSection !== 'account') setSettingsSection('account')
+                else setShowSettings(false)
+              }}
+              style={{ background: accountActive ? ACCENT_DIM : 'none', border: `1px solid ${accountActive ? ACCENT_BORDER : BORDER2}`, color: accountActive ? ACCENT : FG4, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '4px 8px', cursor: 'pointer', flexShrink: 0, WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+              title="Account">
+              <AccountIcon />
+            </button>
           </header>
 
           {/* ── Content area ─────────────────────────────────────────────── */}
@@ -475,8 +600,15 @@ function Main() {
 
             {/* Wiki — primary surface */}
             <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-              <KernelStrip {...kernelStrip} theme="light" />
-              <div style={{ flex: 1, minHeight: 0 }}>
+              <KernelStrip {...kernelStrip} theme={theme} />
+              {/* Soft, non-blocking hint while the catalog search index is still
+                  optimizing — search already works, this just signals results are
+                  still improving. Search tab only (local music needs no catalog). */}
+              {optimizing && !showLocal && <IndexingBar variant="banner" />}
+              {/* Content region below the Kernel view. LocalMusicView overlays
+                  just this area (position:absolute inset:0), so the shell header
+                  and KernelStrip stay visible — same chrome as the wiki. */}
+              <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
                 <TrackWikiView
                   view={wikiView}
                   stack={wikiStack}
@@ -493,6 +625,7 @@ function Main() {
                   kernelSessionLength={kernel.state.t}
                   kernelMutedCount={kernelStrip.mutedCount}
                 />
+                {showLocal && <LocalMusicView />}
               </div>
             </div>
 
@@ -507,6 +640,8 @@ function Main() {
                   kernelState={kernel.state}
                   entropy={entropy}
                   activeProfileName={activeProfileName}
+                  section={settingsSection}
+                  onSectionChange={setSettingsSection}
                   onLoadKernel={handleLoadKernel}
                   onClose={() => setShowSettings(false)}
                   onOpenGalaxy={() => { setShowGalaxy(true); setShowSettings(false) }}
@@ -532,14 +667,6 @@ function Main() {
                 }}
                 onBack={() => setShowGalaxy(false)}
               />
-            </div>,
-            document.body,
-          )}
-
-          {/* ── Local music overlay ───────────────────────────────────────── */}
-          {showLocal && createPortal(
-            <div style={{ position: 'fixed', inset: 0, zIndex: 70 }}>
-              <LocalMusicView onClose={() => setShowLocal(false)} />
             </div>,
             document.body,
           )}
@@ -571,6 +698,9 @@ function Main() {
 
           {/* KernelDebugHUD — Ctrl+K accessible */}
           <KernelDebugHUD state={kernel.state} />
+
+          {/* Bug reporter — bottom-left corner, mirroring the HUD's anchor. */}
+          <BugReportFab storageKey="app" style={{ position: 'fixed', left: 0, bottom: 0, zIndex: 200 }} />
         </div>
       </PlayerProvider >
       </LocalMusicProvider>
@@ -602,19 +732,155 @@ function NowPlayingDot({ onOpen }: { onOpen: () => void }) {
   )
 }
 
+// ─── ThemeIcon ────────────────────────────────────────────────────────────────
+// Shows the mode you'll switch *to*: a moon while in light mode, a sun while in
+// dark mode.
+
+function ThemeIcon({ theme }: { theme: 'light' | 'dark' }) {
+  if (theme === 'dark') {
+    // Sun — click to go light.
+    return (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="4" />
+        <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
+      </svg>
+    )
+  }
+  // Moon — click to go dark.
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+    </svg>
+  )
+}
+
+// ─── AccountIcon ──────────────────────────────────────────────────────────────
+
+function AccountIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+      <circle cx="12" cy="7" r="4" />
+    </svg>
+  )
+}
+
 // ─── Settings drawer ──────────────────────────────────────────────────────────
+
+function fmtBytes(n: number): string {
+  if (n >= 1e9) return (n / 1e9).toFixed(2) + ' GB'
+  if (n >= 1e6) return (n / 1e6).toFixed(1) + ' MB'
+  if (n >= 1e3) return (n / 1e3).toFixed(0) + ' KB'
+  return `${n} B`
+}
+
+// Settings → Data: opt-in catalog management. Shows install state + sizes, and
+// lets the user download (if they skipped the startup prompt) or delete to
+// reclaim the disk. Live install/optimize progress mirrors the boot state.
+function DataSettings() {
+  const boot = useBoot()
+  const [info, setInfo] = useState<SnapshotInfo | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+
+  const refresh = useCallback(() => {
+    window.sond3r?.getSnapshotInfo().then(setInfo).catch(() => { })
+  }, [])
+  // Refresh on mount and whenever boot crosses a stage boundary (install/delete).
+  useEffect(() => { refresh() }, [refresh, boot.stage])
+
+  const loading    = boot.stage === 'downloading' || boot.stage === 'decompressing' || boot.stage === 'recovering' || boot.stage === 'warming'
+  const optimizing = boot.stage === 'indexing'
+  const installed  = boot.ready || optimizing || (info?.installed ?? false)
+  const lowDisk    = !!info && info.freeBytes < info.requiredBytes
+
+  const onDownload = () => { setBusy(true); window.sond3r?.downloadSnapshot().finally(() => setBusy(false)) }
+  const onDelete = () => {
+    setBusy(true)
+    window.sond3r?.deleteSnapshot().then(() => setConfirmDelete(false)).finally(() => { setBusy(false); refresh() })
+  }
+
+  const Row = ({ k, v, warn }: { k: string; v: string; warn?: boolean }) => (
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, fontFamily: MONO, fontSize: 11, color: warn ? 'var(--err)' : FG3, fontVariantNumeric: 'tabular-nums' }}>
+      <span style={{ color: FG4, letterSpacing: '0.08em', textTransform: 'uppercase' }}>{k}</span>
+      <span>{v}</span>
+    </div>
+  )
+  const btn = (primary: boolean, danger?: boolean): React.CSSProperties => ({
+    marginTop: 8, padding: '9px 14px', fontFamily: MONO, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase',
+    color: danger ? 'var(--err)' : primary ? '#fff' : FG3,
+    background: primary && !danger ? ACCENT : 'transparent',
+    border: `1px solid ${danger ? 'var(--err)' : primary ? ACCENT : BORDER2}`,
+    cursor: 'pointer', textAlign: 'left',
+  })
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div>
+        <div style={{ fontFamily: MONO, fontSize: 8, color: FG4, letterSpacing: '0.18em', textTransform: 'uppercase', marginBottom: 6 }}>Search catalog</div>
+        <div style={{ fontFamily: SANS, fontSize: 12, color: FG3, lineHeight: 1.55 }}>
+          The catalog (10M+ tracks) powers Search. It's optional — local music works without it.
+        </div>
+      </div>
+
+      {loading ? (
+        <div style={{ fontFamily: MONO, fontSize: 11, color: FG2 }}>
+          {boot.label}{boot.pct != null ? ` · ${boot.pct}%` : '…'}
+        </div>
+      ) : installed ? (
+        <>
+          <Row k="Status" v={optimizing ? 'Installed · optimizing' : 'Installed'} />
+          {info && info.installedBytes > 0 && <Row k="On disk" v={fmtBytes(info.installedBytes)} />}
+          {!confirmDelete ? (
+            <button onClick={() => setConfirmDelete(true)} disabled={busy} style={btn(false, true)}>Delete catalog…</button>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, border: '1px solid var(--err)', padding: 12 }}>
+              <div style={{ fontFamily: SANS, fontSize: 12, color: FG2, lineHeight: 1.5 }}>
+                Delete the catalog and free {info && info.installedBytes > 0 ? fmtBytes(info.installedBytes) : 'this disk space'}? You'll need to re-download it to search again.
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={onDelete} disabled={busy} style={{ ...btn(false, true), marginTop: 0, flex: 1, textAlign: 'center' }}>{busy ? 'Deleting…' : 'Delete'}</button>
+                <button onClick={() => setConfirmDelete(false)} disabled={busy} style={{ ...btn(false), marginTop: 0, flex: 1, textAlign: 'center' }}>Cancel</button>
+              </div>
+            </div>
+          )}
+        </>
+      ) : (
+        <>
+          <Row k="Status" v="Not installed" />
+          {info && <>
+            <Row k="Download" v={fmtBytes(info.compressedBytes)} />
+            <Row k="On disk (unpacked)" v={`≈ ${fmtBytes(info.uncompressedBytes)}`} />
+            <Row k="Free disk needed" v={fmtBytes(info.requiredBytes)} warn={lowDisk} />
+            <Row k="You have free" v={fmtBytes(info.freeBytes)} warn={lowDisk} />
+          </>}
+          <div style={{ fontFamily: SANS, fontSize: 11, color: FG4, lineHeight: 1.5 }}>
+            Large download - best on a fast, unmetered connection.
+          </div>
+          {lowDisk && (
+            <div style={{ fontFamily: MONO, fontSize: 10, color: 'var(--err)', lineHeight: 1.5 }}>Not enough free disk to install.</div>
+          )}
+          <button onClick={onDownload} disabled={busy || !info || lowDisk} style={btn(true)}>
+            {busy ? 'Starting…' : `Download catalog${info ? ` · ${fmtBytes(info.compressedBytes)}` : ''}`}
+          </button>
+        </>
+      )}
+    </div>
+  )
+}
 
 interface SettingsDrawerProps {
   kernelState: any
   entropy: number
   activeProfileName: string
+  section: DrawerSection
+  onSectionChange: (s: DrawerSection) => void
   onLoadKernel: (snap: KernelSnapshot) => void
   onClose: () => void
   onOpenGalaxy: () => void
 }
 
-function SettingsDrawer({ kernelState, entropy, activeProfileName, onClose, onOpenGalaxy }: SettingsDrawerProps) {
-  const [section, setSection] = useState<'kernel' | 'connectors' | 'agent'>('kernel')
+function SettingsDrawer({ kernelState, entropy, activeProfileName, section, onSectionChange, onClose, onOpenGalaxy }: SettingsDrawerProps) {
 
   const vibeLabel = entropy > 0.65
     ? { label: 'Wandering', desc: 'Discovery mode — pushing past familiar territory', color: '#5a3d9e' }
@@ -628,8 +894,8 @@ function SettingsDrawer({ kernelState, entropy, activeProfileName, onClose, onOp
       {/* Drawer header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 14px', height: 40, borderBottom: `1px solid ${BORDER}`, flexShrink: 0 }}>
         <div style={{ display: 'flex', gap: 0 }}>
-          {(['kernel', 'connectors', 'agent'] as const).map(s => (
-            <button key={s} onClick={() => setSection(s)} style={{
+          {(['kernel', 'account', 'connectors', 'agent', 'data'] as const).map(s => (
+            <button key={s} onClick={() => onSectionChange(s)} style={{
               background: 'none', border: 'none', borderBottom: `1px solid ${section === s ? ACCENT : 'transparent'}`,
               color: section === s ? FG : FG4, fontFamily: MONO, fontSize: 9, letterSpacing: '0.16em',
               textTransform: 'uppercase', padding: '10px 10px 9px', cursor: 'pointer',
@@ -666,8 +932,10 @@ function SettingsDrawer({ kernelState, entropy, activeProfileName, onClose, onOp
           </div>
         )}
 
+        {section === 'account' && <AccountView />}
         {section === 'connectors' && <ConnectorsView />}
         {section === 'agent' && <AgentView />}
+        {section === 'data' && <DataSettings />}
       </div>
     </div>
   )

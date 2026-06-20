@@ -1,0 +1,8 @@
+name = "sonder-bug-report"
+main = "worker.js"
+compatibility_date = "2024-11-01"
+
+# GITHUB_REPO can also be set as a plain var here; the token must be a secret:
+#   wrangler secret put GITHUB_TOKEN
+# [vars]
+# GITHUB_REPO = "fangorn-network/sonder"

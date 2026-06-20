@@ -1,23 +1,8 @@
-import { usePrivy, useFundWallet, useWallets } from '@privy-io/react-auth'
-import { createPublicClient, createWalletClient, http, custom, parseAbi, formatUnits } from 'viem'
-import { arbitrumSepolia } from 'viem/chains'
+import { usePrivy, useFundWallet } from '@privy-io/react-auth'
+import { formatUnits } from 'viem'
 import { useEffect, useState } from 'react'
 import '../App.css'
-
-const USDC_ADDRESS = '0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d'
-const TARGET_CONTRACT = '0x14cff4b583cabde7066d12f04bf9eaba408a426f'
-
-const USDC_ABI = parseAbi(['function balanceOf(address) view returns (uint256)'])
-const CONTRACT_ABI = parseAbi([
-  'function publish(string manifest_cid, bytes32 schema_id, string name, uint256 price) public'
-])
-
-const rpcUrl   = (import.meta as any).env.VITE_ARBITRUM_SEPOLIA_RPC_URL
-
-const publicClient = createPublicClient({
-  chain: arbitrumSepolia,
-  transport: http("https://sepolia-rollup.arbitrum.io/rpc")
-})
+import { NETWORK, USDC_ABI, USDC_DECIMALS, publicClient, usdcFundingOptions } from '../lib/network'
 
 function EyeIcon({ hidden }: { hidden: boolean }) {
   return hidden ? (
@@ -36,7 +21,6 @@ function EyeIcon({ hidden }: { hidden: boolean }) {
 
 export function ConnectWallet() {
   const { login, logout, authenticated, user } = usePrivy()
-  const { wallets } = useWallets() 
   const { fundWallet } = useFundWallet({ onUserExited: () => { } })
   
   const [balance, setBalance] = useState<string | null>(null)
@@ -48,8 +32,6 @@ export function ConnectWallet() {
     ?? (user as any)?.google?.email
     ?? (address ? `${address.slice(0, 6)}...${address.slice(-4)}` : '')
 
-  const embeddedWallet = wallets.find((w) => w.walletClientType === 'privy')
-
   function handleCopyAddress() {
     if (!address || hidden) return
     navigator.clipboard.writeText(address)
@@ -60,12 +42,12 @@ export function ConnectWallet() {
   useEffect(() => {
     if (!address) { setBalance(null); return }
     publicClient.readContract({
-      address: USDC_ADDRESS,
+      address: NETWORK.usdc,
       abi: USDC_ABI,
       functionName: 'balanceOf',
       args: [address],
     })
-      .then(raw => setBalance(formatUnits(raw, 6)))
+      .then(raw => setBalance(formatUnits(raw, USDC_DECIMALS)))
       .catch(console.error)
   }, [address])
 
@@ -77,7 +59,7 @@ export function ConnectWallet() {
           {hidden ? null : copied ? 'copied!' : label}
         </button>
         {balance !== null && !hidden && (
-          <span className="wallet-balance" onClick={() => address && fundWallet({ address })}>
+          <span className="wallet-balance" onClick={() => address && fundWallet({ address, options: usdcFundingOptions() })}>
             <span className="wallet-balance-currency">$</span>
             {Number(balance).toFixed(2)}
             <span className="wallet-balance-unit"> USDC</span>

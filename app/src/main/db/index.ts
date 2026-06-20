@@ -1,0 +1,110 @@
+/**
+ * main/db/index.ts
+ *
+ * Process-wide SQLite handle (better-sqlite3) for local app data. Opened lazily
+ * on first use and migrated idempotently, so importing this module is cheap and
+ * the DB file isn't created until something actually reads/writes. Currently
+ * backs the local-music metadata library (see main/local/catalog.ts).
+ *
+ * better-sqlite3 ships a native binary; it's kept external from the main bundle
+ * (electron.vite.config.ts) and rebuilt against Electron's ABI by the
+ * `electron-builder install-app-deps` postinstall hook.
+ */
+
+import Database from 'better-sqlite3'
+import { app } from 'electron'
+import path from 'path'
+
+let db: Database.Database | null = null
+
+/** Open (once) and return the shared database handle. */
+export function getDb(): Database.Database {
+  if (db) return db
+  const file = path.join(app.getPath('userData'), 'sond3r.db')
+  db = new Database(file)
+  db.pragma('journal_mode = WAL')
+  migrate(db)
+  return db
+}
+
+/** Idempotent schema setup — safe to run on every open. */
+function migrate(d: Database.Database): void {
+  d.exec(`
+    CREATE TABLE IF NOT EXISTS local_track_meta (
+      local_id       TEXT PRIMARY KEY,
+      path           TEXT NOT NULL,
+      schema_version INTEGER NOT NULL DEFAULT 1,
+      track_id       TEXT,
+      isrc_code      TEXT,
+      title          TEXT NOT NULL,
+      by_artist      TEXT NOT NULL,
+      album_name     TEXT,
+      date_published TEXT,
+      duration_ms    INTEGER,
+      contributors   TEXT,
+      created_at     INTEGER NOT NULL,
+      updated_at     INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_ltm_by_artist ON local_track_meta(by_artist);
+    CREATE INDEX IF NOT EXISTS idx_ltm_album     ON local_track_meta(album_name);
+
+    -- Semantic taxonomy tags for a local track (genres / moods / themes /
+    -- contexts), shaped to schemas/TrackTaxonomySchema.json. Stored locally only;
+    -- this is the source that would feed embedding generation once that's enabled
+    -- for users, but nothing here is published or embedded today. Keyed by the
+    -- local file id (same as local_track_meta); track_id mirrors the labeled
+    -- track's canonical id so the row is embedding-ready. See
+    -- main/local/taxonomy.ts.
+    CREATE TABLE IF NOT EXISTS local_track_tags (
+      local_id       TEXT PRIMARY KEY,
+      schema_version INTEGER NOT NULL DEFAULT 1,
+      track_id       TEXT,
+      genres         TEXT NOT NULL DEFAULT '[]',
+      moods          TEXT NOT NULL DEFAULT '[]',
+      themes         TEXT NOT NULL DEFAULT '[]',
+      contexts       TEXT NOT NULL DEFAULT '[]',
+      created_at     INTEGER NOT NULL,
+      updated_at     INTEGER NOT NULL
+    );
+
+    -- User-supplied album / artist artwork, stored inline. Keyed by scope
+    -- ('album' | 'artist') + a normalized key (see main/local/art.ts).
+    CREATE TABLE IF NOT EXISTS local_art (
+      scope      TEXT NOT NULL,
+      art_key    TEXT NOT NULL,
+      mime       TEXT NOT NULL,
+      data       BLOB NOT NULL,
+      updated_at INTEGER NOT NULL,
+      PRIMARY KEY (scope, art_key)
+    );
+
+    -- "Favorited" artists, albums, and songs. kind is 'track' | 'artist' |
+    -- 'album'; ref is the renderer-built reference for that thing (a local file
+    -- id for tracks, an artist name for artists, "artist album" for albums).
+    -- See main/local/favorites.ts.
+    CREATE TABLE IF NOT EXISTS local_favorites (
+      kind       TEXT NOT NULL,
+      ref        TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      PRIMARY KEY (kind, ref)
+    );
+
+    -- User playlists and their ordered tracks. Tracks reference local files by
+    -- their file id (local_id); rows whose file is no longer present are simply
+    -- skipped when the renderer resolves them. See main/local/playlists.ts.
+    CREATE TABLE IF NOT EXISTS local_playlists (
+      id         TEXT PRIMARY KEY,
+      name       TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS local_playlist_tracks (
+      playlist_id TEXT NOT NULL,
+      local_id    TEXT NOT NULL,
+      position    INTEGER NOT NULL,
+      added_at    INTEGER NOT NULL,
+      PRIMARY KEY (playlist_id, local_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_lpt_playlist ON local_playlist_tracks(playlist_id, position);
+  `)
+}

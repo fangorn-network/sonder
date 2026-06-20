@@ -1,0 +1,78 @@
+{
+  "name": "fangorn-8009660693873684-2026-06-16-22-11-57.snapshot.gz",
+  "total_size": 15122981951,
+  "part_size": 92292479,
+  "parts": [
+    {
+      "index": 0,
+      "name": "fangorn-8009660693873684-2026-06-16-22-11-57.snapshot.gz.part000",
+      "id": "019ed39a-088b-760e-97b7-029bf3f55825",
+      "cid": "bafybeid663upntxbph5hibjva23tyzydc4qztyudrdpnsfvgjdakt5dplm",
+      "size": 92292479
+    },
+    {
+      "index": 1,
+      "name": "fangorn-8009660693873684-2026-06-16-22-11-57.snapshot.gz.part001",
+      "id": "019ed39a-f418-7090-99be-c87dc13ebf47",
+      "cid": "bafybeig7vlgslq4ozlqa43ukncoxgf5unocpdiojchgfte5iyefdbklpwe",
+      "size": 92292479
+    },
+    {
+      "index": 2,
+      "name": "fangorn-8009660693873684-2026-06-16-22-11-57.snapshot.gz.part002",
+      "id": "019ed39b-b543-7e59-b297-2ca504f12c9e",
+      "cid": "bafybeihkvjs65rrgtwpijrqb3maeq2vk4z5ps5k3qopgxlfhi65pmlandy",
+      "size": 92292479
+    },
+    {
+      "index": 3,
+      "name": "fangorn-8009660693873684-2026-06-16-22-11-57.snapshot.gz.part003",
+      "id": "019ed39c-8eff-7bc7-b7e1-3e9504bac662",
+      "cid": "bafybeih36mfeb342bdzpt3jckqcahbnizq55my74bfkwe33vf4kwewlkbm",
+      "size": 92292479
+    },
+    {
+      "index": 4,
+      "name": "fangorn-8009660693873684-2026-06-16-22-11-57.snapshot.gz.part004",
+      "id": "019ed39d-59da-703f-b223-d94a627ed2e8",
+      "cid": "bafybeign7u4ioymypcwocwgso5zne6jgv62kgc5b2bbopbc64l5eaeqkau",
+      "size": 92292479
+    },
+    {
+      "index": 5,
+      "name": "fangorn-8009660693873684-2026-06-16-22-11-57.snapshot.gz.part005",
+      "id": "019ed39e-96c0-77cc-8ed2-0f493590c435",
+      "cid": "bafybeiehgcz3vpfykfvntg5fctbrvrq3coy5zjlm7z3rzz4xuzvebmhczm",
+      "size": 92292479
+    },
+    {
+      "index": 6,
+      "name": "fangorn-8009660693873684-2026-06-16-22-11-57.snapshot.gz.part006",
+      "id": "019ed3a0-4a36-78c2-92e9-f8604ee4fe89",
+      "cid": "bafybeid6dyvcvogqnhtl2y7ovoi6i4s3c3lneepxfd3qn2t3u7fknwjfrm",
+      "size": 92292479
+    },
+    {
+      "index": 7,
+      "name": "fangorn-8009660693873684-2026-06-16-22-11-57.snapshot.gz.part007",
+      "id": "019ed3a0-ed94-75d1-a7fc-b9c5f460b3d0",
+      "cid": "bafybeiaczgb73otpss4nq5ojhbmssnzpirfyzjulqyu6puxzi6mko3kerq",
+      "size": 92292479
+    },
+    {
+      "index": 8,
+      "name": "fangorn-8009660693873684-2026-06-16-22-11-57.snapshot.gz.part008",
+      "id": "019ed3a1-9fad-792b-92b6-d0ed4dc13c40",
+      "cid": "bafybeiebwe3v6s635u25aijhwoggxjs5g5usf7ojjdyunnieqqqzxnx2mu",
+      "size": 92292479
+    },
+    {
+      "index": 9,
+      "name": "fangorn-8009660693873684-2026-06-16-22-11-57.snapshot.gz.part009",
+      "id": "019ed3a2-4fa6-7aaa-be7a-bbdfc74a4d4f",
+      "cid": "bafybeibfgcy26iimjv7oiunuspas2bw5ruwzgcvs3jxuj5fb55kwnj2ryu",
+      "size": 92292479
+    }
+  ],
+  "rebuilt": "2026-06-17T15:42:44.180Z"
+}

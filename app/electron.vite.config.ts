@@ -6,7 +6,10 @@ export default defineConfig({
   main: {
     build: {
       rollupOptions: {
-        external: ['dbus-final', 'x11']
+        // better-sqlite3 ships a native .node binary (can't be bundled);
+        // music-metadata is ESM-only and loaded via dynamic import(). Keep both
+        // external so they're required from node_modules at runtime.
+        external: ['dbus-final', 'x11', 'better-sqlite3', 'music-metadata']
       }
     }
   },

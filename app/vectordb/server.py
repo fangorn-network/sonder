@@ -1,5 +1,22 @@
 import certifi
 import os
+
+# ── Native thread governance ────────────────────────────────────────────────
+# numba (pulled in by UMAP), numpy/OpenBLAS, and onnxruntime (via fastembed)
+# each start a pool of worker threads that *busy-wait* when idle. After a big
+# job like the 860k-point UMAP build finishes, those leftover threads keep every
+# core pinned at 100% for the life of the process. Make idle OpenMP threads
+# sleep, and cap each pool to ~half the cores so a build can't lock up the whole
+# machine. Must run before those libraries load (fastembed below pulls in
+# onnxruntime at import time; numpy/numba load lazily on the first map build).
+_HALF_CORES = str(max(1, (os.cpu_count() or 4) // 2))
+os.environ.setdefault("OMP_WAIT_POLICY", "PASSIVE")
+os.environ.setdefault("OMP_NUM_THREADS", _HALF_CORES)
+os.environ.setdefault("OPENBLAS_NUM_THREADS", _HALF_CORES)
+os.environ.setdefault("MKL_NUM_THREADS", _HALF_CORES)
+os.environ.setdefault("NUMEXPR_NUM_THREADS", _HALF_CORES)
+os.environ.setdefault("NUMBA_NUM_THREADS", _HALF_CORES)
+
 import io
 import sys
 os.environ['SSL_CERT_FILE'] = certifi.where()
@@ -9,6 +26,7 @@ import aiohttp
 import random
 import hashlib
 import json
+import logging
 import math
 import uuid
 import requests
@@ -16,7 +34,7 @@ import uvicorn
 
 from qdrant_client import QdrantClient, models as qmodels
 from fastembed import TextEmbedding
-from fastapi import FastAPI, Query, BackgroundTasks, Request
+from fastapi import FastAPI, Query, BackgroundTasks, Request, Response
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -67,6 +85,12 @@ def parse_args():
     parser.add_argument(
         "--bundle-cid", default=None, metavar="CID",
         help="IPFS CID of an NDJSON bundle to seed from on first startup (skipped if collection already has points)",
+    )
+    parser.add_argument(
+        "--catalog-map-file", default="./db/catalog_map.json.gz", metavar="PATH",
+        help="Gzipped catalog-map artifact produced by `quickbeam build --umap-target file`. "
+             "When present, GET /catalog/map streams it directly (no UMAP recompute) — the "
+             "scalable path for large collections.",
     )
     return parser.parse_args()
 
@@ -275,19 +299,77 @@ def _scroll_all(with_vectors: bool = False, batch: int = 5_000):
 _map_cache:     dict | None = None
 _map_computing: bool        = False
 
-def _build_map_sync() -> dict:
-    try:
-        import umap as umap_lib
-        import numpy as np
-    except ImportError as exc:
-        raise RuntimeError("umap-learn is not installed. Run: pip install umap-learn") from exc
+def _build_map_from_payload() -> dict:
+    """Fast catalog map: read the px/py that `quickbeam build --umap` baked into
+    each point's payload, instead of recomputing UMAP. Pulls no vectors and runs
+    no UMAP, so it scales to multi-million-point collections where the recompute
+    path (all vectors in RAM + UMAP) is infeasible. The baked coords are already
+    normalized to [-1, 1], so no rescaling is needed."""
+    import numpy as np
+    tracks:        list = []
+    tag_positions: dict = {}
+    for pt_id, payload, _ in _scroll_all(with_vectors=False):
+        px, py = payload.get("px"), payload.get("py")
+        if px is None or py is None:
+            continue
+        fields = payload.get("fields", {})
+        if not isinstance(fields, dict):
+            fields = {}
+        primary   = _role_tag_field_values(fields, 0)
+        secondary = _role_tag_field_values(fields, 1)
+        px, py    = float(px), float(py)
+        tracks.append({
+            "id":     str(pt_id),
+            "title":  _role_title(fields, fallback=str(pt_id)),
+            "artist": _role_subtitle(fields),
+            "genres": primary[:3],
+            "moods":  secondary[:3],
+            "px":     px,
+            "py":     py,
+        })
+        if primary:
+            tag_positions.setdefault(primary[0], []).append((px, py))
 
+    tag_centroids = []
+    for tag, pts in tag_positions.items():
+        if len(pts) < 5:
+            continue
+        a = np.array(pts)
+        tag_centroids.append({"genre": tag, "px": float(a[:, 0].mean()),
+                              "py": float(a[:, 1].mean()), "count": len(pts)})
+    tag_centroids.sort(key=lambda x: -x["count"])
+    print(f"[catalog/map] served {len(tracks)} tracks from baked px/py (no recompute)")
+    return {"tracks": tracks, "total": len(tracks), "genres": tag_centroids[:40]}
+
+
+def _build_map_sync() -> dict:
     total = _collection_count()
     print(f"[catalog/map] building projection for {total} tracks …")
     if total == 0:
         return {"tracks": [], "total": 0, "genres": []}
 
     _ensure_role_map()
+
+    # ── Fast path: px/py baked into payloads by the builder (quickbeam build --umap
+    #    / --umap-only). Read them directly — the only viable path at large scale.
+    try:
+        probe, _ = qdrant_client.scroll(
+            collection_name=cfg.collection, limit=1,
+            with_payload=True, with_vectors=False)
+    except Exception:
+        probe = None
+    if (probe and isinstance(probe[0].payload, dict)
+            and probe[0].payload.get("px") is not None
+            and probe[0].payload.get("py") is not None):
+        return _build_map_from_payload()
+
+    # ── Slow path: recompute UMAP from vectors. Feasible only for small
+    #    collections — large ones must bake px/py with the builder first.
+    try:
+        import umap as umap_lib
+        import numpy as np
+    except ImportError as exc:
+        raise RuntimeError("umap-learn is not installed. Run: pip install umap-learn") from exc
 
     embeddings, payloads, ids = [], [], []
     for pt_id, payload, vec in _scroll_all(with_vectors=True):
@@ -377,83 +459,68 @@ def _build_map_sync() -> dict:
 # TEXT (LEXICAL) SEARCH
 # ---------------------------------------------------------------------------
 
-_text_index:    list[dict] | None = None
+# True once background warmup has finished: embedding model loaded and the vector
+# index paged into memory. The /ready boot gate keys off this so the loading screen
+# can hold until the very first query is fast. Text matching is delegated to
+# Qdrant's payload index, so there's no in-memory lexical build to wait on here.
+_warm = False
 
-def _build_text_index_sync() -> list[dict]:
-    total = _collection_count()
-    if total == 0:
-        return []
-    _ensure_role_map()
-    out: list[dict] = []
-    for pt_id, payload, _ in _scroll_all(with_vectors=False):
-        fields   = payload.get("fields", {}) or {}
-        owner    = payload.get("owner")
-        subtitle = _role_subtitle(fields)
-        title    = _role_title(fields)
-        tags     = _role_tags(fields)
-        out.append({
-            "id":       str(pt_id),
-            "owner":    owner,
-            "fields":   fields,
-            "_sub_l":   subtitle.lower(),
-            "_title_l": title.lower(),
-            "_tags_l":  " ".join(t.lower() for t in tags),
-            "_sort":    (subtitle.lower(), title.lower()),
-        })
-    print(f"[search/text] built lexical index: {len(out)} records")
-    return out
+# Warmup progress for the boot splash. `_warm_phase` names the current step so the
+# UI can show an honest indeterminate state; there's no full-collection scan left to
+# report a percentage against, so `_warm_indexed`/`_warm_total` stay 0.
+_warm_phase   = "starting"
+_warm_indexed = 0
+_warm_total   = 0
 
-def _score_rec(rec: dict, q_l: str, tokens: list[str]) -> float:
-    a, t, tags = rec["_sub_l"], rec["_title_l"], rec["_tags_l"]
-    score = 0.0
-    if   a == q_l:          score += 1000
-    elif a.startswith(q_l): score += 400
-    elif q_l and q_l in a:  score += 220
-    if   t == q_l:          score += 350
-    elif t.startswith(q_l): score += 160
-    elif q_l and q_l in t:  score += 120
-    if tokens:
-        hay = f"{a} {t}"
-        score += 60 * (sum(1 for tok in tokens if tok in hay) / len(tokens))
-        score += 12 * (sum(1 for tok in tokens if tok in tags) / len(tokens))
-    return score
+# ── Text search ────────────────────────────────────────────────────────────────
+# /search/text runs the SAME fast HNSW vector path as /search. We tried two lexical
+# approaches first and both failed at 10M points: an in-memory index OOM-killed the
+# process, and Qdrant full-text payload indexes saturated the engine (building them
+# blocked every other request past the gRPC deadline) and persisted in the
+# collection config so they kept re-saturating on restart. Semantic search needs no
+# extra index, never blocks the collection, and the embedding model is already warm
+# from startup. The tradeoff is no exact substring/prefix lexical ranking — the box
+# returns nearest neighbours by meaning instead.
+
+def _drop_text_indexes() -> None:
+    """Remove any full-text payload indexes left over from the abandoned MatchText
+    approach. Building them over a 10M-point collection saturated Qdrant (every
+    other gRPC call hit the deadline) and their definitions persist in the
+    collection config, so a stale one would keep re-saturating Qdrant on launch.
+    Drop them at startup — the vector text path needs no payload index."""
+    try:
+        info   = qdrant_client.get_collection(cfg.collection)
+        schema = info.payload_schema or {}
+    except Exception as e:
+        print(f"[startup] could not read payload schema: {e}")
+        return
+    for key, ps in schema.items():
+        dt = getattr(ps, "data_type", None)
+        if dt == qmodels.PayloadSchemaType.TEXT or str(dt).lower().endswith("text"):
+            try:
+                qdrant_client.delete_payload_index(cfg.collection, key, wait=True)
+                print(f"[startup] dropped stale full-text index: {key}")
+            except Exception as e:
+                print(f"[startup] drop index {key}: {e}")
 
 def _search_text_sync(q: str, limit: int, owner: str | None) -> list[dict]:
-    global _text_index
-    if _text_index is None:
-        _text_index = _build_text_index_sync()
-    q_l    = q.strip().lower()
-    tokens = [tok for tok in q_l.split() if tok]
-    recs   = _text_index if not owner else [r for r in _text_index if r.get("owner") == owner]
-    scored = [(s, r) for r in recs if (s := _score_rec(r, q_l, tokens)) > 0]
-    scored.sort(key=lambda x: (-x[0], x[1]["_sort"]))
-    return [{"id": r["id"], "fields": r["fields"], "owner": r.get("owner")}
-            for _, r in scored[:limit]]
-
-def _attach_embeddings(results: list[dict]) -> list[dict]:
-    """Batch-fetch vectors for a result list so the frontend avoids a round-trip re-embed."""
-    ids = [r["id"] for r in results]
-    if not ids:
-        return results
-    # Qdrant retrieve by point IDs
-    try:
-        pts = qdrant_client.retrieve(
-            collection_name=cfg.collection,
-            ids=ids,
-            with_vectors=True,
-        )
-        emap = {}
-        for pt in pts:
-            vec = pt.vector
-            if vec is not None:
-                emap[str(pt.id)] = vec if isinstance(vec, list) else vec.tolist()
-        for r in results:
-            e = emap.get(r["id"])
-            if e is not None:
-                r["embedding"] = e
-    except Exception as exc:
-        print(f"[_attach_embeddings] warn: {exc}")
-    return results
+    """Text search via semantic vector similarity — the same HNSW path as /search."""
+    q = (q or "").strip()
+    if not q:
+        return []
+    query_vec    = _embed_texts([q], prefix="search_query")[0]
+    query_filter = qmodels.Filter(
+        must=[qmodels.FieldCondition(key="owner", match=qmodels.MatchValue(value=owner))]
+    ) if owner else None
+    resp = qdrant_client.query_points(
+        collection_name=cfg.collection,
+        query=query_vec,
+        limit=limit,
+        query_filter=query_filter,
+        with_payload=True,
+        with_vectors=True,
+    )
+    return [_hit_from_point(pt, pt.score) for pt in resp.points]
 
 # ---------------------------------------------------------------------------
 # CHECKPOINT
@@ -842,8 +909,11 @@ def _truncate_normalize(vec: list[float], dim: int) -> list[float]:
     norm = math.sqrt(sum(x * x for x in v)) or 1.0
     return [x / norm for x in v]
 
-def _embed_texts(texts: list[str]) -> list[list[float]]:
-    prefixed = [f"search_document: {t}" for t in texts]
+def _embed_texts(texts: list[str], prefix: str = "search_document") -> list[list[float]]:
+    # nomic-embed-text-v1.5 is asymmetric: documents must be prefixed
+    # "search_document:" (ingestion default), queries "search_query:". Passing
+    # the right prefix on the query side measurably improves retrieval.
+    prefixed = [f"{prefix}: {t}" for t in texts]
     vectors  = []
     for vec in embed_engine.embed(prefixed, batch_size=64):
         v = vec.tolist() if not isinstance(vec, list) else vec
@@ -880,7 +950,7 @@ def _upsert_joined(joined: list[dict]) -> None:
 # ---------------------------------------------------------------------------
 
 async def ingest():
-    global _map_cache, _text_index
+    global _map_cache
     loop       = asyncio.get_event_loop()
     schemas    = get_schemas()
     primary    = get_primary(schemas)
@@ -925,7 +995,6 @@ async def ingest():
     _save_checkpoint(checkpoint)
 
     _map_cache  = None
-    _text_index = None
 
     print(f"Ingestion complete. Collection contains {_collection_count()} points.")
 
@@ -938,7 +1007,15 @@ def _hit_from_point(pt, score: float | None = None) -> dict:
     payload = pt.payload or {}
     fields  = payload.get("fields", {})
     owner   = payload.get("owner")
+    meta    = payload.get("meta", {}) or {}
     hit     = {"id": payload.get("id", str(pt.id)), "fields": fields, "owner": owner}
+    # Surface on-chain provenance so the MCP layer can attach it to every result.
+    hit["meta"] = {
+        "manifestCid":    meta.get("manifestCid"),
+        "blockTimestamp": meta.get("blockTimestamp"),
+        "version":        meta.get("version"),
+        "owner":          meta.get("owner"),
+    }
     if score is not None:
         hit["score"] = round(score, 4)
     vec = getattr(pt, "vector", None)
@@ -956,7 +1033,7 @@ async def _seed_from_ipfs(cid: str) -> None:
     Runs as a background task at startup — server is live and queryable while
     this progresses. Tries the configured gateway first, then fallbacks.
     """
-    global _map_cache, _text_index
+    global _map_cache
 
     gateways = [cfg.ipfs_gateway.rstrip("/")] + FALLBACK_GATEWAYS
     resp     = None
@@ -1023,7 +1100,6 @@ async def _seed_from_ipfs(cid: str) -> None:
             total += len(batch)
 
     _map_cache  = None
-    _text_index = None
     print(f"\n[seed] done — {total} points seeded from {cid}")
 
 # ---------------------------------------------------------------------------
@@ -1032,7 +1108,11 @@ async def _seed_from_ipfs(cid: str) -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global qdrant_client, embed_engine, vector_dim
+    global qdrant_client, embed_engine, vector_dim, _warm
+    # Silence the boot-poll access logs (main polls /ready every ~300ms until the
+    # warmup below flips it to 200). Done here, after uvicorn has set up its
+    # loggers, so the filter sticks.
+    logging.getLogger("uvicorn.access").addFilter(_AccessLogPollFilter())
     # `timeout` is the per-request gRPC deadline. The default (5s) is too tight
     # for a cold first query: against a freshly-recovered 1M-vector collection,
     # Qdrant has to page the HNSW graph + mmap'd segments into memory before it
@@ -1088,6 +1168,10 @@ async def lifespan(app: FastAPI):
     count = _collection_count()
     print(f"[startup] collection '{cfg.collection}' ready — {count} points")
 
+    # Drop any leftover full-text payload indexes (from the abandoned MatchText
+    # path) so Qdrant isn't stuck re-building/maintaining them and starving queries.
+    _drop_text_indexes()
+
     if count == 0 and cfg.bundle_cid:
         print(f"[startup] collection empty — seeding from bundle CID {cfg.bundle_cid}")
         asyncio.create_task(_seed_from_ipfs(cfg.bundle_cid))
@@ -1102,16 +1186,24 @@ async def lifespan(app: FastAPI):
     # critical path means /health comes up immediately while warmup proceeds.
     if count > 0:
         asyncio.create_task(_warmup())
+    else:
+        # Nothing to warm (empty / still-seeding collection) — don't gate boot on
+        # a warmup that will never run.
+        _warm = True
 
     yield
 
 
 async def _warmup() -> None:
+    global _warm, _warm_phase
     loop = asyncio.get_event_loop()
     try:
-        # Force the embedding model to fully initialise.
+        # Force the embedding model to fully initialise (semantic search path).
+        # No measurable sub-progress — the UI shows this as an indeterminate step.
+        _warm_phase = "loading embedding model"
         await loop.run_in_executor(None, lambda: _embed_texts(["warmup"]))
         # Touch the collection so its HNSW graph + segments page into memory.
+        _warm_phase = "warming vector index"
         dim = vector_dim or MODEL_DIM_MAP.get(cfg.embedding_model, 768)
         await loop.run_in_executor(None, lambda: qdrant_client.query_points(
             collection_name=cfg.collection,
@@ -1123,6 +1215,23 @@ async def _warmup() -> None:
         print("[startup] warmup complete — embeddings + vector index hot")
     except Exception as e:
         print(f"[startup] warmup skipped: {e}")
+    finally:
+        # Release the boot gate either way: on success everything's hot; on
+        # failure the lazy fallbacks still work and we must not hang the splash.
+        _warm_phase = "ready"
+        _warm = True
+
+
+class _AccessLogPollFilter(logging.Filter):
+    """Drop uvicorn access-log lines for the boot-gate poll endpoints. While the
+    splash waits for warmup, main hits /ready every ~300ms — without this the
+    console fills with '"GET /ready" 503' until the index is hot."""
+    _QUIET = ("/ready", "/health")
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        msg = record.getMessage()
+        return not any(p in msg for p in self._QUIET)
+
 
 app = FastAPI(lifespan=lifespan)
 
@@ -1163,8 +1272,8 @@ async def search(
 ):
     loop = asyncio.get_event_loop()
 
-    # Embed the query text
-    vectors = await loop.run_in_executor(None, lambda: _embed_texts([q]))
+    # Embed the query text. nomic is asymmetric — use the query-side prefix.
+    vectors = await loop.run_in_executor(None, lambda: _embed_texts([q], prefix="search_query"))
     query_vec = vectors[0]
 
     query_filter = qmodels.Filter(
@@ -1207,7 +1316,6 @@ async def search_vector(body: VectorSearchRequest):
 async def search_text(body: TextSearchRequest):
     loop    = asyncio.get_event_loop()
     results = await loop.run_in_executor(None, _search_text_sync, body.q, body.limit, body.owner)
-    results = await loop.run_in_executor(None, _attach_embeddings, results)
     return {"results": results}
 
 @app.post("/embed")
@@ -1251,9 +1359,8 @@ async def bundle_upsert(body: BundleUpsertRequest):
         lambda: qdrant_client.upsert(collection_name=cfg.collection, points=points, wait=True),
     )
 
-    global _map_cache, _text_index
+    global _map_cache
     _map_cache  = None
-    _text_index = None
 
     return {"upserted": len(points)}
 
@@ -1308,9 +1415,8 @@ async def bundle_import(request: Request):
         await _flush(batch)
         upserted += len(batch)
 
-    global _map_cache, _text_index
+    global _map_cache
     _map_cache  = None
-    _text_index = None
 
     return {"upserted": upserted}
 
@@ -1400,6 +1506,23 @@ async def schema():
 @app.get("/catalog/map")
 async def catalog_map():
     global _map_cache, _map_computing
+    # Fast path: stream the prebuilt artifact (quickbeam build --umap-target file).
+    # It is already gzipped JSON in the exact response shape, so we stream the
+    # bytes straight from disk — no recompute, no loading 10M points into RAM.
+    map_file = getattr(cfg, "catalog_map_file", None)
+    if map_file and os.path.exists(map_file):
+        def _iter():
+            with open(map_file, "rb") as f:
+                while True:
+                    chunk = f.read(1 << 20)
+                    if not chunk:
+                        break
+                    yield chunk
+        return StreamingResponse(
+            _iter(),
+            media_type="application/json",
+            headers={"Content-Encoding": "gzip", "X-Map-Source": "artifact"},
+        )
     if _map_cache is not None:
         return _map_cache
     if _map_computing:
@@ -1469,7 +1592,35 @@ async def health():
         "roles":         role_map_global,
         "map_cached":    _map_cache is not None,
         "map_computing": _map_computing,
-        "text_indexed":  _text_index is not None,
+        "text_indexed":  True,   # text search runs the semantic vector path
+        "warm":          _warm,
+        "warm_phase":    _warm_phase,
+        "warm_indexed":  _warm_indexed,
+        "warm_total":    _warm_total,
+    }
+
+@app.get("/ready")
+async def ready(response: Response):
+    """Boot gate. Returns 200 only once background warmup has finished (lexical
+    index + embedding model + vector index hot), so the loading screen can hold
+    until the very first query is fast. 503 while still warming.
+
+    The 503 body carries *real* progress: `phase` names the current step and,
+    during the lexical build, `indexed`/`total`/`pct` report records scanned so
+    far. `pct` is non-null only while that build runs — the tail steps have no
+    measurable sub-progress, so the splash shows them as an indeterminate state
+    rather than a fabricated number."""
+    if _warm:
+        return {"ready": True}
+    response.status_code = 503
+    building = _warm_phase == "building text index"
+    pct = round(100 * _warm_indexed / _warm_total) if (building and _warm_total) else None
+    return {
+        "ready":   False,
+        "phase":   _warm_phase,
+        "indexed": _warm_indexed,
+        "total":   _warm_total,
+        "pct":     pct,
     }
 
 @app.post("/reingest")
@@ -1479,10 +1630,9 @@ async def reingest():
 
 @app.post("/reingest/full")
 async def reingest_full():
-    global _map_cache, _text_index
+    global _map_cache
     _clear_checkpoint()
     _map_cache  = None
-    _text_index = None
     asyncio.create_task(ingest())
     return {"status": "accepted", "note": "checkpoint cleared — full reingest in progress"}
 
@@ -1490,6 +1640,11 @@ async def reingest_full():
 # MAIN
 # ---------------------------------------------------------------------------
 
-if __name__ == "__main__":
+def main() -> None:
+    global cfg
     cfg = parse_args()
     uvicorn.run(app, host=cfg.host, port=cfg.port)
+
+
+if __name__ == "__main__":
+    main()

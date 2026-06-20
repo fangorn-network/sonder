@@ -5,16 +5,18 @@ import ReactDOM from 'react-dom/client';
 // window.Buffer = Buffer
 import './index.css';
 import { PrivyProvider } from '@privy-io/react-auth';
-import { arbitrumSepolia } from 'viem/chains';
 import App from './App';
+import { NETWORK } from './lib/network';
 // import * as THREE from 'three'
 // ;(window as any).THREE = THREE
+
+const PRIVY_APP_ID = (import.meta as any).env.VITE_PRIVY_APP_ID as string | undefined;
 
 const root = ReactDOM.createRoot(document.getElementById('root')!);
 root.render(
   <React.StrictMode>
     <PrivyProvider
-      appId="cmmmmq70j01du0djr5foaef5x"
+      appId={PRIVY_APP_ID ?? ''}
       config={{
         // Embedded wallets for users who don't have one
         embeddedWallets: {
@@ -25,12 +27,14 @@ root.render(
         },
         fundingMethodConfig: {
           moonpay: {
-            useSandbox: true, // false for production
+            // Sandbox on testnet, live on-ramp on mainnet.
+            useSandbox: NETWORK.testnet,
           },
         },
-        // Default chain — Arbitrum Sepolia for fangorn.music
-        defaultChain: arbitrumSepolia,
-        supportedChains: [arbitrumSepolia],
+        // Active chain — Arbitrum Sepolia everywhere until we deploy on
+        // Arbitrum One (override via VITE_NETWORK). See lib/network.ts.
+        defaultChain: NETWORK.chain,
+        supportedChains: [NETWORK.chain],
         appearance: {
           theme: 'dark',
           accentColor: '#c7e8b3',

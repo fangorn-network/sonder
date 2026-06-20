@@ -96,12 +96,7 @@ async function fetchAlbumArt(title: string, artist: string): Promise<string | nu
     if (url) return url.replace('100x100bb', '600x600bb')
   } catch { }
   try {
-    const q = encodeURIComponent(`artist:"${artist}" track:"${title}"`)
-    const { body } = await (window as any).electron.ipcRenderer.invoke('fetch:proxy', {
-      url: `https://api.deezer.com/search?q=${q}&limit=1`
-    })
-    const data = JSON.parse(body)
-    const url = data.data?.[0]?.album?.cover_xl
+    const url = await (window as any).electron.ipcRenderer.invoke('deezer:track-cover', { artist, title })
     if (url) return url
   } catch { }
   return null

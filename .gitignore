@@ -34,6 +34,9 @@ db/
 **/.venv**
 **/venv**   
 **/db/*
+# ...but app/src/main/db is source (SQLite schema/migrations), not a data dir.
+!app/src/main/db/
+!app/src/main/db/**
 **/.yarn/*
 !**/.yarn/releases
 !**/.yarn/patches
@@ -43,3 +46,7 @@ db/
 **/resources/
 **/qdrant_storage
 .qdrant-initialized
+**/__pycache__/
+*.pyc
+*.pyo
+**/.claude/**

@@ -25,17 +25,19 @@ import type { KernelState } from '../kernel/types'
 // ─── design tokens ────────────────────────────────────────────────────────────
 
 const T = {
-  bg:        '#f0ece5',          // BG1 — matches the app shell surface
-  bgHover:   '#e8e3da',          // BG2
-  border:    'rgba(0,0,0,0.12)', // BORDER
-  borderHi:  'rgba(0,0,0,0.24)',
-  text:      '#1a1714',          // FG
-  textMid:   '#4a4440',          // FG2
-  textLo:    '#766e66',          // FG3
-  textFaint: '#a09890',          // FG4
-  accent:    '#b83030',          // ACCENT
-  trackOff:  'rgba(0,0,0,0.10)',
-  shadow:    '0 6px 24px rgba(0,0,0,0.12)',
+  // Read from the shared theme tokens (App.css) so the HUD flips with the
+  // light/dark toggle alongside the rest of the shell.
+  bg:        'var(--bg1)',
+  bgHover:   'var(--bg2)',
+  border:    'var(--border)',
+  borderHi:  'var(--border3)',
+  text:      'var(--fg)',
+  textMid:   'var(--fg2)',
+  textLo:    'var(--fg3)',
+  textFaint: 'var(--fg4)',
+  accent:    'var(--accent)',
+  trackOff:  'var(--border)',
+  shadow:    '0 6px 24px rgba(0,0,0,0.28)',
   mono:      'var(--font-mono,"Fragment Mono","DM Mono",monospace)',
   sans:      'var(--font-body,"Geist","Inter",sans-serif)',
   // Vibe colors mirror the Settings drawer's readout so the two never disagree.
@@ -77,9 +79,9 @@ function injectStyles() {
       height: 2px;
       background: linear-gradient(
         to right,
-        var(--fill, #b83030) 0%,
-        var(--fill, #b83030) var(--pct, 50%),
-        rgba(0,0,0,0.10) var(--pct, 50%)
+        var(--fill, var(--accent)) 0%,
+        var(--fill, var(--accent)) var(--pct, 50%),
+        var(--border) var(--pct, 50%)
       );
     }
     .snd-range::-webkit-slider-thumb {
@@ -87,24 +89,24 @@ function injectStyles() {
       width: 10px;
       height: 10px;
       border-radius: 0;
-      background: var(--fill, #b83030);
+      background: var(--fill, var(--accent));
       margin-top: -4px;
       cursor: ew-resize;
     }
     .snd-range::-moz-range-track {
       height: 2px;
-      background: rgba(0,0,0,0.10);
+      background: var(--border);
       border-radius: 0;
     }
     .snd-range::-moz-range-progress {
       height: 2px;
-      background: var(--fill, #b83030);
+      background: var(--fill, var(--accent));
     }
     .snd-range::-moz-range-thumb {
       width: 10px;
       height: 10px;
       border-radius: 0;
-      background: var(--fill, #b83030);
+      background: var(--fill, var(--accent));
       border: none;
       cursor: ew-resize;
     }

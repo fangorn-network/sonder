@@ -9,6 +9,16 @@
 
 import { ipcMain, dialog, BrowserWindow } from 'electron'
 import * as lib from './LocalLibrary'
+import * as catalog from './catalog'
+import * as taxonomy from './taxonomy'
+import * as discovery from './discovery'
+import * as art from './art'
+import * as artSearch from './artSearch'
+import { autoOrganize, mergeArtist } from './organize'
+import * as favorites from './favorites'
+import * as playlists from './playlists'
+import type { ArtBestTryProgress, ArtQuery, ArtRequest, ArtSaveItem, ArtScope, ImportMode, ImportProgress, LocalTrackMeta, LocalTrackTags, OrganizeProgress } from './types'
+import type { FavKind } from './favorites'
 
 export function registerLocalMusicIpc(): void {
   void lib.startLocalFileServer()
@@ -31,13 +41,199 @@ export function registerLocalMusicIpc(): void {
   })
 
   ipcMain.handle('local:scan', async (_e, dir?: string) => {
-    const target = dir || lib.getSavedDir()
-    lib.saveDir(target)
+    // lib.scan persists `dir` as the primary folder when given, then scans every
+    // root (primary + referenced).
     try {
-      return await lib.scan(target)
+      return await lib.scan(dir || undefined)
     } catch (err) {
       console.error('[local-music] scan failed:', err)
       throw err
     }
   })
+
+  // ── Bulk import (external folders / drives) ──────────────────────────────────
+  // Pick a source folder and report how many audio files it holds, so the import
+  // dialog can preview before the user commits to copy vs reference.
+  ipcMain.handle('local:import:pick-source', async () => {
+    const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
+    const opts = { title: 'Choose a folder to import', properties: ['openDirectory' as const] }
+    const result = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts)
+    const dir = result.filePaths[0]
+    if (result.canceled || !dir) return null
+    return { path: dir, audioCount: await lib.countAudioFiles(dir) }
+  })
+
+  // Run the import, streaming throttled progress back to the caller's window.
+  ipcMain.handle('local:import:run', async (e, source: string, mode: ImportMode) => {
+    let last = 0
+    const onProgress = (p: ImportProgress) => {
+      const now = Date.now()
+      if (p.processed >= p.total || now - last > 120) {
+        last = now
+        if (!e.sender.isDestroyed()) e.sender.send('local:import:progress', p)
+      }
+    }
+    return lib.importFolder(source, mode, onProgress)
+  })
+
+  // ── Library roots (primary + referenced folders) ─────────────────────────────
+  ipcMain.handle('local:roots:list', () => lib.getRoots())
+  ipcMain.handle('local:roots:remove', (_e, p: string) => { lib.removeExtraRoot(p) })
+
+  // ── Auto-organize (smart bulk labeling) ──────────────────────────────────────
+  // Resolve + merge + label every Unlabeled track, streaming throttled progress.
+  ipcMain.handle('local:auto-organize', (e) => {
+    let last = 0
+    const onProgress = (p: OrganizeProgress) => {
+      const now = Date.now()
+      if (p.processed >= p.total || now - last > 120) {
+        last = now
+        if (!e.sender.isDestroyed()) e.sender.send('local:organize:progress', p)
+      }
+    }
+    return autoOrganize(onProgress)
+  })
+
+  // Resolve a duplicate-artist suggestion: merge the variant spellings into the
+  // canonical one the user picked. Returns how many tracks were renamed.
+  ipcMain.handle('local:artist:merge', (_e, canonical: string, variants: string[]) =>
+    mergeArtist(canonical, variants))
+
+  // ── Track metadata library ──────────────────────────────────────────────────
+  // Tracks are addressed by their served id; the path is resolved from the last
+  // scan's registry so these can't touch files outside the scanned folder.
+
+  ipcMain.handle('local:meta:get', (_e, localId: string) => catalog.getMeta(localId))
+
+  ipcMain.handle('local:meta:upsert', (_e, localId: string, meta: LocalTrackMeta) => {
+    const filePath = lib.pathForId(localId)
+    if (!filePath) throw new Error('unknown track id')
+    return catalog.upsertMeta(localId, filePath, meta)
+  })
+
+  ipcMain.handle('local:meta:delete', (_e, localId: string) => {
+    catalog.deleteMeta(localId)
+  })
+
+  // Drop a track from the library: delete the file if it's a library copy (leaves
+  // referenced-in-place source files intact), and clear its metadata + tags.
+  ipcMain.handle('local:track:drop', (_e, localId: string) => {
+    const res = lib.dropTrack(localId)
+    catalog.deleteMeta(localId)
+    taxonomy.deleteTags(localId)
+    return res
+  })
+
+  ipcMain.handle('local:read-tags', async (_e, localId: string) => {
+    const filePath = lib.pathForId(localId)
+    if (!filePath) throw new Error('unknown track id')
+    return catalog.readEmbeddedTags(filePath)
+  })
+
+  // ── Semantic taxonomy tags ────────────────────────────────────────────────────
+  // Local-only enrichment (genres/moods/themes/contexts) per TrackTaxonomySchema.
+  // Stored, never published or embedded. The canonical trackId is taken from the
+  // track's saved metadata so it stays consistent with the labeled library.
+
+  ipcMain.handle('local:tags:get', (_e, localId: string) => taxonomy.getTags(localId))
+
+  // All stored tag rows in one shot — lets the renderer flag which tracks carry
+  // taxonomy without a per-row round-trip. Maps don't survive IPC, so send values.
+  ipcMain.handle('local:tags:list', () => Array.from(taxonomy.listTags().values()))
+
+  ipcMain.handle('local:tags:upsert', (_e, localId: string, tags: LocalTrackTags) => {
+    if (!lib.pathForId(localId)) throw new Error('unknown track id')
+    const trackId = catalog.getMeta(localId)?.trackId ?? null
+    return taxonomy.upsertTags(localId, trackId, tags)
+  })
+
+  ipcMain.handle('local:tags:delete', (_e, localId: string) => {
+    taxonomy.deleteTags(localId)
+  })
+
+  // ── Catalog discoverability ───────────────────────────────────────────────────
+  // Which labeled tracks have a vector in the local Qdrant catalog (read-only).
+  // Drives the "semantically discoverable" indicator in the renderer.
+  ipcMain.handle('local:discoverable:list', () => discovery.listDiscoverableLocalIds())
+
+  // ── Album / artist artwork ──────────────────────────────────────────────────
+  // Normalized keys that already have stored art — lets the renderer surface only
+  // the artists/albums still missing artwork without probing each key.
+  ipcMain.handle('local:art:keys', () => art.listArtKeys())
+
+  ipcMain.handle('local:art:get', (_e, scope: ArtScope, key: string) => art.getArt(scope, key))
+
+  ipcMain.handle('local:art:clear', (_e, scope: ArtScope, key: string) => { art.clearArt(scope, key) })
+
+  // Opens the native image picker; resolves to the chosen path, or null if the
+  // user cancels. The dialog title is tailored to the scope being set.
+  const pickImageFile = async (scope: ArtScope): Promise<string | null> => {
+    const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
+    const opts = {
+      title: scope === 'artist' ? 'Choose artist image' : 'Choose album cover',
+      properties: ['openFile' as const],
+      filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'avif'] }],
+    }
+    const result = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts)
+    const file = result.filePaths[0]
+    return result.canceled || !file ? null : file
+  }
+
+  // Opens the native image picker, stores the chosen image, and returns it as a
+  // data URL. Returns null if the user cancels.
+  ipcMain.handle('local:art:pick-set', async (_e, scope: ArtScope, key: string) => {
+    const file = await pickImageFile(scope)
+    return file ? art.setArtFromFile(scope, key, file) : null
+  })
+
+  // Pick-only: open the image picker and return { path, dataUrl } without storing
+  // anything. The editors use this to stage artwork, then commit it under the
+  // final artist/album key on save (so renaming before save doesn't orphan art).
+  ipcMain.handle('local:art:pick', async (_e, scope: ArtScope) => {
+    const file = await pickImageFile(scope)
+    return file ? { path: file, dataUrl: art.imageFileToDataUrl(file) } : null
+  })
+
+  // Commit a previously picked image (by path) as the artwork for (scope, key).
+  ipcMain.handle('local:art:set-file', (_e, scope: ArtScope, key: string, filePath: string) =>
+    art.setArtFromFile(scope, key, filePath))
+
+  // Third-party artwork search (Deezer). Returns candidates with inline thumbnail
+  // data URLs (CSP-safe) plus a full-res URL to commit later.
+  ipcMain.handle('local:art:search', (_e, scope: ArtScope, q: ArtQuery) => artSearch.searchArt(scope, q))
+
+  // "Best try": resolve many missing-art targets in one call, streaming throttled
+  // progress. Only the first match's thumbnail is downloaded per target (vs. the
+  // full search's up-to-MAX_RESULTS), so a big import is one IPC + N light lookups.
+  ipcMain.handle('local:art:bestTry', (e, reqs: ArtRequest[]) => {
+    let last = 0
+    const onProgress = (p: ArtBestTryProgress) => {
+      const now = Date.now()
+      if (p.done >= p.total || now - last > 120) {
+        last = now
+        if (!e.sender.isDestroyed()) e.sender.send('local:art:bestTry:progress', p)
+      }
+    }
+    return artSearch.bestTryArt(reqs, onProgress)
+  })
+
+  // Commit a third-party image (by URL) as the artwork for (scope, key).
+  ipcMain.handle('local:art:set-url', (_e, scope: ArtScope, key: string, url: string) =>
+    art.setArtFromUrl(scope, key, url))
+
+  // Bulk-commit staged artwork in one call (downloads/reads run concurrently in
+  // main, then persist in a single transaction). Returns saved/failed counts.
+  ipcMain.handle('local:art:set-many', (_e, items: ArtSaveItem[]) => art.setArtMany(items))
+
+  // ── Favorites (artists / albums / songs) ─────────────────────────────────────
+  ipcMain.handle('local:fav:list', () => favorites.listFavorites())
+  ipcMain.handle('local:fav:toggle', (_e, kind: FavKind, ref: string) => favorites.toggleFavorite(kind, ref))
+
+  // ── Playlists ────────────────────────────────────────────────────────────────
+  ipcMain.handle('local:playlist:list', () => playlists.listPlaylists())
+  ipcMain.handle('local:playlist:create', (_e, name: string) => playlists.createPlaylist(name))
+  ipcMain.handle('local:playlist:rename', (_e, id: string, name: string) => { playlists.renamePlaylist(id, name) })
+  ipcMain.handle('local:playlist:delete', (_e, id: string) => { playlists.deletePlaylist(id) })
+  ipcMain.handle('local:playlist:add', (_e, id: string, localId: string) => { playlists.addToPlaylist(id, localId) })
+  ipcMain.handle('local:playlist:remove', (_e, id: string, localId: string) => { playlists.removeFromPlaylist(id, localId) })
 }

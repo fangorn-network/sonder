@@ -1,21 +1,13 @@
-import { useEffect, useState, ReactNode } from 'react'
+import { useState, ReactNode } from 'react'
+import { useBoot, type SnapshotInfo } from '../providers/BootProvider'
+import { BugReportFab } from '../components/BugReportFab'
 
 // ── Boot sequence ─────────────────────────────────────────────────────────────
-// Driven by the real backend boot lifecycle (main → preload `window.sond3r`):
-// first run fetches a ~1.5GB catalog snapshot from IPFS, decompresses it, and
-// recovers it into the local Qdrant instance. We surface download progress as a
-// determinate bar and the decompress/recover stages as an indeterminate one.
-
-type BootStage = 'init' | 'downloading' | 'decompressing' | 'recovering' | 'ready' | 'error'
-
-const STAGE_LABEL: Record<BootStage, string> = {
-  init:         'initializing',
-  downloading:  'fetching catalog from ipfs',
-  decompressing:'decompressing snapshot',
-  recovering:   'loading into vector store',
-  ready:        'ready',
-  error:        'connection failed',
-}
+// The backend boot lifecycle now lives in BootProvider (shared with the running
+// app's IndexingBar). This view just renders it: first run fetches a ~1.5GB
+// catalog snapshot from IPFS, recovers it into Qdrant, then warms the search
+// index. Download progress is a determinate bar; decompress/recover are an
+// indeterminate sweep.
 
 function fmtBytes(n: number): string {
   if (n >= 1e9) return (n / 1e9).toFixed(2) + ' GB'
@@ -24,49 +16,56 @@ function fmtBytes(n: number): string {
   return `${n} B`
 }
 
-interface BootState {
-  stage: BootStage
-  pct: number | null          // download %, null when total is unknown / not downloading
-  received: number
-  total: number
-  error: string | null
-  done: boolean
-}
-
-function useBootSequence(): BootState {
-  const [stage, setStage] = useState<BootStage>('init')
-  const [progress, setProgress] = useState<{ received: number; total: number }>({ received: 0, total: 0 })
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    const s = window.sond3r
-    // No bridge (e.g. a plain browser dev session) → nothing to wait on.
-    if (!s) { setStage('ready'); return }
-
-    s.onSnapshotProgress((d) => { setStage('downloading'); setProgress(d) })
-    s.onSnapshotStatus((status) => {
-      if (status === 'downloading' || status === 'decompressing' || status === 'recovering') {
-        setStage(status as BootStage)
-      }
-    })
-    s.onBackendReady(() => setStage('ready'))
-    s.onBackendError((msg) => { setStage('error'); setError(msg) })
-
-    // Cached fast path: the backend may already be up (and `backend:ready` may
-    // have fired) before our listeners attached. Reconcile once on mount.
-    s.isBackendReady()
-      .then((ready) => { if (ready) setStage((cur) => (cur === 'init' ? 'ready' : cur)) })
-      .catch(() => { })
-
-    return () => s.offBootEvents()
-  }, [])
-
-  const { received, total } = progress
-  const pct = stage === 'downloading' && total > 0
-    ? Math.min(100, Math.round((received / total) * 100))
-    : null
-
-  return { stage, pct, received, total, error, done: stage === 'ready' }
+// Opt-in download disclosure shown on the splash when the catalog isn't
+// installed. States the compressed/uncompressed/required sizes up front so users
+// on slow or metered connections aren't surprised by a multi-GB fetch. Skipping
+// (the Enter affordance below) lets them use the app — local music — without it.
+function ConsentCard({ info, onDownload }: { info: SnapshotInfo | null; onDownload: () => void }) {
+  const enoughSpace = info ? info.freeBytes >= info.requiredBytes : true
+  const Row = ({ k, v, warn }: { k: string; v: string; warn?: boolean }) => (
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, fontFamily: 'var(--font-mono)', fontSize: '11px', color: warn ? 'var(--err, #c0392b)' : 'var(--fg3)', fontVariantNumeric: 'tabular-nums' }}>
+      <span style={{ letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--fg4)' }}>{k}</span>
+      <span>{v}</span>
+    </div>
+  )
+  return (
+    <div style={{ border: '1px solid var(--border2)', background: 'var(--bg1)', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 9, WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--fg2)', marginBottom: 2 }}>
+        Download the catalog?
+      </div>
+      <div style={{ fontFamily: 'var(--font-body, sans-serif)', fontSize: '12px', lineHeight: 1.55, color: 'var(--fg3)', marginBottom: 4 }}>
+        The full search catalog (10M+ tracks) is a large download - best on a fast, unmetered connection. You can skip and use local music without it, but you will be missing some features such as algorithm curation.
+      </div>
+      {info ? (
+        <>
+          <Row k="Download" v={fmtBytes(info.compressedBytes)} />
+          <Row k="On disk (unpacked)" v={`≈ ${fmtBytes(info.uncompressedBytes)}`} />
+          <Row k="Free disk needed" v={fmtBytes(info.requiredBytes)} warn={!enoughSpace} />
+          <Row k="You have free" v={fmtBytes(info.freeBytes)} warn={!enoughSpace} />
+        </>
+      ) : (
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--fg4)' }}>checking sizes…</div>
+      )}
+      {!enoughSpace && (
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--err, #c0392b)', lineHeight: 1.5 }}>
+          Not enough free disk to install. Free up space and reopen, or skip for now.
+        </div>
+      )}
+      <button
+        onClick={onDownload}
+        disabled={!info || !enoughSpace}
+        style={{
+          marginTop: 6, padding: '10px 16px', fontFamily: 'var(--font-mono)', fontSize: '11px',
+          letterSpacing: '0.18em', textTransform: 'uppercase',
+          color: !info || !enoughSpace ? 'var(--fg4)' : '#fff',
+          background: !info || !enoughSpace ? 'transparent' : 'var(--accent)',
+          border: `1px solid ${!info || !enoughSpace ? 'var(--border2)' : 'var(--accent)'}`,
+          cursor: !info || !enoughSpace ? 'default' : 'pointer', WebkitAppRegion: 'no-drag',
+        } as React.CSSProperties}>
+        Download catalog{info ? ` · ${fmtBytes(info.compressedBytes)}` : ''}
+      </button>
+    </div>
+  )
 }
 
 // ── Main Startup View ──────────────────────────────────────────────────────────
@@ -81,11 +80,23 @@ interface StartupViewProps {
 
 export function StartupView({ onReady, children }: StartupViewProps) {
   const [exiting, setExiting] = useState(false)
-  const { stage, pct, received, total, error, done } = useBootSequence()
+  // `label` reflects the real backend step ("building text index", …); `canEnter`
+  // flips on as soon as boot is underway (incl. the IPFS fetch) so we can show
+  // Enter early and let the rest load inside the app.
+  const { stage, pct, received, total, error, ready, warmup, index, needsDownload, snapshotInfo, canEnter, label } = useBoot()
+  const [requested, setRequested] = useState(false)
 
-  // Let the user through once the catalog is ready, or if the boot failed (so a
-  // backend hiccup never hard-locks the splash — the app surfaces its own retry).
-  const revealed = done || stage === 'error'
+  // Opt-in: kick off the (large) catalog download. The backend then streams
+  // snapshot:status='downloading', which flips us off the consent stage.
+  const handleDownload = () => {
+    if (requested) return
+    setRequested(true)
+    window.sond3r?.downloadSnapshot().catch(() => setRequested(false))
+  }
+
+  // The bar keeps running until the backend is actually ready (or errors) — the
+  // loading screen looks the same as before for anyone who waits it out.
+  const revealed = ready || stage === 'error'
 
   // The bar shows for the whole boot so there's always a visible indicator
   // (incl. the init gap before the first event). Indeterminate when we have no
@@ -93,8 +104,11 @@ export function StartupView({ onReady, children }: StartupViewProps) {
   const showBar = !revealed
   const indeterminate = pct === null
 
+  // Enter is offered as soon as boot is underway (incl. while the catalog is
+  // still downloading), not just at full ready — the user can enter and let the
+  // fetch/index finish inside the app, where IndexingBar takes over the display.
   const handleExit = () => {
-    if (!revealed || exiting) return
+    if (!canEnter || exiting) return
     setExiting(true)
     setTimeout(onReady, 700)
   }
@@ -112,11 +126,15 @@ export function StartupView({ onReady, children }: StartupViewProps) {
       zIndex: 9999,
       background: 'var(--bg)',
       color: 'var(--fg)',
-    }}>
+      // Frameless window: the loading screen has no OS titlebar, so make the
+      // whole splash a drag region (the main app's header does the same). The
+      // Enter affordance below opts back out with no-drag so it stays clickable.
+      WebkitAppRegion: 'drag',
+    } as React.CSSProperties}>
       {/* Hairline frame for the editorial "page" feel */}
       <div style={{ position: 'absolute', inset: 0, border: '1px solid var(--border2)', pointerEvents: 'none' }} />
 
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '34px', userSelect: 'none', padding: '0 32px' }}>
+      <div style={{ position: 'relative', flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '34px', userSelect: 'none', padding: '0 32px' }}>
 
         {/* Wordmark + tagline */}
         <div style={{ textAlign: 'center' }}>
@@ -130,12 +148,15 @@ export function StartupView({ onReady, children }: StartupViewProps) {
 
         {/* ── Progress block (fixed footprint so nothing jumps on stage change) ── */}
         <div style={{ width: 'min(480px, 72vw)', minHeight: '54px' }}>
-          {!revealed && (
+          {needsDownload && !requested && (
+            <ConsentCard info={snapshotInfo} onDownload={handleDownload} />
+          )}
+          {!revealed && !(needsDownload && !requested) && (
             <>
               {/* Stage label + percent */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '8px', fontFamily: 'var(--font-mono)', fontSize: '11px', letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--fg2)' }}>
                 <span>
-                  {STAGE_LABEL[stage]}<span style={{ animation: 'sonderBlink 1s step-end infinite' }}>_</span>
+                  {label}<span style={{ animation: 'sonderBlink 1s step-end infinite' }}>_</span>
                 </span>
                 <span style={{ color: 'var(--fg3)', fontVariantNumeric: 'tabular-nums' }}>
                   {pct !== null ? `${pct}%` : '— —'}
@@ -151,10 +172,18 @@ export function StartupView({ onReady, children }: StartupViewProps) {
                 ))}
               </div>
 
-              {/* Byte readout */}
+              {/* Raw count readout — verifiable units behind the bar: bytes while
+                  downloading, records while the lexical index builds. */}
               <div style={{ marginTop: '8px', fontFamily: 'var(--font-mono)', fontSize: '10px', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--fg4)', fontVariantNumeric: 'tabular-nums' }}>
-                {stage === 'downloading' && total > 0 ? `${fmtBytes(received)} / ${fmtBytes(total)}` : ' '}
+                {stage === 'downloading' && total > 0
+                  ? `${fmtBytes(received)} / ${fmtBytes(total)}`
+                  : stage === 'warming' && warmup.total > 0
+                  ? `${warmup.indexed.toLocaleString()} / ${warmup.total.toLocaleString()} records`
+                  : stage === 'indexing' && index.total > 0
+                  ? `${index.indexed.toLocaleString()} / ${index.total.toLocaleString()} vectors`
+                  :' '}
               </div>
+
             </>
           )}
 
@@ -164,17 +193,24 @@ export function StartupView({ onReady, children }: StartupViewProps) {
             </div>
           )}
         </div>
+        
+        <div style={{ textAlign: "center", marginTop: '10px', fontFamily: 'var(--font-mono)', fontSize: '9px', letterSpacing: '0.28em', textTransform: 'uppercase', color: 'var(--accent)' }}>
+            Early Access Preview
+        </div>
 
-        {/* Enter affordance — flat, sharp, ink. Hover inverts to ink fill. */}
+        {/* Enter affordance — flat, sharp, ink. Hover inverts to ink fill.
+            Revealed at `canEnter` (boot underway), so users can enter while the
+            catalog is still downloading / the index is still building. */}
         <div
           onClick={handleExit}
           style={{
-            opacity: revealed ? 1 : 0,
-            transform: revealed ? 'translateY(0)' : 'translateY(8px)',
+            opacity: canEnter ? 1 : 0,
+            transform: canEnter ? 'translateY(0)' : 'translateY(8px)',
             transition: 'opacity 0.5s ease, transform 0.5s ease',
-            pointerEvents: revealed ? 'auto' : 'none',
+            pointerEvents: canEnter ? 'auto' : 'none',
             cursor: 'pointer',
-          }}
+            WebkitAppRegion: 'no-drag',
+          } as React.CSSProperties}
         >
           {children ?? (
             <button
@@ -195,12 +231,16 @@ export function StartupView({ onReady, children }: StartupViewProps) {
             </button>
           )}
         </div>
+
+        {/* Bug reporter — bottom-left of the content area, above the footer line
+            and aligned with "Built by Fangorn" (32px gutter). */}
+        <BugReportFab style={{ position: 'absolute', left: 32, bottom: 16, zIndex: 1 }} />
       </div>
 
       {/* Footer */}
       <div style={{ width: '100%', display: 'flex', justifyContent: 'space-between', padding: '16px 32px', borderTop: '1px solid var(--border2)', fontFamily: 'var(--font-mono)', fontSize: '10px', letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--fg3)' }}>
         <div>Built by Fangorn</div>
-        <div>v0.1.0</div>
+        <div>v0.0.1</div>
       </div>
 
       <style>{`

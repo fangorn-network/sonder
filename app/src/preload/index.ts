@@ -3,7 +3,15 @@ import { electronAPI } from '@electron-toolkit/preload'
 import type { AgentProviderConfig, ProviderStatus } from "../main/agent/agent-provider-manager";
 import type { OllamaStatus } from "../main/agent/ollama-manager";
 import type { FangornAgentResponse } from "@fangorn-network/agent";
-import type { LocalTrack } from "../main/local/types";
+import type {
+  ArtBestTryProgress, ArtCandidate, ArtQuery, ArtRequest, ArtSaveItem, ArtSaveResult, ArtScope,
+  ImportMode, ImportProgress, ImportSummary, LibraryRoots, LocalTrack, LocalTrackMeta,
+  LocalTrackTags, OrganizeProgress, OrganizeReport,
+} from "../main/local/types";
+import type { StoredMeta } from "../main/local/catalog";
+import type { StoredTags } from "../main/local/taxonomy";
+import type { FavKind, Favorites } from "../main/local/favorites";
+import type { LocalPlaylist } from "../main/local/playlists";
 
 // ── Local on-disk music ────────────────────────────────────────────────
 export interface LocalMusicApi {
@@ -15,6 +23,110 @@ export interface LocalMusicApi {
   pickDir(): Promise<string | null>
   /** Recursively scan `dir` (defaults to the saved/default dir) for audio files. */
   scan(dir?: string): Promise<LocalTrack[]>
+
+  // ── Bulk import + library roots ────────────────────────────────────────
+  /** Native folder picker for an import source; returns the path plus how many
+   *  audio files it contains, or null if cancelled. */
+  importPickSource(): Promise<{ path: string; audioCount: number } | null>
+  /** Import `source` by copying into the library or referencing it in place. */
+  importRun(source: string, mode: ImportMode): Promise<ImportSummary>
+  /** Subscribe to copy-import progress; returns an unsubscribe function. */
+  onImportProgress(cb: (p: ImportProgress) => void): () => void
+  /** The library's primary folder plus any referenced-in-place folders. */
+  listRoots(): Promise<LibraryRoots>
+  /** Remove a referenced-in-place folder. */
+  removeRoot(path: string): Promise<void>
+  /** Smart-label every Unlabeled track (tags + filename + folder, with merging).
+   *  Returns a report of what was labeled / merged / left for review. */
+  autoOrganize(): Promise<OrganizeReport>
+  /** Subscribe to auto-organize progress; returns an unsubscribe function. */
+  onOrganizeProgress(cb: (p: OrganizeProgress) => void): () => void
+  /** Merge duplicate artist spellings into the chosen canonical one. Returns how
+   *  many tracks were renamed. */
+  mergeArtist(canonical: string, variants: string[]): Promise<number>
+
+  // ── Metadata library ──────────────────────────────────────────────────
+  /** Stored metadata for a track, or null if it hasn't been labeled. */
+  getMeta(localId: string): Promise<StoredMeta | null>
+  /** Insert/update a track's metadata (requires title + artist). */
+  saveMeta(localId: string, meta: LocalTrackMeta): Promise<StoredMeta>
+  /** Remove a track's metadata (returns it to Unlabeled). */
+  deleteMeta(localId: string): Promise<void>
+  /** Drop a track from the library: deletes the file if it's a library copy
+   *  (leaves referenced-in-place source files intact) and clears its data.
+   *  Resolves with whether the on-disk file was deleted. */
+  dropTrack(localId: string): Promise<{ deletedFile: boolean }>
+  /** Best-effort metadata read from the file's embedded tags (for prefill). */
+  readTags(localId: string): Promise<LocalTrackMeta>
+
+  // ── Semantic taxonomy tags (local-only; not published/embedded) ───────
+  /** Stored taxonomy tags for a track, or null if none have been set. */
+  getTrackTags(localId: string): Promise<StoredTags | null>
+  /** Every track that carries taxonomy tags — for showing a "tagged" indicator. */
+  listTrackTags(): Promise<StoredTags[]>
+  /** Insert/update a track's taxonomy tags (genres/moods/themes/contexts). */
+  saveTrackTags(localId: string, tags: LocalTrackTags): Promise<StoredTags>
+  /** Remove a track's taxonomy tags. */
+  deleteTrackTags(localId: string): Promise<void>
+
+  // ── Catalog discoverability ───────────────────────────────────────────
+  /** Local ids of labeled tracks that have a vector in the SOND3R catalog
+   *  (the local Qdrant collection). Empty if the catalog isn't ready. */
+  listDiscoverable(): Promise<string[]>
+
+  // ── Album / artist artwork ────────────────────────────────────────────
+  /** Normalized keys that already have stored art, grouped by scope — for
+   *  flagging which artists/albums still need artwork. */
+  listArtKeys(): Promise<{ artist: string[]; album: string[] }>
+  /** Stored artwork for (scope, key) as a data URL, or null if none. */
+  getArt(scope: ArtScope, key: string): Promise<string | null>
+  /** Open the image picker and store the chosen image; returns its data URL,
+   *  or null if cancelled. */
+  pickArt(scope: ArtScope, key: string): Promise<string | null>
+  /** Open the image picker WITHOUT storing; returns the chosen file path plus a
+   *  data URL for preview, or null if cancelled. Pair with setArtFile to commit
+   *  it once the artist/album key is final. */
+  pickImage(scope: ArtScope): Promise<{ path: string; dataUrl: string } | null>
+  /** Store a previously picked image (by path) as the artwork for (scope, key);
+   *  returns its data URL. */
+  setArtFile(scope: ArtScope, key: string, path: string): Promise<string | null>
+  /** Search a third party (Deezer) for album covers / artist photos. Returns
+   *  candidates with inline thumbnail data URLs and a full-res URL to commit. */
+  searchArt(scope: ArtScope, query: ArtQuery): Promise<ArtCandidate[]>
+  /** "Best try" a whole batch in one call: returns the first match per request
+   *  (or null), in order. Downloads only that match's thumbnail per target. */
+  bestTryArt(reqs: ArtRequest[]): Promise<(ArtCandidate | null)[]>
+  /** Subscribe to progress for the in-flight bestTryArt batch; returns an
+   *  unsubscribe. */
+  onBestTryProgress(cb: (p: ArtBestTryProgress) => void): () => void
+  /** Download a third-party image (by URL) and store it as the artwork for
+   *  (scope, key); returns its data URL. */
+  setArtFromUrl(scope: ArtScope, key: string, url: string): Promise<string | null>
+  /** Bulk-commit staged artwork in one call (resolved concurrently in main, then
+   *  persisted together). Returns how many were saved / failed. */
+  setArtMany(items: ArtSaveItem[]): Promise<ArtSaveResult>
+  /** Remove the stored artwork for (scope, key). */
+  clearArt(scope: ArtScope, key: string): Promise<void>
+
+  // ── Favorites (artists / albums / songs) ──────────────────────────────
+  /** All favorited refs, grouped by kind. */
+  listFavorites(): Promise<Favorites>
+  /** Flip a favorite on/off; resolves to the new state (true = now favorited). */
+  toggleFavorite(kind: FavKind, ref: string): Promise<boolean>
+
+  // ── Playlists ─────────────────────────────────────────────────────────
+  /** All playlists with their ordered track ids. */
+  listPlaylists(): Promise<LocalPlaylist[]>
+  /** Create a new (empty) playlist; returns it. */
+  createPlaylist(name: string): Promise<LocalPlaylist>
+  /** Rename a playlist. */
+  renamePlaylist(id: string, name: string): Promise<void>
+  /** Delete a playlist and its track membership. */
+  deletePlaylist(id: string): Promise<void>
+  /** Append a track to a playlist (no-op if already present). */
+  addToPlaylist(id: string, localId: string): Promise<void>
+  /** Remove a track from a playlist. */
+  removeFromPlaylist(id: string, localId: string): Promise<void>
 }
 
 const localMusic: LocalMusicApi = {
@@ -22,6 +134,89 @@ const localMusic: LocalMusicApi = {
   getDir: () => ipcRenderer.invoke('local:get-dir'),
   pickDir: () => ipcRenderer.invoke('local:pick-dir'),
   scan: (dir?: string) => ipcRenderer.invoke('local:scan', dir),
+  importPickSource: () => ipcRenderer.invoke('local:import:pick-source'),
+  importRun: (source, mode) => ipcRenderer.invoke('local:import:run', source, mode),
+  onImportProgress: (cb) => {
+    const handler = (_e: unknown, p: ImportProgress) => cb(p)
+    ipcRenderer.on('local:import:progress', handler)
+    return () => ipcRenderer.removeListener('local:import:progress', handler)
+  },
+  listRoots: () => ipcRenderer.invoke('local:roots:list'),
+  removeRoot: (path) => ipcRenderer.invoke('local:roots:remove', path),
+  autoOrganize: () => ipcRenderer.invoke('local:auto-organize'),
+  mergeArtist: (canonical, variants) => ipcRenderer.invoke('local:artist:merge', canonical, variants),
+  onOrganizeProgress: (cb) => {
+    const handler = (_e: unknown, p: OrganizeProgress) => cb(p)
+    ipcRenderer.on('local:organize:progress', handler)
+    return () => ipcRenderer.removeListener('local:organize:progress', handler)
+  },
+  getMeta: (localId) => ipcRenderer.invoke('local:meta:get', localId),
+  saveMeta: (localId, meta) => ipcRenderer.invoke('local:meta:upsert', localId, meta),
+  deleteMeta: (localId) => ipcRenderer.invoke('local:meta:delete', localId),
+  dropTrack: (localId) => ipcRenderer.invoke('local:track:drop', localId),
+  readTags: (localId) => ipcRenderer.invoke('local:read-tags', localId),
+  getTrackTags: (localId) => ipcRenderer.invoke('local:tags:get', localId),
+  listTrackTags: () => ipcRenderer.invoke('local:tags:list'),
+  saveTrackTags: (localId, tags) => ipcRenderer.invoke('local:tags:upsert', localId, tags),
+  deleteTrackTags: (localId) => ipcRenderer.invoke('local:tags:delete', localId),
+  listDiscoverable: () => ipcRenderer.invoke('local:discoverable:list'),
+  listArtKeys: () => ipcRenderer.invoke('local:art:keys'),
+  getArt: (scope, key) => ipcRenderer.invoke('local:art:get', scope, key),
+  pickArt: (scope, key) => ipcRenderer.invoke('local:art:pick-set', scope, key),
+  pickImage: (scope) => ipcRenderer.invoke('local:art:pick', scope),
+  setArtFile: (scope, key, path) => ipcRenderer.invoke('local:art:set-file', scope, key, path),
+  searchArt: (scope, query) => ipcRenderer.invoke('local:art:search', scope, query),
+  bestTryArt: (reqs) => ipcRenderer.invoke('local:art:bestTry', reqs),
+  onBestTryProgress: (cb) => {
+    const handler = (_e: unknown, p: ArtBestTryProgress) => cb(p)
+    ipcRenderer.on('local:art:bestTry:progress', handler)
+    return () => ipcRenderer.removeListener('local:art:bestTry:progress', handler)
+  },
+  setArtFromUrl: (scope, key, url) => ipcRenderer.invoke('local:art:set-url', scope, key, url),
+  setArtMany: (items) => ipcRenderer.invoke('local:art:set-many', items),
+  clearArt: (scope, key) => ipcRenderer.invoke('local:art:clear', scope, key),
+  listFavorites: () => ipcRenderer.invoke('local:fav:list'),
+  toggleFavorite: (kind, ref) => ipcRenderer.invoke('local:fav:toggle', kind, ref),
+  listPlaylists: () => ipcRenderer.invoke('local:playlist:list'),
+  createPlaylist: (name) => ipcRenderer.invoke('local:playlist:create', name),
+  renamePlaylist: (id, name) => ipcRenderer.invoke('local:playlist:rename', id, name),
+  deletePlaylist: (id) => ipcRenderer.invoke('local:playlist:delete', id),
+  addToPlaylist: (id, localId) => ipcRenderer.invoke('local:playlist:add', id, localId),
+  removeFromPlaylist: (id, localId) => ipcRenderer.invoke('local:playlist:remove', id, localId),
+}
+
+// ── In-app bug reporter ────────────────────────────────────────────────
+export interface BugReportInput {
+  description: string
+  expected?: string
+  email?: string
+  userId?: string
+}
+export interface BugReportResult {
+  ok: boolean
+  /** How it was filed: silently via the proxy, or by opening the browser. */
+  via?: 'api' | 'browser'
+  /** Issue URL when filed via the proxy. */
+  url?: string
+  error?: string
+}
+export interface BugReportDiagnostics {
+  appVersion: string
+  platform: string
+  arch: string
+  os: string
+  electron: string
+  chrome: string
+  node: string
+}
+export interface BugReportApi {
+  submit(input: BugReportInput): Promise<BugReportResult>
+  getDiagnostics(): Promise<BugReportDiagnostics>
+}
+
+const bugReport: BugReportApi = {
+  submit: (input) => ipcRenderer.invoke('bug:submit', input),
+  getDiagnostics: () => ipcRenderer.invoke('bug:diagnostics'),
 }
 
 // Custom APIs for renderer
@@ -87,11 +282,39 @@ if (process.contextIsolated) {
         ipcRenderer.removeAllListeners('snapshot:status')
         ipcRenderer.on('snapshot:status', (_e, s: string) => cb(s))
       },
+      // warmup progress: { phase, pct, indexed, total }. pct is a real fraction
+      // (records scanned / total) during the lexical build, and null for the
+      // tail steps that have no measurable sub-progress.
+      onWarmupProgress: (cb: (d: { phase: string | null; pct: number | null; indexed: number; total: number }) => void) => {
+        ipcRenderer.removeAllListeners('snapshot:warmup')
+        ipcRenderer.on('snapshot:warmup', (_e, d) => cb(d))
+      },
       // backend fully up: Qdrant + collection + query server all ready
       onBackendReady: (cb: () => void) => {
         ipcRenderer.removeAllListeners('backend:ready')
         ipcRenderer.on('backend:ready', () => cb())
       },
+      // background HNSW index build progress: { indexed, total, pct, done }.
+      // Streams after backend:ready until Qdrant's optimizer settles (done:true),
+      // so the search index keeps a live progress bar while it finishes.
+      onIndexingProgress: (cb: (d: { indexed: number; total: number; pct: number | null; done: boolean }) => void) => {
+        ipcRenderer.removeAllListeners('snapshot:indexing')
+        ipcRenderer.on('snapshot:indexing', (_e, d) => cb(d))
+      },
+      // Opt-in catalog: the backend stops at Qdrant when nothing's installed and
+      // emits the size disclosure here so the renderer can prompt for download.
+      // (Precise types live in index.d.ts / Sond3rBootApi.)
+      onNeedsConsent: (cb: (info: unknown) => void) => {
+        ipcRenderer.removeAllListeners('snapshot:needs-consent')
+        ipcRenderer.on('snapshot:needs-consent', (_e, info) => cb(info))
+      },
+      // Current sizes + install state (for the Settings data panel / re-checks).
+      getSnapshotInfo: () => ipcRenderer.invoke('snapshot:info'),
+      // User consented — start the download/recover/warm install. Progress arrives
+      // via the existing snapshot:status / backend:ready / snapshot:indexing events.
+      downloadSnapshot: () => ipcRenderer.invoke('snapshot:download'),
+      // Delete the catalog, free the disk, return to "not installed".
+      deleteSnapshot: () => ipcRenderer.invoke('snapshot:delete'),
       // backend failed somewhere in the boot chain
       onBackendError: (cb: (msg: string) => void) => {
         ipcRenderer.removeAllListeners('backend:error')
@@ -101,17 +324,34 @@ if (process.contextIsolated) {
       offBootEvents: () => {
         ipcRenderer.removeAllListeners('snapshot:progress')
         ipcRenderer.removeAllListeners('snapshot:status')
+        ipcRenderer.removeAllListeners('snapshot:warmup')
+        ipcRenderer.removeAllListeners('snapshot:indexing')
+        ipcRenderer.removeAllListeners('snapshot:needs-consent')
         ipcRenderer.removeAllListeners('backend:ready')
         ipcRenderer.removeAllListeners('backend:error')
       },
 
+      // Re-tint the native window-controls overlay to match the light/dark
+      // theme. No-op on macOS (handled in main).
+      setWindowTheme: (theme: 'light' | 'dark') =>
+        ipcRenderer.invoke('window:set-theme', theme),
+
       isBackendReady: () => ipcRenderer.invoke('backend:is-ready'),
+
+      // Clears this device's storage for the renderer partition (Privy session
+      // + cached app data) and reloads. Escape hatch for a wedged login.
+      resetSession: () => ipcRenderer.invoke('session:reset'),
     })
 
     // ── Local on-disk music ──────────────────────────────────────────
     // Pick a folder, scan it, and play files in-app via <audio>. Standalone
     // from the catalog player — see main/local/* and LocalMusicProvider.
     contextBridge.exposeInMainWorld('localMusic', localMusic)
+
+    // ── In-app bug reporter ──────────────────────────────────────────
+    // Renderer collects a description; main attaches diagnostics + recent
+    // logs and files a GitHub issue. See main/bug-report.ts.
+    contextBridge.exposeInMainWorld('bugReport', bugReport)
 
   } catch (error) {
     console.error(error)
@@ -123,6 +363,8 @@ if (process.contextIsolated) {
   window.api = api
   // @ts-ignore (define in dts)
   window.localMusic = localMusic
+  // @ts-ignore (define in dts)
+  window.bugReport = bugReport
 }
 
 

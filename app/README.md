@@ -13,11 +13,12 @@ An Electron application with React and TypeScript
 Requirements: **Node 22** (Corepack enables Yarn 4), **Python 3.12+**, and `tar` on your PATH. `ffmpeg` is optional (audio extraction).
 
 ```bash
-yarn install   # deps + native-module rebuild
-yarn dev       # first run auto-provisions the dev backend, then launches
+yarn install
+yarn setup
+yarn dev 
 ```
 
-That's the whole flow. The first `yarn dev` runs a one-time setup (`scripts/setup.mjs`, also available as `yarn setup`) that provisions everything a fresh clone is missing, **per-OS**:
+That's the whole flow. The first `yarn dev` runs a one-time setup that provisions everything a fresh clone is missing, **per-OS**:
 
 - **`.env`** — copied from `.env.example`. Fill in real values to enable auth / Firebase / Spotify / catalog features; the app still launches with blanks.
 - **yt-dlp** → `resources/bin/<os>/`.

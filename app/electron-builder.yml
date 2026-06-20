@@ -36,9 +36,19 @@ extraResources:
 win:
   executableName: SOND3R
   target:
-    - target: portable
+    - target: nsis
       arch: [x64]
-  artifactName: ${name}.${ext}
+  # Azure Trusted Signing. electron-builder installs the `TrustedSigning`
+  # PowerShell module on the runner and signs via `Invoke-TrustedSigning`,
+  # authenticating through Microsoft Entra ID env vars set in CI:
+  # AZURE_TENANT_ID / AZURE_CLIENT_ID / AZURE_CLIENT_SECRET (a service principal
+  # holding the "Trusted Signing Certificate Profile Signer" role).
+  # The four values below are NOT secrets and belong in source control.
+  azureSignOptions:
+    endpoint: https://scus.codesigning.azure.net/ 
+    codeSigningAccountName: SOND3R
+    certificateProfileName: prod-signing
+    publisherName: Fangorn
 
 mac:
   executableName: SOND3R
@@ -53,10 +63,16 @@ linux:
 appImage:
   artifactName: ${name}.${ext}
 nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
   artifactName: ${name}-${version}-setup.${ext}
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always
+  # Keep wallet/account + vector index data when the app is uninstalled.
+  # (false is the electron-builder default; set explicitly so a future edit
+  # doesn't silently start wiping users' crypto account data.)
+  deleteAppDataOnUninstall: false
 npmRebuild: false
 nodeGypRebuild: false
 detectUpdateChannel: false

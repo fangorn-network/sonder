@@ -112,6 +112,7 @@ jobs:
           VITE_ARBITRUM_SEPOLIA_RPC_URL=${{ secrets.VITE_ARBITRUM_SEPOLIA_RPC_URL }}
           VITE_SPOTIFY_CLIENT_ID=${{secrets.VITE_SPOTIFY_CLIENT_ID}}
           VITE_SPOTIFY_CLIENT_SECRET=${{secrets.VITE_SPOTIFY_CLIENT_SECRET}}
+          VITE_PRIVY_APP_ID=${{ secrets.VITE_PRIVY_APP_ID }}
           EOF
 
       - name: Download server binary
